@@ -23,7 +23,11 @@ typedef signed short S16; /**< Signed 16-bit integer. */
 typedef unsigned long U32; /**< Unsigned 32-bit integer. */
 typedef signed long S32; /**< Signed 32-bit integer. */
 
-typedef U32 size_t; /**< Abstract size type, needed by the memory allocator. */
+#ifndef __SIZE_TYPE__
+#define __SIZE_TYPE__ U32 /**< Used to go conform with gcc, otherwise we are
+                            risking an error because of conflicting types for size_t */
+#endif
+typedef __SIZE_TYPE__ size_t; /**< Abstract size type, needed by the memory allocator. */
 
 typedef U8 bool; /**< Boolean data type. */
 #define FALSE (0) /**< False boolean value. */
