@@ -96,8 +96,9 @@ SECTIONS {
    * properly.
    */
   .bss : {
-    . = ALIGN(4);
     * (*.bss *.bss.*)
+    . = ALIGN(4);
+    __bss_end__ = . ;
   } > ram
 
 
