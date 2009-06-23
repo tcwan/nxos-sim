@@ -816,8 +816,9 @@ void tests_usb_hardcore(void) {
 
 void tests_radar(void) {
   U32 sensor = 0;
-  U8 interval, reading;
+  U8 reading;
   S8 object;
+  U8 objects[8];
 
   hello();
 
@@ -838,29 +839,58 @@ void tests_radar(void) {
 
   nx_display_string("Found.\n\n");
   nx_radar_info(sensor);
-  interval = nx_radar_read_value(sensor, RADAR_INTERVAL);
 
   while (nx_avr_get_button() != BUTTON_OK);
 
+  // We are toggling between reading all values
+  // and reading them one after another. Just for fun and to test
+  // both ways to communicate with the US.
+  bool read_toggle = TRUE;
+
   while (nx_avr_get_button() != BUTTON_RIGHT) {
+    // We are using the single shot mode, in continues mode
+    // the US doesn't seem to measure more than one byte.
+    nx_radar_set_op_mode(sensor, RADAR_MODE_SINGLE_SHOT);
+    // Give the sensor the time to receive the echos and store
+    // the measurements.
+    nx_systick_wait_ms(100);
+    // Go on and read and display the values.
     nx_display_clear();
     nx_display_cursor_set_pos(0, 0);
 
+    if( ! read_toggle ) {
+      memset(objects, 0, sizeof(objects));
+      if( ! nx_radar_read_all(sensor, objects) ) {
+        nx_display_string("Error reading!\n");
+        break;
+      }
+    }
     for (object=0 ; object<8 ; object++) {
       nx_display_uint(object);
       nx_display_string("> ");
 
-      reading = nx_radar_read_distance(sensor, object);
+      if( ! read_toggle )
+        reading = objects[object];
+      else
+        reading = nx_radar_read_distance(sensor, object);
 
       if (reading > 0x00 && reading < 0xFF) {
         nx_display_uint(reading);
-        nx_display_string(" cm\n");
+        nx_display_string(" cm");
       } else {
-        nx_display_string("n/a\n");
+        nx_display_string("n/a");
       }
+      if( ! object ) {
+        if( ! read_toggle )
+          nx_display_string(" (read8)");
+        else
+          nx_display_string(" (read1)");
+      }
+      nx_display_end_line();
     }
 
-    nx_systick_wait_ms((interval > 0) ? interval * 500 : 1000);
+    read_toggle = ! read_toggle;
+    nx_systick_wait_ms(1000);
   }
 
   nx_radar_close(sensor);
