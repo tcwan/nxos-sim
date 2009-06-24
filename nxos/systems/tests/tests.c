@@ -24,6 +24,7 @@
 #include "base/drivers/usb.h"
 #include "base/drivers/radar.h"
 #include "base/drivers/ht_compass.h"
+#include "base/drivers/ht_accel.h"
 #include "base/drivers/bt.h"
 #include "base/drivers/_uart.h"
 
@@ -543,6 +544,8 @@ static int tests_command(char *buffer) {
     tests_radar();
   else if (streq(buffer, "ht_compass"))
     tests_ht_compass();
+  else if (streq(buffer, "ht_accel"))
+    tests_ht_accel();
   else if (streq(buffer, "bt"))
     tests_bt();
   else if (streq(buffer, "bt2"))
@@ -887,6 +890,48 @@ void tests_ht_compass(void) {
   goodbye();
 }
 
+void tests_ht_accel(void) {
+  U32 sensor = 2;
+  hello();
+  nx_display_clear();
+  nx_display_cursor_set_pos(0, 0);
+  nx_display_string(" Test of ht_accel\n\n");
+  //nx_i2c_init();
+  nx_display_string("Press OK to stop\n");
+  ht_accel_init(sensor);
+
+  if( ! ht_accel_detect(sensor) ) {
+    nx_display_string("No accel!\n");
+    goodbye();
+    return;
+  }
+
+  ht_accel_info(sensor);
+  ht_accel_values values;
+  while(nx_avr_get_button() != BUTTON_OK) {
+    nx_display_cursor_set_pos(3, 5);
+    if ( ! ht_accel_read_values(sensor, &values) ) {
+        nx_display_string("Error reading!");
+        break;
+    }
+    nx_display_string("    ");
+    nx_display_cursor_set_pos(3, 5);
+    nx_display_uint( values.x );
+    nx_display_cursor_set_pos(3, 6);
+    nx_display_string("    ");
+    nx_display_cursor_set_pos(3, 6);
+    nx_display_uint( values.y );
+    nx_display_cursor_set_pos(3, 7);
+    nx_display_string("    ");
+    nx_display_cursor_set_pos(3, 7);
+    nx_display_uint( values.z );
+    nx_systick_wait_ms(100);
+  }
+
+  ht_accel_close(sensor);
+  goodbye();
+}
+
 void tests_fs(void) {
   hello();
   fs_test_infos();
@@ -917,6 +962,7 @@ void tests_all(void) {
   tests_radar();
   tests_fs();
   tests_ht_compass();
+  tests_ht_accel();
 
   test_silent = FALSE;
   goodbye();
