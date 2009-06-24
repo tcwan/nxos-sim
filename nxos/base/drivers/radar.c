@@ -27,7 +27,7 @@
  * (see radar.h) and links the address in the radar's memory for the given
  * value to its returned data length.
  */
-static struct radar_cmd_info {
+static const struct radar_cmd_info {
   U8 addr;
   U8 len;
 } radar_cmds[RADAR_N_COMMANDS] = {
@@ -63,7 +63,7 @@ void nx_radar_close(U32 sensor) {
 
 /** Reads a value from the radar's memory slot into the provided buffer. */
 bool nx_radar_read(U32 sensor, radar_memory_slot slot, U8 *val) {
-  struct radar_cmd_info *cmd = &radar_cmds[slot];
+  const struct radar_cmd_info *cmd = &radar_cmds[slot];
   return nx_i2c_memory_read(sensor, cmd->addr, val, cmd->len) == I2C_ERR_OK;
 }
 
@@ -78,7 +78,7 @@ U8 nx_radar_read_value(U32 sensor, radar_memory_slot slot) {
 
 /** Writes the given buffer into the radar's memory slot. */
 bool nx_radar_write(U32 sensor, radar_memory_slot slot, U8 *val) {
-  struct radar_cmd_info *cmd = &radar_cmds[slot];
+  const struct radar_cmd_info *cmd = &radar_cmds[slot];
   return nx_i2c_memory_write(sensor, cmd->addr, val, cmd->len) == I2C_ERR_OK;
 }
 
@@ -148,8 +148,6 @@ U8 nx_radar_read_distance(U32 sensor, U32 object) {
  *
  * The given buffer 'buf' must be pre-allocated to hold the eight measurements
  * of the radar.
- *
- * Note: DOES NOT WORK (is it even possible to read as many bytes we want?)
  */
 bool nx_radar_read_all(U32 sensor, U8 *buf) {
   /* We use the low-level i2c_memory_read function here to try to read
@@ -172,29 +170,29 @@ bool nx_radar_set_op_mode(U32 sensor, radar_op_mode mode) {
 
 /** Display connected radar's information. */
 void nx_radar_info(U32 sensor) {
-  U8 buf[8];
+  U8 buf[9];
 
   // Product ID (LEGO)
-  memset(buf, 0, 8);
+  memset(buf, 0, sizeof(buf));
   nx_radar_read(sensor, RADAR_PRODUCT_ID, buf);
   nx_display_string((char *)buf);
   nx_display_string(" ");
 
   // Sensor Type (Sonar)
-  memset(buf, 0, 8);
+  memset(buf, 0, sizeof(buf));
   nx_radar_read(sensor, RADAR_SENSOR_TYPE, buf);
   nx_display_string((char *)buf);
   nx_display_string(" ");
 
   // Version (V1.0)
-  memset(buf, 0, 8);
+  memset(buf, 0, sizeof(buf));
   nx_radar_read(sensor, RADAR_VERSION, buf);
   nx_display_string((char *)buf);
   nx_display_end_line();
 
   // Measurement units
   nx_display_string("Units: ");
-  memset(buf, 0, 8);
+  memset(buf, 0, sizeof(buf));
   nx_radar_read(sensor, RADAR_MEASUREMENT_UNITS, buf);
   nx_display_string((char *)buf);
   nx_display_end_line();

@@ -173,7 +173,7 @@ U8 nx_radar_read_value(U32 sensor, radar_memory_slot slot);
  */
 U8 nx_radar_read_distance(U32 sensor, U32 object);
 
-/** Read all radar measurement at once (not working).
+/** Read all radar measurement at once.
  *
  * @param sensor The sensor port number.
  * @param buf A buffer to hold the measurements.
