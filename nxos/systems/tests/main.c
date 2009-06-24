@@ -32,5 +32,6 @@ void main(void) {
   //tests_radar();
   //tests_util();
   //tests_defrag();
+  //tests_ht_compass();
   tests_sysinfo();
 }
