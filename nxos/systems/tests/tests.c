@@ -928,7 +928,7 @@ void tests_ht_accel(void) {
   hello();
   nx_display_clear();
   nx_display_cursor_set_pos(0, 0);
-  nx_display_string(" Test of ht_accel\n\n");
+  nx_display_string("Test of ht_accel\n\n");
   //nx_i2c_init();
   nx_display_string("Press OK to stop\n");
   ht_accel_init(sensor);
@@ -949,15 +949,15 @@ void tests_ht_accel(void) {
     }
     nx_display_string("    ");
     nx_display_cursor_set_pos(3, 5);
-    nx_display_uint( values.x );
+    nx_display_int( values.x );
     nx_display_cursor_set_pos(3, 6);
     nx_display_string("    ");
     nx_display_cursor_set_pos(3, 6);
-    nx_display_uint( values.y );
+    nx_display_int( values.y );
     nx_display_cursor_set_pos(3, 7);
     nx_display_string("    ");
     nx_display_cursor_set_pos(3, 7);
-    nx_display_uint( values.z );
+    nx_display_int( values.z );
     nx_systick_wait_ms(100);
   }
 
