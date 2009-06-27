@@ -61,6 +61,15 @@ bool ht_accel_detect(U32 sensor) {
       == I2C_ERR_OK && streq((char *)str, HT_ACCEL_TYPE_STR);
 }
 
+/* helper function */
+static inline S16 get_converted_val(const U8* buf) {
+  S16 val = (((S16)(S8)buf[0])<<2);
+  if( val < 0)
+    return val - buf[3];
+  else
+    return val + buf[3];
+}
+
 /** Read the acceleration/tilt-values.
  *
  * @param sensor The sensor port number.
@@ -73,9 +82,9 @@ bool ht_accel_read_values(U32 sensor, ht_accel_values* values) {
   U8 buf[6];
   if( nx_i2c_memory_read(sensor, HT_ACCEL_VALUES, buf, 6) != I2C_ERR_OK )
     return FALSE;
-  values->x = (((U16)buf[0])<<2) + buf[3];
-  values->y = (((U16)buf[1])<<2) + buf[4];
-  values->z = (((U16)buf[2])<<2) + buf[5];
+  values->x = get_converted_val(buf);
+  values->y = get_converted_val(buf+1);
+  values->z = get_converted_val(buf+2);
   return TRUE;
 }
 
@@ -111,12 +120,12 @@ void ht_accel_info(U32 sensor) {
     return;
   }
   nx_display_string("x: ");
-  nx_display_uint(values.x);
+  nx_display_int(values.x);
   nx_display_end_line();
   nx_display_string("y: ");
-  nx_display_uint(values.y);
+  nx_display_int(values.y);
   nx_display_end_line();
   nx_display_string("z: ");
-  nx_display_uint(values.z);
+  nx_display_int(values.z);
   nx_display_end_line();
 }

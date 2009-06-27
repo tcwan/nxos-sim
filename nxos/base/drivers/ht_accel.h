@@ -33,9 +33,9 @@
 
 /** A type for the returned acceleration values */
 typedef struct {
-  U16 x;
-  U16 y;
-  U16 z;
+  S16 x;
+  S16 y;
+  S16 z;
 } ht_accel_values;
 
 /** Internal memory addresses.
