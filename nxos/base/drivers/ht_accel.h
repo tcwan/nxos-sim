@@ -31,11 +31,11 @@
  */
 #define HT_ACCEL_I2C_ADDRESS  0x01
 
-/** A type for the returned acceleration values */
+/** A type for the returned acceleration values (10bit, -2g to 2g )*/
 typedef struct {
-  S16 x;
-  S16 y;
-  S16 z;
+  S16 x; /** 10bit: -512 to 511, the x-axis is pointing outwards the black front */
+  S16 y; /** 10bit: -512 to 511, the y-axis is pointing outwards left side */
+  S16 z; /** 10bit: -512 to 511, the z-axis is pointing outwards the top (white cover) */
 } ht_accel_values;
 
 /** Internal memory addresses.
