@@ -25,6 +25,7 @@
 #include "base/drivers/radar.h"
 #include "base/drivers/ht_compass.h"
 #include "base/drivers/ht_accel.h"
+#include "base/drivers/ht_gyro.h"
 #include "base/drivers/digitemp.h"
 #include "base/drivers/bt.h"
 #include "base/drivers/_uart.h"
@@ -547,6 +548,8 @@ static int tests_command(char *buffer) {
     tests_ht_compass();
   else if (streq(buffer, "ht_accel"))
     tests_ht_accel();
+  else if (streq(buffer, "ht_gyro"))
+    tests_ht_gyro();
   else if (streq(buffer, "digitemp"))
     tests_digitemp();
   else if (streq(buffer, "bt"))
@@ -962,6 +965,38 @@ void tests_ht_accel(void) {
   }
 
   ht_accel_close(sensor);
+  goodbye();
+}
+
+void tests_ht_gyro(void) {
+  U32 sensor = 2;
+  hello();
+  nx_display_clear();
+  nx_display_cursor_set_pos(0, 0);
+  nx_display_string(" Test of ht_gyro\n\n");
+  nx_display_string("Press OK calc 0\n");
+  nx_display_string("The Gyro must\nstand still\n");
+  while(nx_avr_get_button() != BUTTON_OK)
+    nx_systick_wait_ms(10);
+  nx_display_string("Calculating 0\n");
+  ht_gyro_init(sensor);
+  U32 zero = ht_gyro_calculate_average_zero(sensor);
+  nx_display_string("Zero: ");
+  nx_display_uint(zero);
+  nx_display_end_line();
+  nx_systick_wait_ms(1000); /* Give the user time to release the OK-button */
+  U32 rotation;
+  while(nx_avr_get_button() != BUTTON_OK) {
+    nx_display_cursor_set_pos(0, 7);
+    nx_display_string("           ");
+    rotation = ht_gyro_get_value(sensor);
+    nx_display_cursor_set_pos(0, 7);
+    nx_display_uint( rotation );
+    nx_display_string(" ");
+    nx_display_int( (S32)rotation - zero );
+    nx_systick_wait_ms(100);
+  }
+  ht_gyro_close(sensor);
   goodbye();
 }
 

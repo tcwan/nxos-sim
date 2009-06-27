@@ -34,6 +34,7 @@ void main(void) {
   //tests_defrag();
   //tests_ht_compass();
   //tests_ht_accel();
+  //tests_ht_gyro();
   //tests_digitemp();
   tests_sysinfo();
 }
