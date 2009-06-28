@@ -26,6 +26,7 @@
 #include "base/drivers/ht_compass.h"
 #include "base/drivers/ht_accel.h"
 #include "base/drivers/ht_gyro.h"
+#include "base/drivers/ht_irlink.h"
 #include "base/drivers/digitemp.h"
 #include "base/drivers/bt.h"
 #include "base/drivers/_uart.h"
@@ -550,6 +551,8 @@ static int tests_command(char *buffer) {
     tests_ht_accel();
   else if (streq(buffer, "ht_gyro"))
     tests_ht_gyro();
+  else if (streq(buffer, "ht_irlink"))
+    tests_ht_irlink();
   else if (streq(buffer, "digitemp"))
     tests_digitemp();
   else if (streq(buffer, "bt"))
@@ -851,7 +854,7 @@ void tests_radar(void) {
   bool read_toggle = TRUE;
 
   while (nx_avr_get_button() != BUTTON_RIGHT) {
-    // We are using the single shot mode, in continues mode
+    // We are using the single shot mode, in continuous mode
     // the US doesn't seem to measure more than one byte.
     nx_radar_set_op_mode(sensor, RADAR_MODE_SINGLE_SHOT);
     // Give the sensor the time to receive the echos and store
@@ -1000,6 +1003,181 @@ void tests_ht_gyro(void) {
   goodbye();
 }
 
+void tests_ht_irlink(void) {
+  U32 sensor = 2;
+  U8 buffer[15];
+
+  hello();
+  nx_display_clear();
+  nx_display_cursor_set_pos(0, 0);
+  nx_display_string("Test of IRLink\n");
+  //nx_i2c_init();
+  nx_display_string("Press OK to stop\n");
+  ht_irlink_init(sensor);
+
+  if( ! ht_irlink_detect(sensor) ) {
+    nx_display_string("No IRLink!\n");
+    nx_systick_wait_ms(10000);
+    goodbye();
+    return;
+  }
+
+  ht_irlink_info(sensor);
+
+  /* This test is build for use with the Motorized Bulldozer (8275).
+   * You need about 1m x 0.5m space where the Bulldozer will drive.
+   * Because we don't have motor-feedback or encoders, all times are
+   * approximately and depending heavily on the battery-level of the PF
+   * and the ground over which the bulldozer drives.
+   *
+   * It should'nt be any problem to use this test with other models or
+   * just plain connected motors to see if all works.
+   *
+   * Maybe I've made a mistake building the bulldozer, but my model
+   * requires to backward drive motor A on channel 0 to drive the left side
+   * forward, it might be that you have to change that.
+   *
+   * The sequence of commands is the following:
+   *
+   * (1) Backward drive motor A (red, blade) and forward drive
+   *     motor B (blue, ripper) on channel 1 with full power for 7s to
+   *     be sure the front blade and the ripper are up.
+   * (2) Forward drive motor A (left) and backward drive motor B (right)
+   *     on channel 0 with full power for 5s to drive the bulldozer
+   *     about 1m forwards.
+   * (3) Forward drive motor A on channel 1 for 5s then backward drive
+   *     him for 5s to move the front blade down an up.
+   * (4) Forward drive both motors on channel 0 with full power for 3s to turn
+   *     the bulldozer to the right about 180 degrees,
+   * (5) Forward drive both motors on channel 0 pwm-controlled, raising the
+   *     power from 3 to 6 and backwards to 0 to drive the bulldozer
+   *     about 1m forwards.
+   * (6) Backward drive both motors on channel 0 pwm-controlled with power 7
+   *     to turn the bulldoze to the left about 180 degrees.
+   * (7) Backward drive motor B on channel 1 for 5s then forward drive
+   *     him for 5s to move the ripper down an up.
+   */
+  U8 count;
+  /* (1) */
+  count = ht_irlink_encode_bitstream(HT_IRLINK_MODE_PF,
+    build_bitstream_PF_direct(1, PF_MOTOR_A_BACKWARD | PF_MOTOR_B_FORWARD),
+    buffer);
+  for ( unsigned i = 0; i < 7; ++i ) {
+    ht_irlink_transmit_buffer_4x(sensor, buffer, count);
+    nx_systick_wait_ms(1000);
+  }
+  /* (2) */
+  count = ht_irlink_encode_bitstream(HT_IRLINK_MODE_PF,
+    build_bitstream_PF_direct(0, PF_MOTOR_A_FORWARD | PF_MOTOR_B_BACKWARD),
+    buffer);
+  for ( unsigned i = 0; i < 5; ++i ) {
+    ht_irlink_transmit_buffer_4x(sensor, buffer, count);
+    nx_systick_wait_ms(1000);
+  }
+  /* (3) */
+  count = ht_irlink_encode_bitstream(HT_IRLINK_MODE_PF,
+    build_bitstream_PF_direct(1, PF_MOTOR_A_FORWARD ),
+    buffer);
+  for ( unsigned i = 0; i < 5; ++i ) {
+    ht_irlink_transmit_buffer_4x(sensor, buffer, count);
+    nx_systick_wait_ms(1000);
+  }
+  count = ht_irlink_encode_bitstream(HT_IRLINK_MODE_PF,
+    build_bitstream_PF_direct(1, PF_MOTOR_A_BACKWARD ),
+    buffer);
+  for ( unsigned i = 0; i < 5; ++i ) {
+    ht_irlink_transmit_buffer_4x(sensor, buffer, count);
+    nx_systick_wait_ms(1000);
+  }
+  /* (4) */
+  count = ht_irlink_encode_bitstream(HT_IRLINK_MODE_PF,
+    build_bitstream_PF_direct(0, PF_MOTOR_A_FORWARD | PF_MOTOR_B_FORWARD),
+    buffer);
+  for ( unsigned i = 0; i < 3; ++i ) {
+    ht_irlink_transmit_buffer_4x(sensor, buffer, count);
+    nx_systick_wait_ms(1000);
+  }
+  /* (5) */
+  for ( unsigned i = 0; i < 4; ++i ) {
+    count = ht_irlink_encode_bitstream(HT_IRLINK_MODE_PF,
+      build_bitstream_PF_pwm(0, PF_PWM_MOTOR_FWD_3 + i, PF_PWM_MOTOR_BACK_3 - i),
+      buffer);
+    ht_irlink_transmit_buffer_4x(sensor, buffer, count);
+    nx_systick_wait_ms(1000);
+  }
+  for ( unsigned i = 3; i ; --i ) {
+    count = ht_irlink_encode_bitstream(HT_IRLINK_MODE_PF,
+      build_bitstream_PF_pwm(0, PF_PWM_MOTOR_FWD_3 + i, PF_PWM_MOTOR_BACK_3 - i),
+      buffer);
+    ht_irlink_transmit_buffer_4x(sensor, buffer, count);
+    nx_systick_wait_ms(1000);
+  }
+  /* (6) */
+  for ( unsigned i = 0; i < 3; ++i ) {
+    count = ht_irlink_encode_bitstream(HT_IRLINK_MODE_PF,
+      build_bitstream_PF_pwm(0, PF_PWM_MOTOR_BACK_7, PF_PWM_MOTOR_BACK_7),
+      buffer);
+    ht_irlink_transmit_buffer_4x(sensor, buffer, count);
+    nx_systick_wait_ms(1000);
+  }
+  /* (7) */
+  count = ht_irlink_encode_bitstream(HT_IRLINK_MODE_PF,
+    build_bitstream_PF_direct(1, PF_MOTOR_B_BACKWARD ),
+    buffer);
+  for ( unsigned i = 0; i < 5; ++i ) {
+    ht_irlink_transmit_buffer_4x(sensor, buffer, count);
+    nx_systick_wait_ms(1000);
+  }
+  count = ht_irlink_encode_bitstream(HT_IRLINK_MODE_PF,
+    build_bitstream_PF_direct(1, PF_MOTOR_B_FORWARD ),
+    buffer);
+  for ( unsigned i = 0; i < 5; ++i ) {
+    ht_irlink_transmit_buffer_4x(sensor, buffer, count);
+    nx_systick_wait_ms(1000);
+  }
+  /* Display the receive buffer */
+  nx_display_cursor_set_pos(15, 4);
+  nx_display_string(" ");
+  nx_display_cursor_set_pos(12, 4);
+  nx_display_uint(count);
+  nx_display_string("):\n");
+  nx_display_string("                                             ");
+  nx_display_cursor_set_pos(0, 5);
+  for(unsigned i = 0; i < count; ++i) {
+    nx_display_hex(buffer[i]);
+    nx_display_string(" ");
+  }
+
+  nx_systick_wait_ms(10000);
+/* this will display received messages continuously */
+/*
+  while(nx_avr_get_button() != BUTTON_OK) {
+    // TODO: Check how to correctly handle receiving of messages.
+    count = ht_irlink_get_receive_buffer(sensor, buffer);
+    if(count) {
+      ht_irlink_clear_receive_buffer(sensor);
+      nx_display_cursor_set_pos(15, 4);
+      nx_display_string(" ");
+      nx_display_cursor_set_pos(12, 4);
+      nx_display_uint(count);
+      nx_display_string("):\n");
+      nx_display_string("                                             ");
+      nx_display_cursor_set_pos(0, 5);
+      for(unsigned i = 0; i < count; ++i) {
+        nx_display_hex(buffer[i]);
+        nx_display_string(" ");
+      }
+      // Clear the receive buffer, to receive more bytes.
+      // TODO: Is this really necessary?
+      ht_irlink_clear_receive_buffer(sensor);
+    }
+    nx_systick_wait_ms(20);
+  }
+*/
+  ht_irlink_close(sensor);
+  goodbye();
+}
+
 void tests_digitemp(void) {
   U32 sensor = 2;
   S16 temperature;
@@ -1069,6 +1247,7 @@ void tests_all(void) {
   tests_fs();
   tests_ht_compass();
   tests_ht_accel();
+  tests_ht_irlink();
   tests_digitemp();
 
   test_silent = FALSE;

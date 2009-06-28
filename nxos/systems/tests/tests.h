@@ -25,6 +25,7 @@ void tests_radar(void);
 void tests_ht_compass(void);
 void tests_ht_accel(void);
 void tests_ht_gyro(void);
+void tests_ht_irlink(void);
 void tests_digitemp(void);
 void tests_bt(void);
 void tests_bt2(void);

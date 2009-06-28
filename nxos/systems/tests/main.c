@@ -35,6 +35,7 @@ void main(void) {
   //tests_ht_compass();
   //tests_ht_accel();
   //tests_ht_gyro();
+  //tests_ht_irlink();
   //tests_digitemp();
   tests_sysinfo();
 }
