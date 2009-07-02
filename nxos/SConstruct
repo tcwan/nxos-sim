@@ -165,9 +165,12 @@ opts.Add(ListVariable('appkernels',
                     'List of application kernels to build '
                     '(by default, only the tests kernel is compiled', 'tests',
                     buildable_systems))
+opts.Add(PathVariable('gccprefix',
+                    'Prefix of the cross-gcc to use (by default arm-elf)',
+                    'arm-elf', PathOption.PathAccept))
 
 Help('''
-Type: 'scons appkernels=...' to build kernels.
+Type: 'scons appkernels=... [gccprefix=...]' to build kernels.
 
 The application kernel names are the directory names in the systems/
 subdirectory. You can specify several application kernels, separated
@@ -187,6 +190,9 @@ Examples
 
  - Build only the baseplate code:
      scons appkernels=none
+
+ - To use another cross-gcc than arm-elf-gcc:
+     scons gccprefix=arm-softfloat-eabi
 
 Options are saved persistent in the file 'scons.options'. That means
 after you have called e.g. 'scons appkernels=tests,marvin' it's enough
@@ -209,7 +215,7 @@ if not env.GetOption('clean'):
     conf = Configure(env, custom_tests = {'CheckTool': CheckTool,
                                           'CheckLibGcc': CheckLibGcc,
                                           'CheckDoxygen': CheckDoxygen})
-    conf.env['CROSS_COMPILE_HOST'] = 'arm-elf'
+    conf.env['CROSS_COMPILE_HOST'] = env['gccprefix']
     if not (conf.CheckTool('CC', 'gcc') and conf.CheckTool('AR') and
             conf.CheckTool('OBJCOPY') and conf.CheckTool('LINK', 'ld') and
             conf.CheckLibGcc(conf.env['CC'])):
