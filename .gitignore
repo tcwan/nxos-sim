@@ -33,3 +33,6 @@ nxos/build_flags.py
 
 # Precommit hooks drop a commit.msg file if they fail.
 commit.msg
+
+# The option-cache
+scons.options

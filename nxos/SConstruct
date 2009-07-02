@@ -160,7 +160,7 @@ for root, dirs, files in os.walk('systems'):
     if 'SConscript' in files:
         buildable_systems.append(root.split('/', 1)[1])
 
-opts = Variables('build_flags.py')
+opts = Variables('scons.options', ARGUMENTS)
 opts.Add(ListVariable('appkernels',
                     'List of application kernels to build '
                     '(by default, only the tests kernel is compiled', 'tests',
@@ -187,6 +187,10 @@ Examples
 
  - Build only the baseplate code:
      scons appkernels=none
+
+Options are saved persistent in the file 'scons.options'. That means
+after you have called e.g. 'scons appkernels=tests,marvin' it's enough
+to call only 'scons' to build both Marvin and the tests kernel again.
 ''')
 
 ###############################################################
@@ -198,6 +202,8 @@ env = Environment(options = opts,
                   toolpath = ['scons_tools'],
                   NXOS_LIBGCC = [], CPPPATH = '#',
                   WITH_DOXYGEN = True)
+opts.Update(env)
+opts.Save('scons.options', env)
 
 if not env.GetOption('clean'):
     conf = Configure(env, custom_tests = {'CheckTool': CheckTool,
