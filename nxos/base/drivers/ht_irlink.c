@@ -207,8 +207,6 @@ U16 build_bitstream_PF_pwm(U8 channel, pf_combo_pwm motor_a, pf_combo_pwm motor_
  * @return The 4 nibbles which should be encoded and transmitted.
  *
  * @note The toggle bit is switched with every call of this function.
- * @note If a motor is attached the following can be used:
- * Forward => C1 = 1, C2 =0, Backwards => C1=0, C2=1 and Brake => C1,C2 = 0.
  */
 U16 build_bitstream_PF_single_pin_timeout(U8 channel, pf_pin_output output,
   pf_pin pin, pf_pin_function function)
@@ -233,8 +231,6 @@ U16 build_bitstream_PF_single_pin_timeout(U8 channel, pf_pin_output output,
  * @return The 4 nibbles which should be encoded and transmitted.
  *
  * @note The toggle bit is switched with every call of this function.
- * @note If a motor is attached the following can be used:
- * Forward => C1 = 1, C2 =0, Backwards => C1=0, C2=1 and Brake => C1,C2 = 0.
  */
 U16 build_bitstream_PF_single_pin_continuous(U8 channel, pf_pin_output output,
   pf_pin pin, pf_pin_function function)
