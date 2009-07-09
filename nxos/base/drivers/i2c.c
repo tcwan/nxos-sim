@@ -345,23 +345,19 @@ i2c_txn_status nx_i2c_get_txn_status(U32 sensor)
 
   p = &i2c_state[sensor];
 
-  /* If the current sub transaction was left in the FAILED state,
-   * the whole transaction is failed.
-   */
-  if (p->txns[p->current_txn].result == TXN_STAT_FAILED)
-    return TXN_STAT_FAILED;
-
   /* If the transaction is not failed, it's in progress until the
    * current_txn number reaches the number of sub transactions (minus 1
    * because indexes start at 0).
    */
-  if (p->current_txn == p->n_txns - 1)
+  if (p->current_txn < p->n_txns)
     return TXN_STAT_IN_PROGRESS;
-
-  /* When everything's done, simply return the last sub transaction
-   * result.
-   */
-  return p->txns[p->current_txn].result;
+  else if (p->current_txn)
+     /* When everything's done, simply return the last sub transaction
+     * result.
+     */
+    return p->txns[p->current_txn-1].result;
+  else
+    return TXN_STAT_SUCCESS; /* current_txn = n_txns = 0 => nothing to do */
 }
 
 bool nx_i2c_busy(U32 sensor)
@@ -471,8 +467,8 @@ static void i2c_isr(void) {
           p->bus_state = I2C_SEND_STOP_BIT0;
           p->txn_state = TXN_STOP;
 
-          /* Bypass remaining sub transactions. */
-          p->current_txn = p->n_txns;
+          /* Bypass remaining sub transactions, leaving the status failed */
+          p->n_txns = ++(p->current_txn);
         } else {
           if (p->processed < t->data_size) {
             p->bus_state = I2C_SCL_LOW;
@@ -551,7 +547,7 @@ static void i2c_isr(void) {
           p->current_pos = 7;
         }
 
-        if (p->current_txn == p->n_txns) {
+        if (p->current_txn >= p->n_txns) {
           p->txn_state = TXN_NONE;
         }
 
