@@ -167,7 +167,7 @@ opts.Add(ListVariable('appkernels',
                     buildable_systems))
 opts.Add(PathVariable('gccprefix',
                     'Prefix of the cross-gcc to use (by default arm-elf)',
-                    'arm-elf', PathOption.PathAccept))
+                    'arm-elf', PathVariable.PathAccept))
 
 Help('''
 Type: 'scons appkernels=... [gccprefix=...]' to build kernels.
