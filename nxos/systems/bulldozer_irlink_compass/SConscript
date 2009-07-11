@@ -1,0 +1,3 @@
+from glob import glob
+Import('env')
+env.AppKernel('bulldozer_irlink_compass', glob('*.[cS]'), kernelsize='50k')
