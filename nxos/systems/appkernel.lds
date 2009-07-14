@@ -55,10 +55,8 @@ SECTIONS {
    * This section is used for code that has to reside in ram to
    * function correctly (like flash writing code)
    */
-  .ram_text : {
-    . = ALIGN(4);
+  .ram_text : ALIGN(4) {
     *.oram (*.text *.text.* *.glue*)
-    . = ALIGN(4);
     *.oram (*.rodata *.rodata.*)
   } > ram
   ROM_ONLY AT> rom
@@ -68,8 +66,7 @@ SECTIONS {
    * Read/Write initialized data. Runs from RAM, gets copied there
    * from ROM if booting from flash.
    */
-  .data : {
-    . = ALIGN(4);
+  .data : ALIGN(4) {
     * (*.data *.data.*)
   } > ram
   ROM_ONLY AT> rom
@@ -79,10 +76,8 @@ SECTIONS {
    * The main kernel executable code, as well as all the read-only
    * data. If possible, this goes into flash, to free up more RAM.
    */
-  .text : {
-    . = ALIGN(4);
+  .text : ALIGN(4) {
     * (*.text *.text.* *.glue*)
-    . = ALIGN(4);
     * (*.rodata *.rodata.*)
   }
   ROM_ONLY > rom
@@ -95,10 +90,8 @@ SECTIONS {
    * defines the symbols we need to be able to initialize the section
    * properly.
    */
-  .bss : {
+  .bss : ALIGN(4) {
     * (*.bss *.bss.*)
-    . = ALIGN(4);
-    __bss_end__ = . ;
   } > ram
 
 
@@ -108,17 +101,14 @@ SECTIONS {
    * Although not strictly required, this zone is zeroed out at boot
    * time to provide a clean environment for the kernel.
    */
-  .stack  : {
+  .stack  : ALIGN(8) {
     /* irq stack */
-    . = ALIGN(8);
     . += 0x60; /* 96b, which is 3*8*4, the maximum irq stack size. */
-    . = ALIGN(8);
     __irq_stack__ = .;
 
     /* supervisor stack */
     __supervisor_stack_bottom__ = . ;
     . += 0x400; /* 1k supervisor stack. */
-    . = ALIGN(8);
     __supervisor_stack__ = .;
     __supervisor_stack_top__ = . ;
   } > ram
