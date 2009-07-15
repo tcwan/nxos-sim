@@ -60,10 +60,10 @@ that contains base/, systems/, ...) and type:
 
 Finally, connect the brick to your computer with the USB cable, and do:
 
-  % ./boot_firmware tests samba
+  % ./boot_firmware
 
-The script will then ask you confirmation, and then upload the firmware
-to the brick's RAM (for ROM flashing mode, change 'samba' for 'rom').
+The script will then ask you for the kernel to upload, and then upload the firmware
+to the brick's RAM (or ROM).
 
 To build and try another kernel, simply replace 'tests' by the name
 of the application kernel you want to build. The available kernels
