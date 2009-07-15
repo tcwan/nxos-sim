@@ -6,13 +6,7 @@
  * the terms of the GNU Public License (GPL) version 2.
  */
 
-/* NXT linker script source.
- *
- *  This file must be run through a sed script to generate an ldscript
- *  suitable for either a SAM-BA or rom image.
- *
- *  The sed script achieves this by selectively copying the lines with
- *  ROM_ONLY and SAM_ONLY.
+/* NXT linker script source to boot from flash.
  *
  *  Notes on alignment:
  *  1) Sections should be 4-byte aligned otherwise ARM fetches will be
@@ -26,7 +20,7 @@
  */
 
 MEMORY {
-ROM_ONLY rom : ORIGIN = 1M, LENGTH =256k
+rom : ORIGIN = 1M, LENGTH =256k
 vector_ram : ORIGIN = 2M, LENGTH = 64
 ram : ORIGIN = 2M + 64, LENGTH = 64K - 64 + 21
 }
@@ -44,8 +38,7 @@ SECTIONS {
    */
   .vectors : {
     KEEP(base/vectors.o (*.text *.text.*))
-  } > vector_ram
-  ROM_ONLY AT> rom
+  } > vector_ram AT> rom
 
 
   /*
@@ -58,8 +51,7 @@ SECTIONS {
   .ram_text : ALIGN(4) {
     *.oram (*.text *.text.* *.glue*)
     *.oram (*.rodata *.rodata.*)
-  } > ram
-  ROM_ONLY AT> rom
+  } > ram AT> rom
 
 
   /*
@@ -68,8 +60,7 @@ SECTIONS {
    */
   .data : ALIGN(4) {
     * (*.data *.data.*)
-  } > ram
-  ROM_ONLY AT> rom
+  } > ram AT> rom
 
 
   /*
@@ -79,9 +70,7 @@ SECTIONS {
   .text : ALIGN(4) {
     * (*.text *.text.* *.glue*)
     * (*.rodata *.rodata.*)
-  }
-  ROM_ONLY > rom
-  SAM_ONLY > ram
+  } > rom
 
 
   /*
@@ -114,40 +103,26 @@ SECTIONS {
   } > ram
 
 
-  /* SAMBA stage 0.5 */
-  SAM_ONLY .samba_boot ADDR(.bss) : {
-  SAM_ONLY   KEEP(base/samba_init.o (.samba_init));
-  SAM_ONLY }
-
-
   /*
    * The magic metadata struct is tacked onto the start of the kernel binary.
    */
-  SAM_ONLY .magic ADDR(.samba_boot) + SIZEOF(.samba_boot) : {
-  ROM_ONLY .magic : {
+   .magic : {
     /* Magic identifier */
     LONG(0xDEADBEEF);
     /* Kernel in-ram size */
     LONG(SIZEOF(.vectors) + SIZEOF(.ram_text) +
          SIZEOF(.data) + SIZEOF(.bss) + SIZEOF(.stack)
-    SAM_ONLY + SIZEOF(.text));
-    ROM_ONLY );
+    );
     /* Kernel in-rom size */
-    SAM_ONLY LONG(0);
-    ROM_ONLY LONG(SIZEOF(.vectors) + SIZEOF(.ram_text) +
-    ROM_ONLY      SIZEOF(.data) + SIZEOF(.text));
+    LONG(SIZEOF(.vectors) + SIZEOF(.ram_text) +
+         SIZEOF(.data) + SIZEOF(.text));
     /* Write address */
-    SAM_ONLY LONG(RAM_BASE + SAMBA_RESERVED_SIZE);
-    ROM_ONLY LONG(ROM_BASE);
+    LONG(ROM_BASE);
     /* Bootup address */
-    SAM_ONLY LONG(ADDR(.samba_boot) + SAMBA_RESERVED_SIZE);
-    ROM_ONLY LONG(ROM_BASE);
+    LONG(ROM_BASE);
     /* SAM-BA kernel? */
-    SAM_ONLY BYTE(1);
-    ROM_ONLY BYTE(0);
-  }
-  SAM_ONLY > ram
-  ROM_ONLY > rom
+    BYTE(0);
+  } > rom
 
   /* Discard anything not mapped at this point. */
   /DISCARD/ : {
@@ -158,9 +133,9 @@ SECTIONS {
    * Symbol definitions for the use of the kernel code.
    */
   __vectors_ram_start__  = ADDR(.vectors);
-  __vectors_ram_end__    = (ADDR(.vectors) + SIZEOF(.vectors));
+  __vectors_ram_end__    = ADDR(.vectors) + SIZEOF(.vectors);
   __vectors_load_start__ = LOADADDR(.vectors);
-  __vectors_load_end__   = (LOADADDR(.vectors) + SIZEOF(.vectors));
+  __vectors_load_end__   = LOADADDR(.vectors) + SIZEOF(.vectors);
 
   __ramtext_ram_start__ = ADDR(.ram_text);
   __ramtext_ram_end__   = ADDR(.ram_text) + SIZEOF(.ram_text);
@@ -176,20 +151,17 @@ SECTIONS {
   __text_end__ = ADDR(.text) + SIZEOF(.text);
 
   __bss_start__ = ADDR(.bss);
-  __bss_end__   = (ADDR(.bss) + SIZEOF(.bss));
+  __bss_end__   = ADDR(.bss) + SIZEOF(.bss);
 
   __stack_start__ = ADDR(.stack);
-  __stack_end__ = (ADDR(.stack) + SIZEOF(.stack));
+  __stack_end__ = ADDR(.stack) + SIZEOF(.stack);
 
-  SAM_ONLY __boot_from_samba__ = 1;
-  ROM_ONLY __boot_from_samba__ = 0;
+  __boot_from_samba__ = 0;
 
-  ROM_ONLY __rom_userspace_start__ = ADDR(.text) + SIZEOF(.text);
-  SAM_ONLY __rom_userspace_start__ = 0;
-  __rom_userspace_end__ = (ROM_BASE + ROM_SIZE);
+  __rom_userspace_start__ = ADDR(.text) + SIZEOF(.text);
+  __rom_userspace_end__ = ROM_BASE + ROM_SIZE;
 
   __ram_userspace_start__ = __stack_end__;
-  __ram_userspace_end__ = (RAM_BASE + RAM_SIZE);
+  __ram_userspace_end__ = RAM_BASE + RAM_SIZE;
 
-  SAM_ONLY __kernel_ram_load_size__ = __text_end__ - __vectors_ram_start__;
 }
