@@ -180,7 +180,8 @@ extern U8 __boot_from_samba__;
  */
 /*@{*/
 #define NX_BOOT_FROM_SAMBA (SYMADDR(__boot_from_samba__) == (U8*)1 ? TRUE : FALSE)
-#define NX_BOOT_FROM_ROM (!NX_BOOT_FROM_SAMBA)
+#define NX_BOOT_FROM_ENH_FW (SYMADDR(__boot_from_samba__) == (U8*)2 ? TRUE : FALSE)
+#define NX_BOOT_FROM_ROM (!NX_BOOT_FROM_SAMBA && !NX_BOOT_FROM_ENH_FW)
 /*@}*/
 
 /*@}*/
