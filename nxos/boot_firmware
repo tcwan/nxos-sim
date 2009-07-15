@@ -14,12 +14,12 @@ import nxt.samba
 import nxt.flash
 
 USAGE = '''
-Syntax: %(n)s <kernel binary file>
-        %(n)s <kernel name> <boot type>
+Syntax: %(n)s
+        %(n)s <kernel binary file>
 
 Examples:
+        %(n)s
         %(n)s systems/tests/tests_samba.bin
-        %(n)s tests rom
 '''.strip()
 
 
@@ -132,7 +132,7 @@ def ask_number(prompt, limit):
 
 def main():
     if len(sys.argv) > 2:
-        print USAGE % sys.argv[0]
+        print USAGE % dict(n=sys.argv[0])
         return 2
 
     if len(sys.argv) == 2:
