@@ -112,9 +112,14 @@ def appkernel_tool(env):
         env.Depends(variant_kernel_elf, app_kernel_lds)
 
         # ... And make a binary image from that.
-        variant_kernel = env.Command(
-            kvariant + '.bin', [variant_kernel_elf],
-            '$OBJCOPY -O binary $SOURCES $TARGET')
+        if variant_name != 'rxe':
+            variant_kernel = env.Command(
+                kvariant + '.bin', [variant_kernel_elf],
+                '$OBJCOPY -O binary $SOURCES $TARGET')
+        else:
+            variant_kernel = env.Command(
+                kernel_name + '.rxe', [variant_kernel_elf],
+                '$OBJCOPY -O binary $SOURCES $TARGET')
 
     def AppKernel(self, kernel_name, sources, kernelsize='50k',
                   romkernelsize=None, kernelisbuilt=False):
@@ -135,6 +140,8 @@ def appkernel_tool(env):
                          env.File('#systems/appkernel_samba.ld'))
         AppKernelVariant(env, kernel_name, 'rom', app_kernel,
                          env.File('#systems/appkernel_rom.ld'))
+        AppKernelVariant(env, kernel_name, 'rxe', app_kernel,
+                         env.File('#systems/appkernel_rxe.ld'))
     appkernel_func = new.instancemethod(AppKernel, env, env.__class__)
     env.AppKernel = appkernel_func
 

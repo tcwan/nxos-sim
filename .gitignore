@@ -3,6 +3,7 @@
 *.pyc
 *.bin
 *.elf
+*.rxe
 *.map
 *.orig
 *.log
