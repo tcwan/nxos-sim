@@ -12,6 +12,7 @@
 #include "base/interrupts.h"
 #include "base/_display.h"
 #include "base/assert.h"
+#include "base/memmap.h"
 #include "drivers/_aic.h"
 #include "drivers/_systick.h"
 #include "drivers/_sound.h"
@@ -80,6 +81,15 @@ void nx_core_halt(void) {
   nx__avr_power_down();
 }
 
+void nx_core_reset(void) {
+  if (shutdown_handler)
+    shutdown_handler();
+  nx__lcd_shutdown();
+  nx__usb_disable();
+  /* Total reset of the NXT's processor. */
+  *AT91C_RSTC_RCR = 0xA5000005;
+}
+
 void nx_core_register_shutdown_handler(nx_closure_t handler) {
   shutdown_handler = handler;
 }
@@ -88,5 +98,8 @@ void nx__kernel_main(void) {
   core_init();
   check_boot_errors();
   main();
-  nx_core_halt();
+  if( NX_BOOT_FROM_ENH_FW )
+    nx_core_reset();
+  else
+    nx_core_halt();
 }

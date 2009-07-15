@@ -35,6 +35,14 @@
  */
 void nx_core_halt(void);
 
+/** Perform a reset of the NXT brick.
+ *
+ * This function disables the LCD, cleanly unregisters
+ * from a USB chain, if the brick was plugged in and
+ * resets the ARM.
+ */
+void nx_core_reset(void);
+
 /** Register a shutdown handler function.
  *
  * The registered handler will be called by nx_core_halt() before it
