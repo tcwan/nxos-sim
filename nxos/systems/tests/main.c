@@ -31,5 +31,6 @@ void main(void) {
   //tests_usb_hardcore();
   //tests_radar();
   //tests_util();
-  tests_defrag();
+  //tests_defrag();
+  tests_sysinfo();
 }
