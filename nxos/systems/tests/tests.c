@@ -346,6 +346,8 @@ void tests_sysinfo(void) {
     nx_display_string("Boot from ");
     if (NX_BOOT_FROM_SAMBA)
       nx_display_string("SAM-BA");
+    else if (NX_BOOT_FROM_ENH_FW)
+      nx_display_string("ENH-FW");
     else
       nx_display_string("ROM");
     nx_display_end_line();
