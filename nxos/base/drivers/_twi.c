@@ -94,7 +94,7 @@ static void twi_isr(void)
     *AT91C_TWI_CR = AT91C_TWI_STOP;
     *AT91C_TWI_IDR = ~0;
     twi_state.mode = TWI_FAILED;
-    /* TODO: This should be an assertion failed, ie. a hard crash. */
+    NX_FAIL("Lost link to AVR");
   }
 }
 
@@ -162,8 +162,6 @@ void nx__twi_read_async(U32 dev_addr, U8 *data, U32 len)
   NX_ASSERT(data != NULL);
   NX_ASSERT(len > 0);
   NX_ASSERT(nx__twi_ready());
-
-  /* TODO: assert(nx__twi_ready()) */
 
   twi_state.mode = TWI_RX_BUSY;
   twi_state.ptr = data;
