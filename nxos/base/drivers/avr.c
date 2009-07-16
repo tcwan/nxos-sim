@@ -228,7 +228,7 @@ static void avr_unpack_from_avr(void) {
    * 3545 followed by a division by 256.
    */
   voltage = word & 0x3ff;
-  voltage = (voltage * 3545) >> 9;
+  voltage = (voltage * 3545) >> 8;
   from_avr.battery.charge = voltage;
 }
 
