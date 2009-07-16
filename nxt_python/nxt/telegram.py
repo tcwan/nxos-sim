@@ -11,6 +11,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
+import os.path
 from cStringIO import StringIO
 from struct import pack, unpack
 import nxt.error
@@ -60,7 +61,7 @@ class Telegram(object):
 		self.pkt.write(pack('%ds' % n_bytes, v))
 
 	def add_filename(self, fname):
-		self.pkt.write(pack('20s', fname))
+		self.pkt.write(pack('20s', os.path.basename(fname)))
 
 	def add_s8(self, v):
 		self.pkt.write(pack('<b', v))
