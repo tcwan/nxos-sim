@@ -5,14 +5,6 @@ import sys
 import os.path
 import struct
 
-nxt_path = os.path.join(
-    os.path.split(os.path.abspath(__file__))[0], '..', 'pynxt')
-sys.path = [nxt_path]+sys.path
-
-import nxt
-import nxt.samba
-import nxt.flash
-
 USAGE = '''
 Syntax: %(n)s
         %(n)s <kernel binary file>
@@ -56,39 +48,97 @@ class Firmware(object):
         f = open(file)
         fw_and_header = f.read()
         f.close()
+        if fw_and_header[:9] == 'NXTBINARY':
+            # rxe found
+            self.rxe = True
+        else:
+            self.rxe = False
+            header = fw_and_header[-self.HEADER_SIZE:]
+            self.firmware = fw_and_header[:-self.HEADER_SIZE]
 
-        header = fw_and_header[-self.HEADER_SIZE:]
-        self.firmware = fw_and_header[:-self.HEADER_SIZE]
+            (magic, self.ramsize, self.romsize, self.writeaddr,
+             self.loadaddr, self.samba) = struct.unpack(self.HEADER_DEF, header)
+            self.samba = bool(self.samba)
+            if magic != 0xDEADBEEF:
+                raise InvalidHeader('Bad magic on header')
 
-        (magic, self.ramsize, self.romsize, self.writeaddr,
-         self.loadaddr, self.samba) = struct.unpack(self.HEADER_DEF, header)
-        self.samba = bool(self.samba)
-        if magic != 0xDEADBEEF:
-            raise InvalidHeader('Bad magic on header')
+# The following two functions are copied from nxt_python/scripts/nxt_push
+
+def _write_file(b, fname, f):
+        from nxt.brick import FileWriter
+	# FIXME: change to "with" syntax for python 2.5
+	w = FileWriter(b, fname, f)
+	w.__enter__()
+	try:
+		print 'Pushing %s (%d bytes) ...' % (os.path.basename(fname), w.size),
+		sys.stdout.flush()
+		size = 0
+		for n_bytes in w:
+			size += n_bytes
+		print 'wrote %d bytes' % size
+	finally:
+		w.__exit__(None, None, None)
+
+def write_file(b, fname):
+        from nxt.error import FileExistsError
+	# FIXME: change to "with" syntax for python 2.5
+	f = open(fname)
+	try:
+		try:
+			_write_file(b, fname, f)
+		except FileExistsError:
+			print 'Overwriting %s on the NXT' % os.path.basename(fname)
+			b.delete(fname)
+			_write_file(b, fname, f)
+                print 'Starting program'
+                b.start_program(os.path.basename(fname))
+	finally:
+		f.close()
 
 
 def upload_and_boot(firmware):
-    s = nxt.samba.SambaBrick()
-    try:
-        s.open(timeout=60)
-    except nxt.samba.SambaOpenError, e:
-        raise BrickNotFound()
+    if firmware.rxe:
+        nxt_path = os.path.join(
+            os.path.split(os.path.abspath(__file__))[0], '..', 'nxt_python')
+        sys.path = [nxt_path]+sys.path
+        import nxt.locator
 
-    if firmware.samba:
-        s.write_buffer(firmware.writeaddr, firmware.firmware)
+	sock = nxt.locator.find_one_brick()
+	if sock:
+		b = sock.connect()
+                name, host, signal_strength, user_flash = b.get_device_info()
+                print 'Found a NXT named' , name
+		write_file(b, firmware.path)
+		sock.close()
     else:
-        f = nxt.flash.FlashController(s)
-        f.flash(firmware.firmware)
+        nxt_path = os.path.join(
+            os.path.split(os.path.abspath(__file__))[0], '..', 'pynxt')
+        sys.path = [nxt_path]+sys.path
+        import nxt
+        import nxt.samba
+        import nxt.flash
 
-    s.jump(firmware.loadaddr)
-    s.close()
+        s = nxt.samba.SambaBrick()
+        try:
+            s.open(timeout=60)
+        except nxt.samba.SambaOpenError, e:
+            raise BrickNotFound()
+
+        if firmware.samba:
+            s.write_buffer(firmware.writeaddr, firmware.firmware)
+        else:
+            f = nxt.flash.FlashController(s)
+            f.flash(firmware.firmware)
+
+        s.jump(firmware.loadaddr)
+        s.close()
 
 
 def find_all_firmwares(root):
     firmwares = []
     for root, dirs, files in os.walk(root):
         for f in files:
-            if f.endswith('.bin'):
+            if f.endswith('.bin') or f.endswith('.rxe'):
                 try:
                     firmware = Firmware(os.path.join(root, f))
                 except Error:
