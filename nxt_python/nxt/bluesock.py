@@ -62,5 +62,6 @@ def _check_brick(arg, value):
 
 def find_bricks(host=None, name=None):
 	for h, n in bluetooth.discover_devices(lookup_names=True):
-		if _check_brick(host, h) and _check_brick(name, n):
+                if host != None or h[:8] == '00:16:53':
+		    if _check_brick(host, h) and _check_brick(name, n):
 			yield BlueSock(h)
