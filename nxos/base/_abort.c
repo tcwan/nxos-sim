@@ -13,7 +13,7 @@
 
 #include "base/_abort.h"
 
-void nx__abort(bool data, U32 pc, U32 cpsr) {
+void nx__abort(U32 data, U32 pc, U32 cpsr) {
   nx_interrupts_disable();
   nx_display_auto_refresh(FALSE);
   nx_display_clear();

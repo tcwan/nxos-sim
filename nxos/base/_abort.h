@@ -18,7 +18,7 @@
 
 /** Process a data or prefetch abort.
  *
- * @param data TRUE if the abort is a data abort, FALSE if it is a
+ * @param data 1 if the abort is a data abort, 0 if it is a
  * prefetch abort.
  * @param pc The address of the instruction that caused the abort.
  * @param cpsr The CPU state at the time of abort.
@@ -26,7 +26,7 @@
  * @note This function never returns, and results in the brick locking
  * up completely.
  */
-void nx__abort(bool data, U32 pc, U32 cpsr);
+void nx__abort(U32 data, U32 pc, U32 cpsr);
 
 /*@}*/
 
