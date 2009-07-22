@@ -159,6 +159,13 @@ nx__spurious_irq:
         mrs r2, spsr
         b nx__abort
 
+        .global nx__illegal_instruction_abort_handler
+nx__illegal_instruction_abort_handler:
+        sub r1, lr, #8
+        mov r0, #3
+        mrs r2, spsr
+        b nx__abort
+
 /**********************************************************
  * Nested interrupt disable/enable routines. The
  * interrupts_disable routine disables IRQ/FIQ handling,

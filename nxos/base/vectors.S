@@ -18,7 +18,7 @@
  * relocated.
  */
         ldr   pc,v0 /* Reset */
-        ldr   pc,v4 /* Illegal instruction */
+        ldr   pc,v5 /* Illegal instruction */
         ldr   pc,v4 /* Software interrupt */
         ldr   pc,v2 /* Prefetch abort */
         ldr   pc,v3 /* Data abort */
@@ -31,3 +31,4 @@ v1:     .long nx__irq_handler
 v2:     .long nx__prefetch_abort_handler
 v3:     .long nx__data_abort_handler
 v4:     .long nx__unhandled_exception
+v5:     .long nx__illegal_instruction_abort_handler
