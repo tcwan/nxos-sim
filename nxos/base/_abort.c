@@ -17,7 +17,9 @@ void nx__abort(U32 data, U32 pc, U32 cpsr) {
   nx_interrupts_disable();
   nx_display_auto_refresh(FALSE);
   nx_display_clear();
-  if (data) {
+  if (data == 2) {
+    nx_display_string("Spurious");
+  } else if (data) {
     nx_display_string("Data");
   } else {
     nx_display_string("Prefetch");

@@ -18,8 +18,8 @@
 
 /** Process a data or prefetch abort.
  *
- * @param data 1 if the abort is a data abort, 0 if it is a
- * prefetch abort.
+ * @param data 2 if the abort is a spurious irq, 1 if the abort is a
+ * data abort, 0 if it is a prefetch abort.
  * @param pc The address of the instruction that caused the abort.
  * @param cpsr The CPU state at the time of abort.
  *

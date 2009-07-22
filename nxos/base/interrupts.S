@@ -20,15 +20,13 @@
 
 /**********************************************************
  * Default handlers for unknown IRQ and FIQ interrupts, and
- * the spurious IRQ handler and unknown exception handler.
+ * unknown exception handler.
  */
         .global nx__default_irq
         .global nx__default_fiq
-        .global nx__spurious_irq
         .global nx__unhandled_exception
 nx__default_irq:
 nx__default_fiq:
-nx__spurious_irq:
 nx__unhandled_exception:
         b nx__unhandled_exception
 
@@ -136,8 +134,8 @@ nx__irq_handler:
 
 /**********************************************************
  * Abort entry points. These get run when the CPU enters
- * prefetch or data abort modes. These handlers just set
- * up the necessary arguments and invoke nx__abort().
+ * prefetch or data abort modes or if a spurious IRQ is received.
+ * These handlers just set up the necessary arguments and invoke nx__abort().
  */
         .extern nx__abort
         .global nx__prefetch_abort_handler
@@ -154,6 +152,12 @@ nx__data_abort_handler:
         mrs r2, spsr
         b nx__abort
 
+        .global nx__spurious_irq
+nx__spurious_irq:
+        sub r1, lr, #8
+        mov r0, #2
+        mrs r2, spsr
+        b nx__abort
 
 /**********************************************************
  * Nested interrupt disable/enable routines. The
