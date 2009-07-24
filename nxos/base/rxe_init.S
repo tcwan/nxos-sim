@@ -69,6 +69,11 @@ CopierCompare:
   	cmp	r0, r2
    	bcc	CopierLoop
 
+        /* Reset peripherals, needed to have defined states e.g. for the uart. */
+        ldr     r0, =0xA5000004 /* AT91C_RSTC_KEY | AT91C_RSTC_PERRST */
+        ldr     r1, =0xFFFFFD00 /* AT91C_RSTC_RCR */
+        str     r0, [r1]
+
 JumpToResetVector:
         ldr pc, =RAM_START
   .size   _startup, . - _startup
