@@ -70,8 +70,7 @@ SECTIONS {
      */
     . = ALIGN(4);
     __bottom_mapped__ = .;
-    ROM_ONLY LONG(0)
-    SAM_ONLY LONG(1)
+    LONG(1)
   } > ram
 
 
