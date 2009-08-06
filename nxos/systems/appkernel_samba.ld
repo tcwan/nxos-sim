@@ -50,6 +50,8 @@ SECTIONS {
   .ram_text : ALIGN(4) {
     *.oram (*.text *.text.* *.glue*)
     *.oram (*.rodata *.rodata.*)
+    . = ALIGN(4);
+    * (*.ram_text)
   } > ram
 
 
@@ -59,6 +61,17 @@ SECTIONS {
    */
   .data : ALIGN(4) {
     * (*.data *.data.*)
+
+    /* This symbol is used by the memcpy wrapper (see base/_memcpy.c) in
+     * order to apply the correct writing method.
+     * 0 -> mapped on flash;   1 -> mapped on ram
+     * TODO: make init code depending on this flag instead of using memory
+     *       comparation.
+     */
+    . = ALIGN(4);
+    __bottom_mapped__ = .;
+    ROM_ONLY LONG(0)
+    SAM_ONLY LONG(1)
   } > ram
 
 
