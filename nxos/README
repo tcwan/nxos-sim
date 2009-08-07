@@ -34,6 +34,7 @@ needed by PyNXT to upload an NxOS kernel to the brick.
   * Python >= 2.4
   * libusb
   * python-pyusb
+  * PyBluez (if you want to upload/boot from the enhanced fw using bluetooth)
 
 You will also need a working ARM cross-compilation chain. To ease
 the process, you will find in the scripts/ directory an automatic
@@ -62,13 +63,26 @@ Finally, connect the brick to your computer with the USB cable, and do:
 
   % ./boot_firmware
 
-The script will then ask you for the kernel to upload, and then upload the firmware
-to the brick's RAM (or ROM).
+The script will then ask you for the kernel to upload, and then upload the
+firmware to the brick's RAM, ROM (flash) or to RAM of the enhanced
+NXT-standard-firmware from John Hansen (available where brikcc is available).
+
+To upload using RAM (kernel_samba.bin) or flash (kernel_rom.bin) the NXT must
+be in SAMBA-mode, which is achieved pressing the button in the hole below the
+USB-port (using a LEGO-antenna or such). To upload to the enhanced firmware
+(kernel.rxe), you have to install the enhanced firmware from John Hansens. This
+gives the advantage that the NxOS-kernel is stored like any other program on
+the NXT and you can still use NXT-G, NBC witout the need to reflash the
+firmware. The disadvantage is, that you will have less RAM available for your
+program, because the program is started in RAM (as when you are uploading a
+kernel_samba.bin).
 
 To build and try another kernel, simply replace 'tests' by the name
 of the application kernel you want to build. The available kernels
 are the directory in systems/. You can also build several appkernels at
-once by using a comma-separated list.
+once by using a comma-separated list. Once scons is called with appkernel=xyz,
+you only have to invoke scons without any arguments, because the options to
+scons are stored in a file namend scons.options.
 
 4. Notes and FAQ
 ^^^^^^^^^^^^^^^^
