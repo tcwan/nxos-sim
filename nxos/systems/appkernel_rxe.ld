@@ -101,6 +101,7 @@ SECTIONS {
    */
   .bss : ALIGN(4) {
     * (*.bss *.bss.*)
+    * (COMMON) /* this is uninitialized data, but we just place it here */
   } > ram
 
 
