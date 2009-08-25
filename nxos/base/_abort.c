@@ -18,8 +18,10 @@ void nx__abort(U32 data, U32 pc, U32 cpsr) {
   nx_display_auto_refresh(FALSE);
   nx_display_clear();
   if (data == 3) {
+    /* PC might be wrong, see interrupts.S. */
     nx_display_string("Illegal");
   } else if (data == 2) {
+    /* PC might be wrong, see interrupts.S. */
     nx_display_string("Spurious");
   } else if (data) {
     nx_display_string("Data");

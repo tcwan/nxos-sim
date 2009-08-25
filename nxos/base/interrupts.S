@@ -152,6 +152,12 @@ nx__data_abort_handler:
         mrs r2, spsr
         b nx__abort
 
+/**********************************************************
+ * Warning: The following two handlers might display stupid
+ * registers values (e.g. wrong PC), I haven't consulted
+ * the documentation about how to extract useful values,
+ * displaying an error was enough me.
+ */
         .global nx__spurious_irq
 nx__spurious_irq:
         sub r1, lr, #8
