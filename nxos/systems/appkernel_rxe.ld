@@ -21,7 +21,7 @@
  */
 
 MEMORY {
-header : ORIGIN = 2M - 16, LENGTH = 16
+header : ORIGIN = 2M - 16 - 80, LENGTH = 16 + 80
 vector_ram : ORIGIN = 2M, LENGTH = 64
 ram : ORIGIN = 2M + 64, LENGTH = 64K - 64 + 21
 }
@@ -36,6 +36,11 @@ SECTIONS {
   .rxe_header : {
     KEEP(base/rxe_header.o (.rxe_header));
   } > header
+  
+ /* loader */
+  .rxe_init : {
+    KEEP(base/rxe_init.o (.rxe_init));
+  } > header
 
   /*
    * Interrupt vectors. These are loaded to the bottom of memory at
@@ -44,12 +49,6 @@ SECTIONS {
   .vectors : {
     KEEP(base/vectors.o (*.text *.text.*))
   } > vector_ram
-
-  /* loader */
-  .rxe_init : {
-    KEEP(base/rxe_init.o (.rxe_init));
-  } > ram
-
 
   /*
    * This section contains code that is relocated to RAM before

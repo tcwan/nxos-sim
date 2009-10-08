@@ -1,5 +1,6 @@
 # Ignore tag
 MASTER-REPO_DO-NOT-DELETE
+.project
 
 # Generally annoying things.
 *.[oa]

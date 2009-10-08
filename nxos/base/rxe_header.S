@@ -30,9 +30,9 @@
     /*
      * The firmware expects to see at offset 12 in the
      * file the offset of the entry function from the
-     * firmware. It evaluates to 80 (16-byte header
-     * plus 64 bytes of vectors).
+     * firmware. It evaluates to 16 (16-byte header)
+     * This allows us to skip the runtime copier routine when copying.
      */
-	.word  80
+	.word  16
     .end
 

@@ -58,8 +58,9 @@ NXT_Entry_Point:
 Copier:
  	add	r2, r0, r1      // r2 now holds the address just beyong
                                 // the end of this binary file
-        mov	r1, #RAM_START  // beginning of RAM
+    mov	r1, #RAM_START  // beginning of RAM
  	add	r0, r0, #16     // skip the header!
+ 	add r0, #0x50		// Hack! I don't know how to calculate this dynamically....
 
  	b	CopierCompare
 CopierLoop:
