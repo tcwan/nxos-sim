@@ -1,3 +1,6 @@
+# Ignore tag
+MASTER-REPO_DO-NOT-DELETE
+
 # Generally annoying things.
 *.[oa]
 *.pyc
