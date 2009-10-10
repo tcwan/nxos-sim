@@ -31,7 +31,10 @@
      * The firmware expects to see at offset 12 in the
      * file the offset of the entry function from the
      * firmware. It evaluates to 16 (16-byte header)
-     * This allows us to skip the runtime copier routine when copying.
+     * This allows us to place the runtime copier
+     * before the Reset Vectors, so we can skip copying
+     * the runtime copier routine when copying the
+     * program to RAM.
      */
 	.word  16
     .end

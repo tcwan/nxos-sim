@@ -41,10 +41,11 @@
 *------------------------------------------------------------------------------*/
         .global _startup
         .func   _startup
+
 _startup:
 /*
  * Entry into native code from NXT firmware;
- * this function must be located at offset 80 in the file
+ * this function must be located at offset 16 in the file
 */
 NXT_Entry_Point:
 
@@ -56,12 +57,13 @@ NXT_Entry_Point:
 	LDMIA	SP!, {R0}		/* Pop R0. */
 
 Copier:
- 	add	r2, r0, r1      // r2 now holds the address just beyong
-                                // the end of this binary file
-    mov	r1, #RAM_START  // beginning of RAM
- 	add	r0, r0, #16     // skip the header!
- 	add r0, #0x50		// Hack! I don't know how to calculate this dynamically....
+ 	add	r2, r0, r1      /* r2 now holds the address just beyong
+                                 the end of this binary file */
+	ldr	r1, _rxe_hdrsize    /* Retrieve size from a variable, so that Linker can fill value in for us */
+	add r0, r0, r1          /* Skip NXTBINARY header and Runtime Copier */
+    mov	r1, #RAM_START      /* beginning of RAM */
 
+/*
  	b	CopierCompare
 CopierLoop:
   	ldr	r3, [r0], #4
@@ -69,6 +71,18 @@ CopierLoop:
 CopierCompare:
   	cmp	r0, r2
    	bcc	CopierLoop
+ */
+
+ /* Copier Loop modified from version found in
+  * Miro Samek, "Building Bare-Metal ARM Systems with GNU"
+  * http://www.state-machine.com/arm
+  * Condition used is LO since addresses are unsigned
+ */
+ CopierLoop:
+ 	cmp	r0, r2
+ 	ldmloia	r0!, {r3}
+ 	stmloia r1!, {r3}
+ 	blo		CopierLoop
 
         /* Reset peripherals, needed to have defined states e.g. for the uart. */
         ldr     r0, =0xA5000004 /* AT91C_RSTC_KEY | AT91C_RSTC_PERRST */
@@ -77,6 +91,10 @@ CopierCompare:
 
 JumpToResetVector:
         ldr pc, =RAM_START
+        .ltorg					/* Needed to force assembler to account for literals
+        						   placed here, to calculate correct address offsets */
+_rxe_hdrsize:  .word	(_rxe_init_end - _startup + 16)		/* Need to include NXTBINARY header */
+_rxe_init_end:
   .size   _startup, . - _startup
   .endfunc
 
