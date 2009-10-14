@@ -11,12 +11,14 @@
 .align 0
 
 #include "asm_decls.h"
+#define __ASSEMBLY__
+#include "at91sam7s256.h"
 
 /*
  * Definition of a few constants, for readability.
  */
-#define AIC_IVR 0xFFFFF100   /* AIC Interrupt Vector Register */
-#define AIC_EOICR 0xFFFFF130 /* End Of Interrupt Control Register */
+@ #define AIC_IVR 0xFFFFF100   /* AIC Interrupt Vector Register */
+@ #define AIC_EOICR 0xFFFFF130 /* End Of Interrupt Control Register */
 
 /**********************************************************
  * Default handlers for unknown IRQ and FIQ interrupts, and
@@ -81,7 +83,7 @@ nx__irq_handler:
         movne r0, #0
 
         /* Get the IVR value. */
-        ldr r1, =AIC_IVR
+        ldr r1, =AT91C_AIC_IVR
         ldr r2, [r1]
 
         /* If we're in Protected mode (usually for JTAG debugging), we
@@ -121,7 +123,7 @@ nx__irq_handler:
          * handled.
          */
         msr cpsr_c, #(MODE_IRQ | IRQ_FIQ_MASK)
-        ldr lr, =AIC_EOICR
+        ldr lr, =AT91C_AIC_EOICR
         str lr, [lr]
 
         /* Restore the SPSR */
