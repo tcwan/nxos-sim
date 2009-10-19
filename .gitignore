@@ -1,6 +1,7 @@
 # Ignore tag
 MASTER-REPO_DO-NOT-DELETE
 .project
+*.objdump
 
 # Generally annoying things.
 *.[oa]
