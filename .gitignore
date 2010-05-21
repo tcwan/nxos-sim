@@ -2,6 +2,7 @@
 MASTER-REPO_DO-NOT-DELETE
 .project
 *.objdump
+.DS_Store
 
 # Generally annoying things.
 *.[oa]
