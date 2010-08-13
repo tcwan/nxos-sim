@@ -240,4 +240,5 @@ if env.GetOption('clean'):
 else:
     appkernels = env['appkernels']
 systems_to_build = ['systems/%s/SConscript' % x for x in appkernels]
-SConscript(['base/SConscript'] + systems_to_build, 'env CheckTool')
+numProcs = os.sysconf('SC_NPROCESSORS_ONLN')
+SConscript(['base/SConscript'] + systems_to_build, 'numProcs env CheckTool')
