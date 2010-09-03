@@ -169,6 +169,21 @@ nx__spurious_irq:
 
         .global nx__illegal_instruction_abort_handler
 nx__illegal_instruction_abort_handler:
+/* Remote GDB Debugger relies on BRKPT instruction being trapped here
+   In ARMv4t, it is an Illegal (Undefined) Instruction.
+   On triggering, lr (R14) contains the previous mode's pc (R15).
+   Based on example in Hohl, "ARM Assembly Language: Fundamentals and Techniques"
+   Chapter 11, Example 11.1.
+ */
+ /* We assume that the UNDEF stack has been setup previously */
+ 		stmfd sp!, {r0-r15}^			/* Save workspace, user mode's pc via 'S' flag */
+ 		mrs	r0, spsr					/* Copy SPSR to r0 */
+ 		str	r0, [sp, #-4]!				/* Save previous mode's CPSR to stack */
+		// What do we do with previous mode's r13 & r14?
+		ldr	r0, [lr, #-4]				/* load UNDEF instruction into r0 */
+		bic
+
+ // Original NxOS code follows
         sub r1, lr, #8
         mov r0, #3
         mrs r2, spsr

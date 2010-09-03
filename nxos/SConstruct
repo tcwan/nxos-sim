@@ -159,8 +159,8 @@ opts.Add(ListVariable('appkernels',
                     '(by default, only the tests kernel is compiled', 'tests',
                     buildable_systems))
 opts.Add(PathVariable('gccprefix',
-                    'Prefix of the cross-gcc to use (by default arm-elf)',
-                    'arm-elf', PathVariable.PathAccept))
+                    'Prefix of the cross-gcc to use (by default arm-none-eabi)',
+                    'arm-none-eabi', PathVariable.PathAccept))
 
 Help('''
 Type: 'scons appkernels=... [gccprefix=...]' to build kernels.
@@ -184,7 +184,7 @@ Examples
  - Build only the baseplate code:
      scons appkernels=none
 
- - To use another cross-gcc than arm-elf-gcc:
+ - To use another cross-gcc than arm-none-eabi-gcc:
      scons gccprefix=arm-softfloat-eabi
 
 Options are saved persistent in the file 'scons.options'. That means
@@ -222,16 +222,16 @@ mycflags = ['-mcpu=arm7tdmi', '-Os', '-Wextra', '-Wall', '-Werror',
                       '-Wpointer-arith', '-Wbad-function-cast',
                       '-Wmissing-prototypes', '-ffreestanding',
                       '-fsigned-char', '-ffunction-sections', '-std=gnu99',
-                      '-fdata-sections', '-fomit-frame-pointer', '-mhard-float']
+                      '-fdata-sections', '-fomit-frame-pointer', '-msoft-float']
 myasflags = ['-Wall', '-Werror', '-Os'];
 if str(env['NXOS_LIBGCC']).find('interwork') != -1:
     mycflags.append('-mthumb-interwork')
-    myasflags.append('-Wa,-mcpu=arm7tdmi,-mfpu=fpa,-mthumb-interwork')
+    myasflags.append('-Wa,-mcpu=arm7tdmi,-mfpu=softfpa,-mthumb-interwork')
 elif str(env['NXOS_LIBGCC']).find('thumb') != -1:
     mycflags.append('-mthumb')
-    myasflags.append('-Wa,-mcpu=arm7tdmi,-mfpu=fpa,-mthumb')
+    myasflags.append('-Wa,-mcpu=arm7tdmi,-mfpu=softfpa,-mthumb')
 else:
-    myasflags.append('-Wa,-mcpu=arm7tdmi,-mfpu=fpa')
+    myasflags.append('-Wa,-mcpu=arm7tdmi,-mfpu=softfpa')
 env.Replace(CCFLAGS = mycflags, ASFLAGS = myasflags )
 
 # Build the baseplate, and all selected application kernels.
