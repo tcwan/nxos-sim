@@ -642,8 +642,8 @@ static void usb_isr(void) {
   if (endpoint < N_ENDPOINTS) { /* if an endpoint was specified */
     csr = AT91C_UDP_CSR[endpoint];
 
-    if (csr & AT91C_UDP_RX_DATA_BK0
-	|| csr & AT91C_UDP_RX_DATA_BK1) {
+    if ((csr & AT91C_UDP_RX_DATA_BK0)
+	|| (csr & AT91C_UDP_RX_DATA_BK1)) {
 
       if (endpoint == 1) {
         AT91C_UDP_CSR[1] &= ~AT91C_UDP_EPEDS;
