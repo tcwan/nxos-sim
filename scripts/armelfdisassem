@@ -3,7 +3,6 @@ OBJDUMP=arm-none-eabi-objdump
 if [ x$1 == "x" ]; then
 	echo "$0 <Sourcefile>"
 else
-	#$OBJDUMP -rdj .text -j .data -j .bss $1.o > $1.objdump
-	$OBJDUMP -rd $1.o > $1.objdump
+	$OBJDUMP -rdj .text -j .data -j .bss $1.elf > $1.objdump
 fi
 

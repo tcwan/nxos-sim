@@ -1,6 +1,7 @@
 #!/bin/sh
+GCC=arm-none-eabi-gcc
 if [ x$1 == "x" ]; then
 	echo "$0 <Sourcefile>"
 else
-	arm-elf-gcc -D__ASSEMBLY__ -x assembler-with-cpp -g -mcpu=arm7tdmi -c -Os -Wall -I. -Wa,-a=$1.lst -o $1.o $1.S
+	$GCC -D__ASSEMBLY__ -x assembler-with-cpp -g -mcpu=arm7tdmi -c -Os -Wall -I. -Wa,-a=$1.lst -o $1.o $1.S
 fi

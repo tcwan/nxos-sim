@@ -1,7 +1,9 @@
 #!/bin/sh
+AS=arm-none-eabi-as
 if [ x$1 == "x" ]; then
 	echo "$0 <Sourcefile>"
 else
-	arm-elf-as -g -a=$1.lst -o $1.obj $1.S
+	echo "Assemblying $1.S"
+	$AS -g -a=$1.lst -o $1.o $1.S
 fi
 
