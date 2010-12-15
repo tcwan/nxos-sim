@@ -24,6 +24,7 @@
 #include "drivers/i2c.h"
 
 #include "base/_core.h"
+#include "armdebug/Debugger/debug_stub.h"
 
 /* main() is the entry point into the custom payload, not included in
  * the NxOS core.
@@ -96,7 +97,9 @@ void nx_core_register_shutdown_handler(nx_closure_t handler) {
 
 void nx__kernel_main(void) {
   core_init();
+  dbg__bkpt_init();
   check_boot_errors();
+  dbg_breakpoint_arm();                 /* Test Breakpoint Instruction */
   main();
   if( NX_BOOT_FROM_ENH_FW )
     nx_core_reset();
