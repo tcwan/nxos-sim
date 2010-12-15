@@ -191,8 +191,10 @@ extern U32 __bottom_mapped__;
  * Only one of these simbols evaluates to TRUE, and defines the current
  * mapping of the first memory area. This may be associated either to 
  */
+/*@{*/
 #define NX_BOTTOM_MAP_FLASH (__bottom_mapped__ == 0 ? TRUE : FALSE)
 #define NX_BOTTOM_MAP_RAM   (!NX_BOTTOM_MAP_FLASH)
+/*@}*/
 
 /*@}*/
 /*@}*/
