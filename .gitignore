@@ -1,6 +1,6 @@
 # Ignore tag
 MASTER-REPO_DO-NOT-DELETE
-.project
+*.lst
 *.objdump
 .DS_Store
 
