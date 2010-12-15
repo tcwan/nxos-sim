@@ -32,10 +32,10 @@
  */
 #define MAX(x, y) ((x) > (y) ? (x): (y))
 
-/** Copy @a len bytes from @a src to @a dest, the regions may overlap.
+/** Copy @a len bytes from @a source to @a dest, the regions may overlap.
  *
  * @param dest Destination of the copy.
- * @param src Source of the copy.
+ * @param source Source of the copy.
  * @param len Number of bytes to copy.
  */
 void memmove(void *dest, const void *source, U32 len);
