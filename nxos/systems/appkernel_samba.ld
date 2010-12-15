@@ -112,6 +112,18 @@ SECTIONS {
     . += 0x400; /* 1k supervisor stack. */
     __supervisor_stack__ = .;
     __supervisor_stack_top__ = . ;
+
+    /* debugger state */
+    __debugger_stack_bottom__ = . ;
+    . += 0x48;	/* 16 user mode registers + SPSR + BKPT Instr Addr */
+    __debugger_stack__ = .;
+    __debugger_stack_top__ = . ;
+    
+    /* breakpoints */
+    __breakpoints_start__ = . ;
+    . += 0x40;	/* Single Stepping Breakpoint + 7 Breakpoints */
+    __breakpoints_end__ = . ;
+
   } > ram
 
 
@@ -142,9 +154,11 @@ SECTIONS {
   } > ram
 
   /* Discard anything not mapped at this point. */
-  /DISCARD/ : {
+  /* Note: Commented out to enable generation of GDB Debug symbols */
+/*  /DISCARD/ : {
     * (*);
   }
+*/
 
   /*
    * Symbol definitions for the use of the kernel code.
@@ -182,4 +196,6 @@ SECTIONS {
   __ram_userspace_end__ = RAM_BASE + RAM_SIZE;
 
    __kernel_ram_load_size__ = __text_end__ - __vectors_ram_start__;
+   __breakpoints_num__ = (__breakpoints_end__ - __breakpoints_start__) / 8;
+   
 }

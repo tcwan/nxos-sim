@@ -133,11 +133,12 @@ SECTIONS {
     __breakpoints_end__ = . ;
   } > ram
 
-
   /* Discard anything not mapped at this point. */
-  /DISCARD/ : {
+  /* Note: Commented out to enable generation of GDB Debug symbols */
+/*  /DISCARD/ : {
     * (*);
   }
+*/
 
   /*
    * Symbol definitions for the use of the kernel code.
