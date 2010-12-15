@@ -31,7 +31,13 @@
    we memory map to address 0.
 */
 
+#define __ASSEMBLY__
+#include "base/at91sam7s256.h"
+
+#define AT91C_RSTC_KEYA5        (0xA5 << 24)  /* Need correct key value to unlock RSTC */
+
 #include "asm_decls.h"
+
 
     .section .rxe_init, "ax"
 	.code 32 /* Assemble in ARM mode, not Thumb mode */
@@ -85,8 +91,8 @@ CopierCompare:
  	blo		CopierLoop
 
         /* Reset peripherals, needed to have defined states e.g. for the uart. */
-        ldr     r0, =0xA5000004 /* AT91C_RSTC_KEY | AT91C_RSTC_PERRST */
-        ldr     r1, =0xFFFFFD00 /* AT91C_RSTC_RCR */
+        ldr     r0, =(AT91C_RSTC_KEYA5 | AT91C_RSTC_PERRST)
+        ldr     r1, =AT91C_RSTC_RCR
         str     r0, [r1]
 
 JumpToResetVector:
