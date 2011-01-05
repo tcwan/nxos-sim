@@ -3,5 +3,6 @@ GCC=arm-none-eabi-gcc
 if [ x$1 == "x" ]; then
 	echo "$0 <Sourcefile>"
 else
-	$GCC -D__ASSEMBLY__ -x assembler-with-cpp -g -mcpu=arm7tdmi -c -Os -Wall -I. -Wa,-a=$1.lst -o $1.o $1.S
+	sourcefile=`basename -s .S $1`
+	$GCC -D__ASSEMBLY__ -x assembler-with-cpp -g -mcpu=arm7tdmi -c -Os -Wall -I. -Wa,-a=$sourcefile.lst -o $sourcefile.o $sourcefile.S
 fi
