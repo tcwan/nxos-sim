@@ -1,0 +1,7 @@
+#!/bin/sh
+GDB=arm-none-eabi-gdb
+if [ x$1 == "x" ]; then
+	echo "$0 <ELF file>"
+else
+	cgdb -d $GDB $1
+fi
