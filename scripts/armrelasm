@@ -1,0 +1,10 @@
+#!/bin/sh
+AS=arm-none-eabi-as
+if [ x$1 == "x" ]; then
+	echo "$0 <Sourcefile>"
+else
+	sourcefile=`basename -s .S $1`
+	echo "Assemblying $sourcefile.S (w/o -g)"
+	$AS -a=$sourcefile.lst -o $sourcefile.o $sourcefile.S
+fi
+
