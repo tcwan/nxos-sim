@@ -99,7 +99,10 @@ void nx__kernel_main(void) {
   core_init();
   dbg__bkpt_init();
   check_boot_errors();
-  dbg_breakpoint_arm();                 /* Test Breakpoint Instruction */
+#ifdef TEST_DBGBKPT
+  dbg__test_arm_bkpt();                 /* Routine to trigger a manual ARM Breakpoint */
+  dbg__test_thumb_bkpt();               /* Routine to trigger a manual Thumb Breakpoint */
+#endif
   main();
   if( NX_BOOT_FROM_ENH_FW )
     nx_core_reset();
