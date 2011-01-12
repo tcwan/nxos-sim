@@ -54,7 +54,7 @@ bool nx_usb_can_write(void);
 /** Send @a length bytes of @a data to the USB host.
  *
  * If there is already data buffered, this function may block. Use
- * nx_usb_can_send() to check for buffered data.
+ * nx_usb_can_write() to check for buffered data.
  *
  * @param data The data to send.
  * @param length The amount of data to send.
