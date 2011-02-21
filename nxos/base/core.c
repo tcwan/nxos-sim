@@ -25,6 +25,9 @@
 
 #include "base/_core.h"
 #include "armdebug/Debugger/debug_stub.h"
+#ifdef TEST_DBGBKPT
+#include "armdebug/Debugger/debug_test.h"
+#endif
 
 /* main() is the entry point into the custom payload, not included in
  * the NxOS core.
