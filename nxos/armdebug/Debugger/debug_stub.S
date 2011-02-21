@@ -3,7 +3,7 @@
  *
  */
 
-/* Copyright (C) 2007-2010 the NxOS developers
+/* Copyright (C) 2007-2011 the NxOS developers
  *
  * Module Developed by: TC Wan <tcwan@cs.usm.my>
  *
@@ -320,6 +320,7 @@ debug_armComplexCCTable:
 	.extern dbg__hasDebugMsg			/* Check for message from the communications link */
 	.extern dbg__getDebugMsg			/* Read a message from the communications link */
 	.extern	dbg__putDebugMsg			/* Write a message to the communications link */
+	.extern dbg__runloopTasks           /* Platform specific Run Loop processing */
 
 
 /* The Debugger Interface can handle a total of (n-1) Breakpoint States and 1 Single Stepping State,
@@ -376,12 +377,42 @@ debug_armComplexCCTable:
  /* FIXME: The Debugger Stack Frame is probably not 100% consistent with the order that
     GDB expects in the g/G messages. CSPR is probably located above R15 */
 
+#ifndef __NXOS__
+/****************************************************************************
+ *
+ * GDB Debugger Invocation Routine for NXT Firmware
+ *
+ ****************************************************************************/
+    .code 16
+    .align 2
+    .global cCommHandleDebug
+    .thumb_func
+/* cCommHandleDebug
+ * Switch Mode to Debugger.
+ *      Used by NXT Firmware only
+ *
+ * UWORD cCommHandleDebug(UBYTE *pInBuf, UBYTE CmdBit, UWORD MsgLength);
+ *
+ * On Entry, we're in SVC mode. We need to setup the USB Buffers, and switch mode to
+ * ABORT mode to handle the incoming message using a Manual Breakpoint instruction.
+ * When DEBUG is exited, the execution resumes from the instruction following the Breakpoint.
+ */
+cCommHandleDebug:
+        push  {r0-r3}               /* store all argX registers */
+        bl    dbg__copyNxtDebugMsg  /* setup Debugger Message Buffers, validate input */
+        pop   {r0-r3}               /* restore all values */
+        dbg__bkpt_thumb
+        mov   r0, #0                /* FIXME: Return Status */
+        bx    lr
+#endif
+
 /****************************************************************************
  *
  * GDB Debugger Init and Breakpoint Handler Routines
  *
  ****************************************************************************/
-
+    .code 32
+    .align 4
  	.global dbg__bkpt_init
 /* dbg__bkpt_init
  * 		GDB set_debug_traps() routine
@@ -501,7 +532,7 @@ dbg__bkpt_offset_outofrange:
  *
  ****************************************************************************/
 dbg__bkpt_waitCMD:
-1:	bl		dbg__getDebugMsg				/* Read new message from Debugger, message buffer addr in R0, NULL if error */
+1:	bl		dbg__getDebugMsg				/* Read new message from Debugger, message buffer addr in R0, 0 if none, -1 if error */
 	cmp		r0, #0
 	beq     1b                              /* No message yet, keep checking */
 	movlt	r0, #MSG_ERRCHKSUM				/* Message invalid, checksum error? */
@@ -528,6 +559,7 @@ _dbg__cmdExists:
 _dbg__cmdError:
 	_dbg_outputMsgStatusErr
 	bl		dbg__putDebugMsg				/* Send error response to the GDB server */
+	bl      dbg__runloopTasks               /* Execute platform run loop tasks while in ABRT mode */
 	b 		dbg__bkpt_waitCMD
 
 
@@ -809,17 +841,17 @@ _exit_dbg__proc_brkpt_params:
 _dbg__cmd_insert_breakpoint:
     stmfd   sp!, {lr}
     bl      __dbg__cmdParamLen
-    teq     r1, #CMD_BKPT_INSERT_PARAMLEN    /* Check for correct length */
-    bne     __dbg__procCmdParamError         /* Unexpected input, report error */
-    bl      _dbg__proc_brkpt_params     /* R0: Breakpoint Address */
+    teq     r1, #CMD_BKPT_INSERT_PARAMLEN   /* Check for correct length */
+    bne     __dbg__procCmdParamError        /* Unexpected input, report error */
+    bl      _dbg__proc_brkpt_params         /* R0: Breakpoint Address */
     teq     r0, #0
-    beq     __dbg__procBreakpointAddrError    /* Thumb2 instructions, or unknown kind */
-    mov     r3, r0                      /* Keep breakpoint address in R3 */
-    mov     r0, #0                      /* Empty Breakpoint entry */
-    bl      _dbg_find_breakpoint_slot   /* Look for an available breakpoint slot, return index in R0 */
+    beq     __dbg__procBreakpointAddrError  /* Thumb2 instructions, or unknown kind */
+    mov     r3, r0                          /* Keep breakpoint address in R3 */
+    mov     r0, #0                          /* Empty Breakpoint entry */
+    bl      _dbg_find_breakpoint_slot       /* Look for an available breakpoint slot, return index in R0 */
     cmp     r0, #CMD_BKPT_NOTFOUND
     beq     __dbg__procBreakpointAddrError  /* No empty slot! */
-    mov     r1, r3                      /* Move breakpoint address to R1 */
+    mov     r1, r3                          /* Move breakpoint address to R1 */
 	bl     _dbg__install_one_breakpoint		/*	r0: index, r1: instruction address */
     b       __dbg__procCmdOk
 
@@ -834,16 +866,17 @@ _dbg__cmd_insert_breakpoint:
 _dbg__cmd_remove_breakpoint:
     stmfd   sp!, {lr}
     bl      __dbg__cmdParamLen
-    teq     r1, #CMD_BKPT_REMOVE_PARAMLEN    /* Check for correct length */
-    bne     __dbg__procCmdParamError         /* Unexpected input, report error */
-    bl      _dbg__proc_brkpt_params     /* R0: Breakpoint Address */
+    teq     r1, #CMD_BKPT_REMOVE_PARAMLEN  /* Check for correct length */
+    bne     __dbg__procCmdParamError       /* Unexpected input, report error */
+    bl      _dbg__proc_brkpt_params        /* R0: Breakpoint Address */
     teq     r0, #0
-    beq     __dbg__procBreakpointAddrError    /* Thumb2 instructions, or unknown kind */
-    bl      _dbg_find_breakpoint_slot   /* Look for matching breakpoint slot, return index in R0 */
+    beq     __dbg__procBreakpointAddrError /* Thumb2 instructions, or unknown kind */
+    bl      _dbg_find_breakpoint_slot      /* Look for matching breakpoint slot, return index in R0 */
     cmp     r0, #CMD_BKPT_NOTFOUND
-    beq     __dbg__procBreakpointAddrError  /* Specified Breakpoint not found! */
-	_index2bkptindex_addr	r0, r0		/* Calculate Breakpoint Entry Address */
-	bl	    _dbg__clear_one_breakpoint  /* R0: address of breakpoint to clear */
+    beq     __dbg__procBreakpointAddrError /* Specified Breakpoint not found! */
+	_index2bkptindex_addr	r0, r1		   /* Calculate Breakpoint Entry Address */
+	mov     r0, r1                         /* Move it to R0 for subroutine call */
+	bl	    _dbg__clear_one_breakpoint     /* R0: address of breakpoint to clear */
     b       __dbg__procCmdOk
 
 
