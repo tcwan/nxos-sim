@@ -8,8 +8,8 @@ import sys
 
 # Fix the PYTHONPATH for scons builds.
 if sys.platform == 'darwin':
-    sys.path.append('/opt/local/Library/Frameworks/Python.framework/Versions/Current/lib/python2.6/site-packages')
-#    sys.path.append('/opt/local/lib/python2.6/site-packages')
+    sys.path.append('/opt/local/Library/Frameworks/Python.framework/Versions/Current/lib/python2.7/site-packages')
+#    sys.path.append('/opt/local/lib/python2.7/site-packages')
 
 try:
     from PIL import Image

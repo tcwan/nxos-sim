@@ -87,7 +87,9 @@ static const U8 usb_device_descriptor[] = {
   0, /* Device protocol. */
   MAX_EP0_SIZE, /* Maximum packet size for EP0 (control endpoint). */
   0x94, 0x06, /* Vendor ID : LEGO */
-  0x00, 0xFF, /* Product ID : NXOS */
+/*  0x00, 0xFF, */ /* Product ID : NXOS */
+  /* Hack: impersonate NXT Product ID so that nxt-python library routines can find us */
+  0x02, 0x00, /* Product ID : NXT */
   0x00, 0x00, /* Product revision. */
   1, /* Index of the vendor string. */
   2, /* Index of the product string. */
