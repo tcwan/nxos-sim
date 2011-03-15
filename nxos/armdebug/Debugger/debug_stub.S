@@ -191,6 +191,7 @@ debug_cmdIndexTable:
  * On entry:
  *		R0: Input Message Parameter Buffer address pointer (points to contents after '$' and '<cmdchar>')
  */
+.align 4
 debug_cmdJumpTable:
 	.word	_dbg__cmd_GetAllRegs				/* 'g' */
 	.word	_dbg__cmd_SetAllRegs	   			/* 'G' */
@@ -533,13 +534,13 @@ dbg__bkpt_offset_outofrange:
  *
  ****************************************************************************/
 dbg__bkpt_waitCMD:
-	bl		dbg__getDebugMsg				/* Read new message from Debugger, message buffer addr in R0, 0 if none, -1 if error */
+	bl		dbg__getDebugMsg				/* Read new message from Debugger, buflen in R0, 0 if none, -1 if error, msgbuf pointer in R1 */
 	cmp		r0, #0
 	beq     _dbg__housekeeping              /* No message yet, do housekeeping tasks */
 	movlt	r0, #MSG_ERRCHKSUM				/* Message invalid, checksum error? */
 	blt		_dbg__cmdError					/* Send response to GDB server */
 /* Message now has $<packet info>\0 */
-	mov		r4, r0							/* Use R4 as Message Buffer pointer */
+    mov     r4, r1							/* Use R4 as buffer pointer */
 	ldrb	r0, [r4], #1					/* Look for '$' */
 	teq		r0, #MSGBUF_STARTCHAR
 	movne	r0, #MSG_ERRFORMAT				/* Message Format invalid (not '$') */
