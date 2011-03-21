@@ -46,10 +46,12 @@
 
 #define USB_GDBMSG_START                3                       /* Offset into USB Telegram buffer */
 
-#define MSG_NUMSEGMENTS  3                                      /* For packet transfers */
+#define MSG_NUMSEGMENTS  				3                       /* For packet transfers */
 #define MSG_SEGMENTSIZE (USB_BUFSIZE - USB_GDBMSG_START)        /* 61 bytes per segment */
 #define MSGBUF_SIZE     (MSG_SEGMENTSIZE*MSG_NUMSEGMENTS)       /* Debug Message Buffer Size, 61 x 3 = 183 chars = ~80 bytes of actual data */
 #define MSGBUF_CHKSUMOFFSET             3                       /* to be subtracted from message length */
+#define MSGBUF_IN_OVERHEADLEN			5						/* For calculating max message data length (include ASCIIZ char) */
+#define MSGBUF_OUT_OVERHEADLEN			6						/* For calculating max message data length (include ASCIIZ char) */
 
 #define MSGBUF_CTRLC     0x03                                   /* For Out of Band Signaling: not implemented yet */
 #define MSGBUF_STARTCHAR '$'
@@ -61,6 +63,7 @@
 #define MSGBUF_SETCHAR   '='
 #define MSGBUF_CHKSUMCHAR '#'
 #define MSGBUF_SEPCHAR   ','
+#define MSGBUF_ARGCHAR   ':'
 #define MSGBUF_MSGERROR  -1
 /*@}*/
 
@@ -81,10 +84,17 @@
 #define CMD_REG_NUMREGS             17
 #define CMD_REG_GETONE_PARAMLEN     1
 #define CMD_REG_GETALL_PARAMLEN     0
-#define CMD_REG_SETONE_PARAMLEN     6
-#define CMD_REG_SETALL_PARAMLEN     (CMD_REG_NUMREGS*4)
-
-
+#define CMD_REG_REGPARAMLEN         8   /* 32-bit ASCII Hex Value */
+#define CMD_REG_SETONE_PARAMLEN     (2 + CMD_REG_REGPARAMLEN)
+#define CMD_REG_SETALL_PARAMLEN     (CMD_REG_NUMREGS*CMD_REG_REGPARAMLEN)
+#define CMD_NUMITEMS_PARAMLEN		4	/* 16-bit ASCII Hex Value */
+#define CMD_MEM_READ_PARAMLEN		(CMD_REG_REGPARAMLEN + CMD_NUMITEMS_PARAMLEN + 1)	/* Address length is equivalent to reg param len */
+#define CMD_MEM_WRITE_MINPARAMLEN	(CMD_REG_REGPARAMLEN + CMD_NUMITEMS_PARAMLEN + 2)	/* Address length is equivalent to reg param len */
+#define CMD_MEM_SEPCHAR_OFFSET		CMD_REG_REGPARAMLEN	/* Address length is equivalent to reg param len */
+#define CMD_MEM_MAXOUTBUFLEN		(MSGBUF_SIZE - MSGBUF_OUT_OVERHEADLEN)
+#define CMD_MEM_MAXREADBYTES		(CMD_MEM_MAXOUTBUFLEN/2)
+#define CMD_MEM_MAXINBUFLEN			(MSGBUF_SIZE - MSGBUF_IN_OVERHEADLEN)
+#define CMD_MEM_MAXWRITEBYTES		((CMD_MEM_MAXINBUFLEN - CMD_MEM_WRITE_MINPARAMLEN)/2)
 /*@}*/
 
 /** @name Debug Breakpoint Command Constants.
@@ -154,6 +164,15 @@
 #define CPSR_IRQ        0x00000080
 #define CPSR_MODE       0x0000001F
 
+/* ARM Exception Modes */
+#define MODE_USR 0x10                   /* User mode */
+#define MODE_FIQ 0x11                   /* FIQ mode */
+#define MODE_IRQ 0x12                   /* IRQ mode */
+#define MODE_SVC 0x13                   /* Supervisor mode */
+#define MODE_ABT 0x17                   /* Abort mode */
+#define MODE_UND 0x1B                   /* Undefined mode */
+#define MODE_SYS 0x1F                   /* System mode */
+
 /*@}*/
 
 /** @name BKPT suppport constants
@@ -200,9 +219,12 @@ ENUM_END(dbg_state_t)
  * Debugger Error Message Enums.
  * The enums must be consecutive, starting from 1
  */
+/* FIXME: Need to validate against the ecos-generic-stub.c Error enums */
 ENUM_BEGIN
 ENUM_VALASSIGN(MSG_ERRIMPL, 0)    /**< Stub (not implemented) Error. */
+ENUM_VAL(MSG_ERRINLENGTH)      	  /**< Message Write Length Error. */
 ENUM_VAL(MSG_ERRCHKSUM)           /**< Checksum Error. */
+ENUM_VAL(MSG_ERROUTLENGTH)        /**< Message Read Length Error. */
 ENUM_VAL(MSG_ERRFORMAT)           /**< Message Format Error. */
 ENUM_VAL(MSG_UNKNOWNCMD)          /**< Unrecognized Command Error. */
 ENUM_VAL(MSG_UNKNOWNPARAM)        /**< Unrecognized Parameter Error. */

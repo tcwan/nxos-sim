@@ -6,11 +6,23 @@ $g#67
 # Display R0
 $p0#A0
 
+# Display R1
+$p1#A1
+
 # Display PC
 $pF#B6
 
 # Display User CPSR
 $p!#91
 
-# Set R0 to 0xAA
-$P1=000000AA#80
+# Set R1 to 0xAA
+$P1=000000AA#60
+
+# Read 16 bytes of Memory from 0x00201d74 (padding bytes after debug_mode + 4 bytes of debug_InUSBBuf)
+$m00201D74,0010#FC
+
+# Write 2 bytes of memory to 0x00201d74 (padding bytes after debug_mode)
+$M00201D74,0002:AA55#03
+
+# Write 2 bytes of memory to 0x00201d74 (padding bytes after debug_mode)
+$M00201D74,0002:9966#F5

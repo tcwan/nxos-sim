@@ -75,7 +75,8 @@
  *					x = ['0','F'] for R0-R15, '!' for User CPSR
  *
  *    mAA..AA,LLLL  Read LLLL bytes at address AA..AA      hex data or ENN
- *    MAA..AA,LLLL: Write LLLL bytes at address AA.AA      OK or ENN
+ *    MAA..AA,LLLL:bb..bb
+ *                  Write LLLL bytes at address AA.AA      OK or ENN
  *
  *    c             Resume at current address              SNN   ( signal NN)
  *    cAA..AA       Continue at address AA..AA             SNN
@@ -143,6 +144,21 @@
     cmp     r0, #MSGBUF_SEPCHAR
     .endm
 
+/* _check_msgargument
+ *      Look for argument ':'
+ *  On entry:
+ *    bufferptr: points to the parameter buffer [can't be R0]
+ *  On exit:
+ *    R0: destroyed
+ *    bufferptr: points to the next character location in the parameter buffer
+ *    Flags: Updated
+ */
+
+    .macro  _check_msgargument bufferptr
+    ldrb    r0, [\bufferptr], #1                /* get separator */
+    cmp     r0, #MSGBUF_ARGCHAR
+    .endm
+
 /* _check_msgassignment
  *      Look for assignment '='
  *  On entry:
@@ -160,14 +176,17 @@
 
 .bss
 .align 4
-debug_state:
-	.word	0x0
 debug_curr_breakpoint:
 	.word	0x0
 debug_InMsgBuf:
 	.space	MSGBUF_SIZE,0
 debug_OutMsgBuf:
 	.space	MSGBUF_SIZE,0
+
+debug_state:
+    .byte   0x0
+debug_mode:
+    .byte   0x0                                 /* Boolean variable */
 
 .data
 .align 4
@@ -197,8 +216,8 @@ debug_cmdJumpTable:
 	.word	_dbg__cmd_SetAllRegs	   			/* 'G' */
 	.word	_dbg__cmd_GetOneReg				    /* 'p' */
 	.word	_dbg__cmd_SetOneReg				    /* 'P' */
-	.word	_dbg__nop							/* 'm' */
-	.word	_dbg__nop							/* 'M' */
+	.word	_dbg__cmd_ReadMem					/* 'm' */
+	.word	_dbg__cmd_WriteMem					/* 'M' */
 	.word	_dbg__nop							/* 'c' */
 	.word	_dbg__nop							/* 's' */
 	.word	_dbg__nop							/* 'k' */
@@ -394,17 +413,33 @@ debug_armComplexCCTable:
  *
  * UWORD cCommHandleDebug(UBYTE *pInBuf, UBYTE CmdBit, UWORD MsgLength);
  *
- * On Entry, we're in SVC mode. We need to setup the USB Buffers, and switch mode to
+ * This routine is called from cCommInterprete either in normal operation mode (SVC)
+ * or else when we're in debug mode (ABORT) which uses the cCommCtrl() routine to handle
+ * I/O with the Host.
+ *
+ * On entry, the message is copied from the NXT buffer into our own buffers.
+ *
+ * If this is accessed from normal operation mode, we need to switch mode to
  * ABORT mode to handle the incoming message using a Manual Breakpoint instruction.
  * When DEBUG is exited, the execution resumes from the instruction following the Breakpoint.
  */
 cCommHandleDebug:
-        push  {r0-r3}               /* store all argX registers */
-        bl    dbg__copyNxtDebugMsg  /* setup Debugger Message Buffers, validate input */
-        pop   {r0-r3}               /* restore all values */
+/* Arg Registers are not preserved since this is invoked explicitly */
+        push  {lr}                      /* store arg registers */
+        bl    dbg__copyNxtDebugMsg  	/* setup Debugger Message Buffers, validate input, CPSR returned in R0 */
+        _dbg_getmode r0             	/* Get Debug Mode */
+        cmp   r0, #(TRUE & BYTE0)		/* Confine it to Byte size */
+
+        /* If Debug Mode is TRUE, this means that we're already running the Debugger */
+		beq	  _cCommHandleDebug_cont
+        /* Else, we're in normal operation mode (SVC), or other mode (??!) and need to force a switch to Debug mode */
         dbg__bkpt_thumb
-        mov   r0, #0                /* FIXME: Return Status */
-        bx    lr
+_cCommHandleDebug_cont:
+        mov   r0, #0                   /* FIXME: Return Status */
+        pop	  {r1}					   /* Can't Pop LR directly */
+        bx    r1					   /* Safe code: actually we should be able to Pop PC since the caller is Thumb Mode */
+
+        .ltorg
 #endif
 
 /****************************************************************************
@@ -432,6 +467,7 @@ dbg__bkpt_init:
 
 /* FIXME: Initialize other stuff here */
 	_dbg_setstate DBG_INIT
+    _dbg_setmode FALSE                  /* Debug Mode = False */
     pop     {lr}
     bx      lr                          /* Must return via BX; may have been called from Thumb mode (NXT Firmware) */
 
@@ -534,6 +570,8 @@ dbg__bkpt_offset_outofrange:
  *
  ****************************************************************************/
 dbg__bkpt_waitCMD:
+    _dbg_setmode TRUE                       /* Debug Mode = True */
+dbg__bkpt_waitCMD_cont:
 	bl		dbg__getDebugMsg				/* Read new message from Debugger, buflen in R0, 0 if none, -1 if error, msgbuf pointer in R1 */
 	cmp		r0, #0
 	beq     _dbg__housekeeping              /* No message yet, do housekeeping tasks */
@@ -556,14 +594,14 @@ _dbg__cmdExists:
 	mov		r3, r0							/* put Command Handler Index in R3 */
 	mov		r0, r4							/* R0 now contains Input Message Buffer Parameter Pointer (previously in R4) */
 	_dbg_jumpTableHandler	debug_cmdJumpTable, r2, r3		/* Call Command Handler Routine, use R2 as jump address pointer */
-	b dbg__bkpt_waitCMD
+	b dbg__bkpt_waitCMD_cont
 
 _dbg__cmdError:
 	_dbg_outputMsgStatusErr
 	bl		dbg__putDebugMsg				/* Send error response to the GDB server */
 _dbg__housekeeping:
 	bl      dbg__runloopTasks               /* Execute platform run loop tasks while in ABRT mode */
-	b 		dbg__bkpt_waitCMD
+	b 		dbg__bkpt_waitCMD_cont
 
 
 /* _dbg__cmdChar2Index
@@ -614,8 +652,7 @@ __dbg__cmdParamLen:
  */
 __dbg__procCmdOk:
     _dbg_outputMsgStatusOk
-    bl      dbg__putDebugMsg                /* Send error response to the GDB server */
-    ldmfd   sp!, {pc}
+    b       __dbg__sendDebugMsgExit
 
 /* __dbg__procCmdParamError
  *		Common subroutine exit stub to handle Command Parameter Error for Command Handlers
@@ -624,9 +661,26 @@ __dbg__procCmdOk:
  */
 __dbg__procCmdParamError:
 	_dbg_outputMsgStatusErrCode MSG_UNKNOWNPARAM
-	bl		dbg__putDebugMsg				/* Send error response to the GDB server */
-	ldmfd	sp!, {pc}
+    b       __dbg__sendDebugMsgExit
 
+
+/* __dbg__procCmdReturnInputLengthError
+ *      Common subroutine exit stub to handle Command Input Length Error for Command Handlers
+ *      DO NOT CALL THIS STUB DIRECTLY! It Assumes that the return address is in the stack.
+ *
+ */
+__dbg__procCmdReturnInputLengthError:
+    _dbg_outputMsgStatusErrCode MSG_ERRINLENGTH
+    b       __dbg__sendDebugMsgExit
+
+/* __dbg__procCmdReturnOutputLengthError
+ *      Common subroutine exit stub to handle Command Return Output Error for Command Handlers
+ *      DO NOT CALL THIS STUB DIRECTLY! It Assumes that the return address is in the stack.
+ *
+ */
+__dbg__procCmdReturnOutputLengthError:
+    _dbg_outputMsgStatusErrCode MSG_ERROUTLENGTH
+    b       __dbg__sendDebugMsgExit
 
 /* __dbg__procBreakpointAddrError
  *      Common subroutine exit stub to handle Breakpoint Address Error for Breakpoint Insert/Remove Handlers
@@ -635,6 +689,8 @@ __dbg__procCmdParamError:
  */
 __dbg__procBreakpointAddrError:
     _dbg_outputMsgStatusErrCode MSG_UNKNOWNBRKPT
+
+__dbg__sendDebugMsgExit:
     bl      dbg__putDebugMsg                /* Send error response to the GDB server */
     ldmfd   sp!, {pc}
 
@@ -705,7 +761,7 @@ _dbg__cmd_GetAllRegs:
     teq     r1, #CMD_REG_GETALL_PARAMLEN    /* Check for correct length */
 	bne		__dbg__procCmdParamError		/* Unexpected input, report error */
 
-	_dbg_outputMsgValidResponse				/* Setup R1 with address of output message buffer data pointer (after response prefix) */
+    _dbg_outputMsgValidResponse             /* R0: address of output message buffer data pointer (after response prefix) */
 	mov		r3, #DBGSTACK_USERCPSR_OFFSET	/* Output User CPSR Value first */
 1:  mov		r1, r3
 	bl		_dbg_outputOneRegValue			/* update output buffer */
@@ -791,7 +847,77 @@ _dbg__nop:
 	bl		dbg__putDebugMsg				   /* Send error response to the GDB server */
 	ldmfd	sp!, {pc}
 
+/* _dbg__cmd_ReadMem
+ *      Read Memory Contents Command Handler
+ *      Output Buffer returns memory contents
+ *      On entry:
+ *          r0: parameter buffer pointer (contents after '$' and '<cmdchar>')
+ *              AA..AA,LLLL
+ *      On exit:
+ *          r0, r1, r2, r3, r4: destroyed
+ */
+_dbg__cmd_ReadMem:
+    stmfd   sp!, {lr}
+    bl      __dbg__cmdParamLen
+    teq     r1, #CMD_MEM_READ_PARAMLEN      /* Check for correct length */
+    bne     __dbg__procCmdParamError        /* Unexpected input, report error */
+    bl      ascii2word                      /* convert ASCII address location to Hex (in R0), R1 has address of next buffer char */
+    mov     r3, r0                          /* Keep Address location in R3 */
+    _check_msgseparator r1
+    bne     __dbg__procCmdParamError        /* Can't find ',' */
+    mov     r0, r1                          /* move buffer pointer to R0 for subsequent processing */
+    bl      ascii2halfword                  /* convert ASCII length to Hex (in R0), R1 has address of next buffer char */
+    cmp     r0, #CMD_MEM_MAXREADBYTES       /* Don't overflow our buffer (2 x CMD_MEM_MAXREADBYTES) */
+    bhi     __dbg__procCmdReturnOutputLengthError /* Requested Length greater than buffer size, return error */
+    mov     r4, r0                          /* Keep numbytes in R4 */
+    /* FIXME: Should validate the address? */
 
+    _dbg_outputMsgValidResponse             /* R0: address of output message buffer data pointer (after response prefix) */
+1:  ldrb    r1, [r3], #1
+    bl      byte2ascii                       /* update output buffer */
+    subs    r4, r4, #1
+    bne     1b
+
+    _asciiz r0, r1
+    bl      dbg__putDebugMsg                /* Send response to the GDB server */
+    ldmfd   sp!, {pc}
+
+
+/* _dbg__cmd_WriteMem
+ *      Write Memory Contents Command Handler
+ *      On entry:
+ *          r0: parameter buffer pointer (contents after '$' and '<cmdchar>')
+ *              AA..AA,LLLL::bb..bb
+ *      On exit:
+ *          r0, r1, r2, r3, r4: destroyed
+ */
+_dbg__cmd_WriteMem:
+    stmfd   sp!, {lr}
+    bl      __dbg__cmdParamLen
+    cmp     r1, #CMD_MEM_WRITE_MINPARAMLEN  /* Check for correct (minimum) length */
+    blo     __dbg__procCmdParamError        /* Unexpected input, report error */
+    sub     r4, r1, #CMD_MEM_WRITE_MINPARAMLEN  /* R4: Number of ASCII Hex chars for byte writes */
+    bl      ascii2word                      /* convert ASCII address location to Hex (in R0), R1 has address of next buffer char */
+    mov     r3, r0                          /* Keep Address location in R3 */
+    _check_msgseparator r1
+    bne     __dbg__procCmdParamError        /* Can't find ',' */
+    mov     r0, r1                          /* move buffer pointer to R0 for subsequent processing */
+    bl      ascii2halfword                  /* convert ASCII length to Hex (in R0), R1 has address of next buffer char */
+    cmp     r0, r4, asr #1                  /* is Number of bytes to write == (number of ASCII Hex Chars / 2)? */
+    bne     __dbg__procCmdParamError        /* Number of bytes does not match argument length */
+    cmp     r0, #CMD_MEM_MAXWRITEBYTES      /* Don't overflow our buffer (2 x CMD_MEM_MAXWRITEBYTES) */
+    bhi     __dbg__procCmdReturnInputLengthError /* Requested Length greater than buffer size, return error */
+    mov     r4, r0                          /* Keep numbytes in R4 */
+    /* FIXME: Should validate the address? */
+    _check_msgargument r1
+    bne     __dbg__procCmdParamError        /* Can't find ':' */
+
+1:  mov     r0, r1
+    bl      ascii2byte                      /* convert ASCII Hex value into byte value */
+    strb    r0, [r3], #1                    /* Store into memory location */
+    subs    r4, r4, #1
+    bne     1b
+    b       __dbg__procCmdOk
 
 /* _dbg__proc_brkpt_params
  *      Process Breakpoint Parameters
