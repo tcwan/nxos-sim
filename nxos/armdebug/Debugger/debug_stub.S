@@ -99,7 +99,7 @@
  *                    4: access watchpoint
  *                  k: 2 (16-bit Thumb), 3 (32-bit Thumb2)
  *                       or 4 (32-bit ARM) for t=[0,1]
- *                     Num. bytes to watch for t=[3,4]
+ *                     Num. bytes to watch for t=[2,4]
  *
  * All commands and responses are sent with a packet which includes a
  * checksum.  A packet consists of
@@ -121,6 +121,9 @@
  ****************************************************************************/
  /* Modified GDB Server Remote Protocol definition from GDB's sparc-stub.c Comment Header included above
   * Additional commands from GDB Reference Appendix D.2
+  *
+  * Note: ARMDEBUG can only implement Memory Breakpoints t=0. Hardware breakpoints requires a JTAG debugger.
+  *       Currently, watchpoints are not implemented as they require hardware support as well (need verification).
   */
 
 #define __ASSEMBLY__
@@ -660,9 +663,8 @@ __dbg__procCmdOk:
  *
  */
 __dbg__procCmdParamError:
-	_dbg_outputMsgStatusErrCode MSG_UNKNOWNPARAM
-    b       __dbg__sendDebugMsgExit
-
+    mov r1, #MSG_UNKNOWNPARAM
+    b   __dbg__procErrorMsg
 
 /* __dbg__procCmdReturnInputLengthError
  *      Common subroutine exit stub to handle Command Input Length Error for Command Handlers
@@ -670,8 +672,8 @@ __dbg__procCmdParamError:
  *
  */
 __dbg__procCmdReturnInputLengthError:
-    _dbg_outputMsgStatusErrCode MSG_ERRINLENGTH
-    b       __dbg__sendDebugMsgExit
+    mov r1, #MSG_ERRINLENGTH
+    b   __dbg__procErrorMsg
 
 /* __dbg__procCmdReturnOutputLengthError
  *      Common subroutine exit stub to handle Command Return Output Error for Command Handlers
@@ -679,8 +681,8 @@ __dbg__procCmdReturnInputLengthError:
  *
  */
 __dbg__procCmdReturnOutputLengthError:
-    _dbg_outputMsgStatusErrCode MSG_ERROUTLENGTH
-    b       __dbg__sendDebugMsgExit
+    mov r1, #MSG_ERROUTLENGTH
+    b   __dbg__procErrorMsg
 
 /* __dbg__procBreakpointAddrError
  *      Common subroutine exit stub to handle Breakpoint Address Error for Breakpoint Insert/Remove Handlers
@@ -688,7 +690,21 @@ __dbg__procCmdReturnOutputLengthError:
  *
  */
 __dbg__procBreakpointAddrError:
-    _dbg_outputMsgStatusErrCode MSG_UNKNOWNBRKPT
+    mov r1, #MSG_UNKNOWNBRKPT
+    b   __dbg__procErrorMsg
+
+/* __dbg__procUnimplementedError
+ *      Common subroutine exit stub to handle Unimplemented GDB Command Error
+ *      DO NOT CALL THIS STUB DIRECTLY! It Assumes that the return address is in the stack.
+ *
+ */
+__dbg__procUnimplementedError:
+    mov r1, #MSG_ERRIMPL
+    /* b   __dbg__procErrorMsg */
+
+__dbg__procErrorMsg:
+    __dbg_outputErrMsg
+    /* b       __dbg__sendDebugMsgExit */
 
 __dbg__sendDebugMsgExit:
     bl      dbg__putDebugMsg                /* Send error response to the GDB server */
@@ -843,9 +859,7 @@ _dbg__cmd_SetAllRegs:
  */
 _dbg__nop:
 	stmfd	sp!, {lr}
-	_dbg_outputMsgStatusErrCode MSG_ERRIMPL    /* Stub, not implemented yet */
-	bl		dbg__putDebugMsg				   /* Send error response to the GDB server */
-	ldmfd	sp!, {pc}
+	b      __dbg__procUnimplementedError
 
 /* _dbg__cmd_ReadMem
  *      Read Memory Contents Command Handler
