@@ -338,14 +338,16 @@ _exit_conv_ascii2byte:
  *			Byte 3-N: Message data													| GDB Command
  *
  *		The GDB Command (of size M) has the following format:
- *				Offset 0: '$'
- *				Offset 1: GDB Command char
- *				Offset 2 - (M-4): Command packet info
+ *              Offset 0: '+'/'-' Command Received Status (Optional)
+ *				Offset 1/0: '$'
+ *				Offset 2/1: GDB Command char
+ *				Offset 3 - (M-4): Command packet info
  *				Offset M-3: '#'
  *				Offset M-2: MSB of Checksum
  *				Offset M-1: LSB of Checksum
  *
- *		The maximum size of a GDB Command packet is MSGBUF_SIZE - 4 ('$', '#', 2 byte checksum)
+ *      To be safe, we assume that the Command Received Status is always sent by the GDB server. Therefore,
+ *		The maximum size of a GDB Command packet is MSGBUF_SIZE - 5 ('+'/'-', '$', '#', 2 byte checksum)
  *
  *		GDB Response
  *		============
@@ -354,15 +356,18 @@ _exit_conv_ascii2byte:
  *			Byte 2:	Telegram Size (Len of USB Buffer - 3, max is MSG_SEGMENTSIZE)	|
  *			Byte 3-N: Message data													| GDB Response
  *
+ *      The GDB Retransmission Request has the following format:
+ *              Offset 0: '-' Command Received Status
+ *
  *		The GDB Response (of size M) has the following format:
- *				Offset 0: '+' or '-' Command Received Status
+ *				Offset 0: '+' Command Received Status
  *				Offset 1: '$'
  *				Offset 2 - (M-4): Response packet info
  *				Offset M-3: '#'
  *				Offset M-2: MSB of Checksum
  *				Offset M-1: LSB of Checksum
  *
- *		The maximum size of a GDB Response packet is MSGBUF_SIZE - 5 ('-'/'+', '$', '#', 2 byte checksum)
+ *		The maximum size of a GDB Response packet is MSGBUF_SIZE - 5 ('+', '$', '#', 2 byte checksum)
  *
  *		Note: The Telegram Size is the actual size of the Message Data portion
  *			  (i.e., excludes the three header bytes, includes the GDB Command/Response Packet checksum bytes
@@ -578,20 +583,32 @@ _hasMsg2Copy:
     ldr     r5, =debug_msgRxBufPtr
     ldr     r5, [r5]                            /* Rx buffer Start Address */
 
-#ifdef CHECK_GDBSTARTCHAR
-    /* Checked in dbg__bkpt_waitCMD */
-    ldrb    r0, [r5]
-    teq     r0, #MSGBUF_STARTCHAR               /* Look for '$' */
-    bne     exit_dbg__getMsgError               /* No start char '$', exit with error */
-#endif
-
-    sub     r2, r4, #MSGBUF_CHKSUMOFFSET        /* Look for '#': Message Length - 3 = '#' offset */
+	/* Note: Here we assume that we won't get a single ACK '+' or NAK '-' character message.
+	 *       If we do, it'll be flagged as an error
+	 */
+    subs    r2, r4, #MSGBUF_CHKSUMOFFSET        /* Look for '#': Message Length - 3 = '#' offset */
+    blt		exit_dbg__getMsgError				/* Message Length is too short, exit with error */
     ldrb    r0, [r5, r2]
     teq     r0, #MSGBUF_CHKSUMCHAR
     bne     exit_dbg__getMsgError               /* No checksum char '#', exit with error */
 
     mov     r1, #0
     strb    r1, [r5, r2]                        /* Zero out '#' char for checksum calc later */
+
+/* Need to account for Packet Acknowledgement */
+    ldrb    r0, [r5]
+    teq     r0, #MSGBUF_NAKCHAR               /* Look for '-' */
+    beq		exit_dbg__getMsgError			  /* FIXME: We can't handle retransmission, flag message error */
+    teq     r0, #MSGBUF_ACKCHAR               /* Look for '+' */
+    addeq   r5, r5, #1                        /* Adjust Buffer Start Pointer (excl '+') */
+    subeq	r4, r4, #1						  /* Adjust Message Length */
+
+#ifdef CHECK_GDBSTARTCHAR
+    /* Checked in dbg__bkpt_waitCMD */
+    ldrb    r0, [r5]
+    teq     r0, #MSGBUF_STARTCHAR               /* Look for '$' */
+    bne     exit_dbg__getMsgError               /* No start char '$', exit with error */
+#endif
 
     add     r0, r5, #1                          /* Checksum packet data (excl '$') */
     bl      _msgbuf_checksum                    /* R2: length (excl '$'), R1: calculated checksum, R0: pointer to checksum in receive buffer */
@@ -711,7 +728,7 @@ _exit_copy_msg_to_usbbuf:
  *		On exit:
  *			r0: status (0: success, -1: error)
  *      Note: GDB Message to be sent must be ASCIIZ terminated, does not include '#' and checksum
- *            Response packets start with '+'/'-' followed by '$' (2 bytes prefix)
+ *            Response packets start with '+' followed by '$' (2 bytes prefix)
  */
 dbg__putDebugMsg:
 	stmfd	sp!, {r4,r5,lr}
@@ -719,8 +736,8 @@ dbg__putDebugMsg:
     ldr     r5, =debug_msgTxBufPtr              /* R5: data structure base pointer */
     ldr     r4, [r5]                            /* Tx buffer Start Address */
     str     r4, [r5, #TXAPPENDPTR_OFFSET]       /* Reset Tx buffer Append Pointer */
-    add     r0, r4, #2                          /* skip '+'/'-' and '$' */
-    bl      _msgbuf_checksum                    /* R2: length (excl '+'/'-' and '$'), R1: calculated checksum, R0: pointer to checksum in tx buffer */
+    add     r0, r4, #2                          /* skip '+' and '$' */
+    bl      _msgbuf_checksum                    /* R2: length (excl '+' and '$'), R1: calculated checksum, R0: pointer to checksum in tx buffer */
 
 #ifdef CHECK_TXLEN
     add     r2, r2, #2                          /* r2: returned length from _msgbuf_checksum, added with prefix length */
@@ -732,7 +749,7 @@ dbg__putDebugMsg:
     mov     r3, #MSGBUF_CHKSUMCHAR
     strb    r3, [r0, #-1]                       /* Insert '#' */
     bl      byte2ascii                          /* On return, R0 points to location after checksum bytes, R1 is original pointer to checksum */
-    sub     r4, r0, r4                          /* R4 = Calculated total message length (incl '+'/'-' and '$', '#' and checksum bytes */
+    sub     r4, r0, r4                          /* R4 = Calculated total message length (incl '+' and '$', '#' and checksum bytes */
     cmp     r4, #MSG_SEGMENTSIZE                /* If total message length > MSG_SEGMENTSIZE */
     mov     r1, #0                              /* Initialize Segment Number = 0 (last segment) first */
     mov     r0, #0                              /* Initial cummulative message length */
@@ -762,4 +779,27 @@ exit_dbg__putMsgError:
 exit_dbg__putDebugMsg:
 	ldmfd	sp!, {r4,r5,pc}
 
+	.global dbg__requestRetransmission
+/* dbg__requestRetransmission
+ *		Request for Retransmission due to received message Checksum error (Blocking) .
+ *		On entry:
+ *			No parameters (assume pointers were initialized previously using dbg__comm_init)
+ *		On exit:
+ *			r0: status (0: success, -1: error)
+ *			r1: destroyed
+ *      Note: A Retransmission is indicated by '-', which is prepended with the USB header and sent (without checksum)
+ */
+dbg__requestRetransmission:
+	stmfd	sp!, {lr}
+    ldr     r1, =debug_msgTxBufPtr              /* R2: data structure base pointer */
+    ldr     r0, [r1]                            /* Tx buffer Start Address */
+    str     r0, [r1, #TXAPPENDPTR_OFFSET]       /* Reset Tx buffer Append Pointer */
+
+	mov     r1, #0                              /* Initialize Segment Number = 0 (last segment) */
+    mov     r0, #1                              /* Retransmission message length = 1 */
+    bl      _copy_msg_to_usbbuf                 /* R0: cummulative message length, R1: segment number */
+    cmp     r0, #1                              /* Check if we managed to transmit the previous message */
+    moveq	r0, #0								/* R0: Exit status (success) */
+    movne	r0, #MSGBUF_MSGERROR				/* R0: Exit status (error) */
+	ldmfd	sp!, {pc}
 
