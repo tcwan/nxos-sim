@@ -68,7 +68,7 @@
  *    GrrrrRRRR..   set the value of the CPU registers     OK or ENN
  *					where register values are given as
  *					32-bit hex values in the sequence:
- *					User CPSR, R0, R1, ..., R15
+ *					User R0, R1, ..., R15, CPSR
  *	  px			get the value of one register (x)      hex data or ENN
  *	  Px=rrrr		set the value of one register (x) to   OK or ENN
  *					32-bit hex value rrrr.
@@ -124,7 +124,17 @@
   *
   * Note: ARMDEBUG can only implement Memory Breakpoints t=0. Hardware breakpoints requires a JTAG debugger.
   *       Currently, watchpoints are not implemented as they require hardware support as well (need verification).
+  *
+  * GDB requires command parameters to be specified as Big Endian values.
+  * However, the read/write register command expect the register contents to be specified in target byte order.
+  * The default target byte order is Little Endian for the AT91SAM7xxx processor in the NXT.
+  * If Big Endian target byte order is required, the __BIG_ENDIAN__ preprocessor label should be defined.
   */
+
+/* FIXME: The Hex value arguments passed by GDB does not have fixed lengths! Although the standard says
+ *        there should be x digits, it does not follow this requirement. e.g., register index.
+ */
+
 
 #define __ASSEMBLY__
 #include "debug_stub.h"
@@ -210,7 +220,7 @@ debug_OkResponse:
 
 /* The CmdIndexTable and CmdJumpTable must be kept in sync */
 debug_cmdIndexTable:
-	.byte	'g','G','p','P','m','M','c','s','k','z','Z','?',0
+	.byte	'g','G','p','P','m','M','c','s','k','z','Z','?','q','Q',0
 
 /* Command Handlers
  * On entry:
@@ -224,12 +234,14 @@ debug_cmdJumpTable:
 	.word	_dbg__cmd_SetOneReg				    /* 'P' */
 	.word	_dbg__cmd_ReadMem					/* 'm' */
 	.word	_dbg__cmd_WriteMem					/* 'M' */
-	.word	_dbg__nop							/* 'c' */
+	.word	_dbg__cmd_Continue					/* 'c' */
 	.word	_dbg__nop							/* 's' */
 	.word	_dbg__nop							/* 'k' */
 	.word	_dbg__cmd_remove_breakpoint			/* 'z' */
 	.word	_dbg__cmd_insert_breakpoint			/* 'Z' */
-	.word	_dbg__nop							/* '?' */
+	.word	_dbg__cmd_Status					/* '?' */
+	.word	_dbg__cmd_Query						/* 'q' */
+	.word	_dbg__nop							/* 'Q' */
 	.word	0
 
 /*
@@ -578,11 +590,18 @@ dbg__bkpt_offset_outofrange:
  *
  ****************************************************************************/
 dbg__bkpt_waitCMD:
+	/* We enter this code section when a Breakpoint Triggers */
     _dbg_setmode TRUE                       /* Debug Mode = True */
+	_dbg_getstate r0
+	cmp		r0, #DBG_CONFIGURED
+	blo		dbg__bkpt_waitCMD_cont			/* Not configured yet, don't send Breakpoint Signal Response */
+	bl		_dbg__cmd_Status				/* Send signal response to the GDB server */
+
 dbg__bkpt_waitCMD_cont:
+	bl      dbg__runloopTasks               /* Execute housekeeping tasks while in ABRT mode */
 	bl		dbg__getDebugMsg				/* Read new message from Debugger, buflen in R0, 0 if none, -1 if error, msgbuf pointer in R1 */
 	cmp		r0, #0
-	beq     _dbg__housekeeping              /* No message yet, do housekeeping tasks */
+	beq     dbg__bkpt_waitCMD_cont          /* No message yet, do housekeeping tasks */
 	blt		__dbg__procChecksumError		/* Message invalid, checksum error? */
 /* Message now has $<packet info>\0 */
     mov     r4, r1							/* Use R4 as buffer pointer */
@@ -594,29 +613,33 @@ dbg__bkpt_waitCMD_cont:
 	bl		_dbg__cmdChar2Index				/* Index in R0 */
 	mov		r1, #CMDINDEX_OUTOFRANGE
 	teq		r0, r1
+	bne		_dbg__cmdExists					/* Found valid command, execute it */
+_dbg_unknown_command:
+	bl		_dbg__nop						/* Command character not recognized, send empty response to GDB server */
+	b 		dbg__bkpt_waitCMD_cont
+
+#if 0
 	moveq	r0, #MSG_UNKNOWNCMD				/* Out of range, Command character not recognized */
 	beq		_dbg__cmdError					/* Send response to GDB server */
+#endif
 
 _dbg__cmdExists:
 	mov		r3, r0							/* put Command Handler Index in R3 */
 	mov		r0, r4							/* R0 now contains Input Message Buffer Parameter Pointer (previously in R4) */
 	_dbg_jumpTableHandler	debug_cmdJumpTable, r2, r3		/* Call Command Handler Routine, use R2 as jump address pointer */
-	b 		_dbg__housekeeping
+	b 		dbg__bkpt_waitCMD_cont
 
 __dbg__procChecksumError:
     _dbg_outputRetransmitFlag
 	bl		dbg__requestRetransmission		/* Request message retransmission from GDB server */
 	cmp		r0, #0
-	beq		_dbg__housekeeping				/* Sending of retransmission request succeeded */
+	beq		dbg__bkpt_waitCMD_cont			/* Sending of retransmission request succeeded */
 	bl      dbg__runloopTasks               /* Service run loop tasks */
 	b 		__dbg__procChecksumError		/* Retry retransmission */
 
 _dbg__cmdError:
 	_dbg_outputMsgStatusErr
 	bl		dbg__putDebugMsg				/* Send error response to the GDB server */
-
-_dbg__housekeeping:
-	bl      dbg__runloopTasks               /* Execute platform run loop tasks while in ABRT mode */
 	b 		dbg__bkpt_waitCMD_cont
 
 /* _dbg__cmdChar2Index
@@ -724,6 +747,31 @@ __dbg__sendDebugMsgExit:
     bl      dbg__putDebugMsg                /* Send error response to the GDB server */
     ldmfd   sp!, {pc}
 
+/* _dbg__cmd_Status
+ *		Status Command Handler
+ *		On entry:
+ *			r0: parameter buffer (contents after '$' and '<cmdchar>')
+ *      On exit:
+ *          r0, r1, r2, r3: destroyed
+ */
+_dbg__cmd_Status:
+	stmfd	sp!, {lr}
+	_dbg_outputMsgStatusSig 0x0				/* FIXME: Dummy Signal number */
+	b	__dbg__sendDebugMsgExit
+
+/* _dbg__cmd_Query
+ *		Query Command Handler
+ *		On entry:
+ *			r0: parameter buffer (contents after '$' and '<cmdchar>')
+ *				[varied, see GDB General Packets query docs]
+ *				http://sourceware.org/gdb/current/onlinedocs/gdb/General-Query-Packets.html
+ *      On exit:
+ *          r0, r1, r2, r3: destroyed
+ */
+_dbg__cmd_Query:
+	stmfd	sp!, {lr}
+	_dbg_setstate	DBG_CONFIGURED			/* We have exchanged query messages with the GDB server */
+	b      __dbg__procUnimplementedError	/* FIXME: return an empty message to GDB (no modifiable settings) */
 
 
 /* _dbg__cmd_GetOneReg
@@ -744,7 +792,7 @@ _dbg__cmd_GetOneReg:
 	bne		__dbg__procCmdParamError		/* Unexpected input, report error */
 	ldrb    r0, [r0]                        /* Load Register index parameter */
 	teq		r0, #MSGBUF_CPSRREG				/* Check for CPSR register indicator */
-	moveq	r0, #DBGSTACK_USERCPSR_OFFSET	/* Put offset from User Registers (-1) into index, so that after adjustment it points to CPSR slot */
+	moveq	r0, #REG_CPSR					/* Use CPSR Enum (-1) */
 	beq		_dbg__proc_getRegister			/* Handle User CPSR */
 	bl		char2hex						/* Convert to Hex value (assume input is valid) */
 	cmp		r0, #NIBBLE0					/* sanity check, (though it is not foolproof as input char in 0x0-0xF (ctrl-chars) will pass through) */
@@ -760,10 +808,10 @@ _dbg__proc_getRegister:
 	ldmfd	sp!, {pc}
 
 /* _dbg_outputOneRegValue
- *		Given Register Index (-1: CPSR, 0-F: R0-R15), output hex char to buffer
+ *		Given Register Enum (-1: CPSR, 0-F: R0-R15), output hex char to buffer
  *		On entry:
  *          r0: output message buffer pointer
- *			r1: register index (-1, 0-F)
+ *			r1: register enum (-1, 0-F)
  *		On exit:
  *			r0: updated (points to next character slot at end of Output Buffer)
  *			r1: original output message buffer pointer
@@ -771,14 +819,18 @@ _dbg__proc_getRegister:
  */
 _dbg_outputOneRegValue:
 	stmfd	sp!, {lr}
-	add		r2, r1, #DBGSTACK_USERREG_INDEX	/* Convert register index to Debug Stack index */
+	add		r2, r1, #DBGSTACK_USERREG_INDEX	/* Convert register enum to Debug Stack index */
 	_getdbgregisterfromindex r2, r1			/* Retrieve Register contents into R1 */
-	bl		word2ascii						/* Convert and put hex chars into Output Message Buffer */
+#ifdef __BIG_ENDIAN__
+	bl		word2ascii_be				    /* Convert and put hex chars into Output Message Buffer */
+#else
+    bl      word2ascii_le                   /* Convert and put hex chars into Output Message Buffer */
+#endif
 	ldmfd	sp!, {pc}
 
 /* _dbg__cmd_GetAllRegs
  *		Get All Register Values Command Handler
- *		Output Buffer returns register values in the order: User CPSR, R0, R1, R2, ..., R15
+ *		Output Buffer returns register values in the order: User R0, R1, R2, ..., R15, FPSCR (dummy), CPSR
  *		On entry:
  *			r0: parameter buffer pointer (contents after '$' and '<cmdchar>')
  *              <NULL> (no parameters)
@@ -792,16 +844,54 @@ _dbg__cmd_GetAllRegs:
 	bne		__dbg__procCmdParamError		/* Unexpected input, report error */
 
     _dbg_outputMsgValidResponse             /* R0: address of output message buffer data pointer (after response prefix) */
-	mov		r3, #DBGSTACK_USERCPSR_OFFSET	/* Output User CPSR Value first */
+
+	/* We must return R0-R15, then CPSR */
+	mov		r3, #REG_R0						/* Output User Register Values first */
 1:  mov		r1, r3
 	bl		_dbg_outputOneRegValue			/* update output buffer */
 	add		r3, r3, #1						/* increment index */
-	cmp		r3, #0xF
-	ble		1b								/* process all the registers */
+	cmp		r3, #REG_PC
+	bls		1b								/* process all the registers */
+_get_cpsr:
+#if 0
+	/* GDB was not happy when this was added */
+	/* Output Dummy FPSCR value */
+	mov		r1, #0
+#ifdef __BIG_ENDIAN__
+	bl		word2ascii_be				    /* Convert and put hex chars into Output Message Buffer */
+#else
+    bl      word2ascii_le                   /* Convert and put hex chars into Output Message Buffer */
+#endif
+#endif
+	mov		r1, #REG_CPSR					/* Output User CPSR Value last */
+	bl		_dbg_outputOneRegValue			/* update output buffer */
 
     _asciiz r0, r1
 	bl		dbg__putDebugMsg				/* Send response to the GDB server */
 	ldmfd	sp!, {pc}
+
+/* _dbg_setOneRegValue
+ *		Given Register Enum (-1: CPSR, 0-F: R0-R15), set register to buffer contents
+ *		On entry:
+ *          r0: parameter buffer pointer
+ *			r1: register enum (-1, 0-F)
+ *		On exit:
+ *          r0: (Updated) Address of parameter in buffer
+ *          r1, r2, r3: destroyed
+ */
+_dbg_setOneRegValue:
+    stmfd   sp!, {lr}
+	add		r2, r1, #DBGSTACK_USERREG_INDEX	/* Convert register enum to Debug Stack index */
+#ifdef __BIG_ENDIAN__
+    bl      ascii2word_be
+#else
+    bl      ascii2word_le
+#endif
+    /* R0: value, R1: pointer to next char in buffer */
+    _setdbgregisterfromindex r2, r0, r3     /* Set Register contents in R0, using index in R2, and scratch register R3 */
+	mov		r0, r1							/* Copy buffer pointer to next parameter to R0 for return value */
+    ldmfd   sp!, {pc}
+
 
 /* _dbg__cmd_SetOneReg
  *      Set One Register Value Command Handler
@@ -814,29 +904,27 @@ _dbg__cmd_GetAllRegs:
  *          r0, r1, r2, r3: destroyed
  *
  */
-
 _dbg__cmd_SetOneReg:
     stmfd   sp!, {lr}
     bl      __dbg__cmdParamLen
     teq     r1, #CMD_REG_SETONE_PARAMLEN    /* Check for correct length */
     bne     __dbg__procCmdParamError        /* Unexpected input, report error */
     mov     r3, r0                          /* Keep parameter buffer address in R3 */
-    ldrb    r1, [r3], #1                    /* Load Register index parameter */
+    ldrb    r1, [r3], #1                    /* Load Register enum parameter */
     _check_msgassignment r3
     bne     __dbg__procCmdParamError        /* Can't find '=' */
-    mov     r0, r1                          /* Move register index to R0 for subsequent processing */
-    teq     r0, #MSGBUF_CPSRREG             /* Check for CPSR register indicator */
-    moveq   r0, #DBGSTACK_USERCPSR_OFFSET   /* Put offset from User Registers (-1) into index, so that after adjustment it points to CPSR slot */
+    teq     r1, #MSGBUF_CPSRREG             /* Check for CPSR register indicator */
+    moveq   r1, #REG_CPSR				    /* Use CPSR enum (-1) */
     beq     _dbg__proc_setRegister          /* Handle User CPSR */
+    mov     r0, r1                          /* Move register enum to R0 for subsequent processing */
     bl      char2hex                        /* Convert to Hex value (assume input is valid) */
     cmp     r0, #NIBBLE0                    /* sanity check, (though it is not foolproof as input char in 0x0-0xF (ctrl-chars) will pass through) */
     bhi     __dbg__procCmdParamError        /* Non-hex char, report error */
+	mov		r1, r0							/* move register enum to R1 to call _dbg_setOneRegValue */
 
 _dbg__proc_setRegister:
-    add     r2, r0, #DBGSTACK_USERREG_INDEX /* Convert register index to Debug Stack index, keep in R2 */
     mov     r0, r3                          /* Retrieve parameter buffer pointer */
-    bl      ascii2word
-    _setdbgregisterfromindex r2, r0, r3     /* Set Register contents in R0, using index in R2, and scratch register R3 */
+    bl      _dbg_setOneRegValue
     b       __dbg__procCmdOk
 
 /* _dbg__cmd_SetAllReg
@@ -849,20 +937,35 @@ _dbg__proc_setRegister:
  *
  */
 _dbg__cmd_SetAllRegs:
-/* FIXME: Assumes that the registers are in the sequence CPSR, R0, R1, ... R15 -- May not be GDB ordering */
+	/* Assumes that the registers are in the sequence R0, R1, ... R15, CPSR */
     stmfd   sp!, {lr}
     bl      __dbg__cmdParamLen              /* R0: pointer to parameters in buffer */
     teq     r1, #CMD_REG_SETALL_PARAMLEN    /* Check for correct length */
     bne     __dbg__procCmdParamError        /* Unexpected input, report error */
-    mov     r2, #DBGSTACK_USERCPSR_INDEX    /* R2: register index, starting with CPSR */
-1:  bl      ascii2word                      /* R0: value, R1: pointer to next char in buffer */
-    _setdbgregisterfromindex r2, r0, r3     /* Set Register contents in R0, using index in R2, and scratch register R3 */
-    add     r2, r2, #1                      /* increment index */
-    ldrb    r0, [r1]
+    mov     r4, #REG_R0					    /* R4: register enum, starting with enum for R0 */
+1:	mov		r1, r4							/* Copy enum to R1; R0 already points to current parameter */
+	bl		_dbg_setOneRegValue				/* R0: next parameter address pointer */
+    add     r4, r4, #1                      /* increment index */
+    cmp		r4, #REG_PC
+    bls		1b
+
+_set_cpsr:
+#if 0
+	/* GDB was not happy when this was added */
+	/* Read dummy FPSCR value (ignored) */
+#ifdef __BIG_ENDIAN__
+    bl      ascii2word_be
+#else
+    bl      ascii2word_le
+#endif
+	mov		r0, r1							/* Copy buffer pointer to next parameter to R0 for return value */
+#endif
+    mov     r1, #REG_CPSR				    /* Use CPSR enum (-1) */
+	bl		_dbg_setOneRegValue				/* R0: next parameter address pointer */
+    ldrb    r0, [r0]
     teq     r0, #0                          /* Look for ASCIIZ character to terminate loop */
-    mov     r0, r1                          /* setup R0 for next ascii2word call */
-    bne     1b                              /* continue only if ASCIIZ not found */
-    b       __dbg__procCmdOk
+    beq     __dbg__procCmdOk
+	bne		__dbg__procCmdParamError		/* Unexpected input, report error */
 
 /* _dbg__nop
  *		NOP Command Handler (placeholder)
@@ -887,14 +990,17 @@ _dbg__nop:
 _dbg__cmd_ReadMem:
     stmfd   sp!, {lr}
     bl      __dbg__cmdParamLen
+#if 0
     teq     r1, #CMD_MEM_READ_PARAMLEN      /* Check for correct length */
     bne     __dbg__procCmdParamError        /* Unexpected input, report error */
-    bl      ascii2word                      /* convert ASCII address location to Hex (in R0), R1 has address of next buffer char */
+    bl      ascii2word_be                   /* convert ASCII address location to Hex (in R0), R1 has address of next buffer char */
+#endif
+    bl      ascii2hex_varlen_be             /* convert ASCII address to Hex (in R0), R1 has address of next buffer char */
     mov     r3, r0                          /* Keep Address location in R3 */
     _check_msgseparator r1
     bne     __dbg__procCmdParamError        /* Can't find ',' */
     mov     r0, r1                          /* move buffer pointer to R0 for subsequent processing */
-    bl      ascii2halfword                  /* convert ASCII length to Hex (in R0), R1 has address of next buffer char */
+    bl      ascii2hex_varlen_be             /* convert ASCII length to Hex (in R0), R1 has address of next buffer char */
     cmp     r0, #CMD_MEM_MAXREADBYTES       /* Don't overflow our buffer (2 x CMD_MEM_MAXREADBYTES) */
     bhi     __dbg__procCmdReturnOutputLengthError /* Requested Length greater than buffer size, return error */
     mov     r4, r0                          /* Keep numbytes in R4 */
@@ -922,15 +1028,18 @@ _dbg__cmd_ReadMem:
 _dbg__cmd_WriteMem:
     stmfd   sp!, {lr}
     bl      __dbg__cmdParamLen
+#if 0
     cmp     r1, #CMD_MEM_WRITE_MINPARAMLEN  /* Check for correct (minimum) length */
     blo     __dbg__procCmdParamError        /* Unexpected input, report error */
     sub     r4, r1, #CMD_MEM_WRITE_MINPARAMLEN  /* R4: Number of ASCII Hex chars for byte writes */
-    bl      ascii2word                      /* convert ASCII address location to Hex (in R0), R1 has address of next buffer char */
+    bl      ascii2word_be                   /* convert ASCII address location to Hex (in R0), R1 has address of next buffer char */
+#endif
+    bl      ascii2hex_varlen_be             /* convert ASCII address to Hex (in R0), R1 has address of next buffer char */
     mov     r3, r0                          /* Keep Address location in R3 */
     _check_msgseparator r1
     bne     __dbg__procCmdParamError        /* Can't find ',' */
     mov     r0, r1                          /* move buffer pointer to R0 for subsequent processing */
-    bl      ascii2halfword                  /* convert ASCII length to Hex (in R0), R1 has address of next buffer char */
+    bl      ascii2hex_varlen_be             /* convert ASCII length to Hex (in R0), R1 has address of next buffer char */
     cmp     r0, r4, asr #1                  /* is Number of bytes to write == (number of ASCII Hex Chars / 2)? */
     bne     __dbg__procCmdParamError        /* Number of bytes does not match argument length */
     cmp     r0, #CMD_MEM_MAXWRITEBYTES      /* Don't overflow our buffer (2 x CMD_MEM_MAXWRITEBYTES) */
@@ -946,6 +1055,54 @@ _dbg__cmd_WriteMem:
     subs    r4, r4, #1
     bne     1b
     b       __dbg__procCmdOk
+
+/* _dbg__cmd_Continue
+ *      Continue User Program Execution Command Handler
+ *      On entry:
+ *          r0: parameter buffer pointer (contents after '$' and '<cmdchar>')
+ *              Optional: AA..AA
+ *      On exit:
+ *          r0, r1, r2: destroyed
+ *			Note: This routine does not return to caller. Instead it switches
+ *				  operating mode to UNDEF and returns to previously active program
+ */
+_dbg__cmd_Continue:
+    bl      __dbg__cmdParamLen
+    cmp     r1, #CMD_REG_CONTINUE_PARAMLEN  /* Check for correct parameter length */
+    beq     _dbg__cmd_processContinue       /* Continue from current PC */
+#if 0
+    cmp     r1, #CMD_REG_CONTINUEFROM_PARAMLEN  /* Check for correct parameter length */
+    bne     __dbg__procCmdParamError        /* Unexpected input, report error */
+    bl      ascii2word_be                   /* convert ASCII address location to Hex (in R0), R1 has address of next buffer char */
+#endif
+    bl      ascii2hex_varlen_be             /* convert ASCII address to Hex (in R0), R1 has address of next buffer char */
+    /* Continue from Specified Address */
+    mov     r2, #DBGSTACK_NEXTINSTR_INDEX   /* The Next Instruction Pointer for Resume is in index 0 of the Debug Stack */
+    _setdbgregisterfromindex r2, r0, r1     /* Set Register contents in R0, using index in R2, and scratch register R1 */
+
+_dbg__cmd_processContinue:
+/* FIXME: Currently we assume that the trigger is a Manual Breakpoint, i.e., no need to
+   restore instructions to memory, and handle auto-breakpoints (needed to reenable the memory
+   breakpoint that was triggered) */
+
+@@@@@
+#if 0
+/* Not part of the GDB Remote Protocol spec. Messages are sent only when system halts, not when we resume */
+__dbg__sendOkBeforeResume:
+    _dbg_outputMsgStatusOk
+    bl      dbg__putDebugMsg                /* Send Ok response to the GDB server */
+    cmp     r0, #0
+    beq     _dbg__switch2undefmode          /* Sending of retransmission request succeeded */
+    bl      dbg__runloopTasks               /* Service run loop tasks */
+    b       __dbg__sendOkBeforeResume       /* Retry retransmission */
+#endif
+
+_dbg__switch2undefmode:
+    msr     cpsr_c, #(MODE_UND | CPSR_FIQ | CPSR_IRQ)         /* Configure Undef Mode */
+    _dbg_setmode FALSE                  	/* Debug Mode = False */
+    ldr     lr, =resume_execution
+    mov     pc, lr                          /* Exit via UNDEF mode */
+
 
 /* _dbg__proc_brkpt_params
  *      Process Breakpoint Parameters
@@ -969,7 +1126,7 @@ _dbg__proc_brkpt_params:
     _check_msgseparator r3
     bne     _dbg__proc_brkpt_params_error   /* Something wrong with the parameters */
     mov     r0, r3                          /* Check Address */
-    bl      ascii2word                      /* R0: value, R1: pointer to next char slot */
+    bl      ascii2word_be                      /* R0: value, R1: pointer to next char slot */
     mov     r3, r0                          /* Keep breakpoint address in R3 */
     _check_msgseparator r1
     bne     _dbg__proc_brkpt_params_error   /* Something wrong with the parameters */

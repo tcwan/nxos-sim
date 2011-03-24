@@ -87,6 +87,15 @@
 #define CMD_REG_REGPARAMLEN         8   /* 32-bit ASCII Hex Value */
 #define CMD_REG_SETONE_PARAMLEN     (2 + CMD_REG_REGPARAMLEN)
 #define CMD_REG_SETALL_PARAMLEN     (CMD_REG_NUMREGS*CMD_REG_REGPARAMLEN)
+/*@}*/
+
+/** @name Debug Memory Command Constants.
+ *
+ * Debug Memory Command
+ * FIXME: These limits are not enforced by the GDB client, it truncates addresses and lengths to remove leading '0's
+ *        The PARAMLEN constants would probably be removed
+ */
+/*@{*/
 #define CMD_NUMITEMS_PARAMLEN		4	/* 16-bit ASCII Hex Value */
 #define CMD_MEM_READ_PARAMLEN		(CMD_REG_REGPARAMLEN + CMD_NUMITEMS_PARAMLEN + 1)	/* Address length is equivalent to reg param len */
 #define CMD_MEM_WRITE_MINPARAMLEN	(CMD_REG_REGPARAMLEN + CMD_NUMITEMS_PARAMLEN + 2)	/* Address length is equivalent to reg param len */
@@ -96,6 +105,16 @@
 #define CMD_MEM_MAXINBUFLEN			(MSGBUF_SIZE - MSGBUF_IN_OVERHEADLEN)
 #define CMD_MEM_MAXWRITEBYTES		((CMD_MEM_MAXINBUFLEN - CMD_MEM_WRITE_MINPARAMLEN)/2)
 /*@}*/
+
+/** @name Debug Continue Command Constants.
+ *
+ * Debug Continue Command
+ */
+/*@{*/
+#define CMD_REG_CONTINUE_PARAMLEN     0
+/*@}*/
+
+
 
 /** @name Debug Breakpoint Command Constants.
  *
@@ -126,9 +145,12 @@
  * Debug Stack Manipulation Values
  */
 /*@{*/
-#define DBGSTACK_USERCPSR_OFFSET   (DBGSTACK_USERCPSR_INDEX-DBGSTACK_USERREG_INDEX)       /* = -1, offset for calculating Debug Stack index */
+#define DBGSTACK_NEXTINSTR_INDEX 0                /* Next Instruction Address is at index 0 from bottom of Debug Stack */
 #define DBGSTACK_USERCPSR_INDEX 1                /* User CPSR (SPSR_UNDEF) is at index 1 from bottom of Debug Stack */
 #define DBGSTACK_USERREG_INDEX  2                /* R0 starts at index 2 from bottom of Debug Stack */
+#define DBGSTACK_USERSP_INDEX   (DBGSTACK_USERREG_INDEX + REG_SP)     /* SP is R13 */
+#define DBGSTACK_USERLR_INDEX   (DBGSTACK_USERREG_INDEX + REG_LR)     /* LR is R14 */
+#define DBGSTACK_USERPC_INDEX   (DBGSTACK_USERREG_INDEX + REG_PC)     /* PC is R15 */
 /*@}*/
 
 /** @name Bitmask Definitions.
@@ -208,6 +230,7 @@
 ENUM_BEGIN
 ENUM_VALASSIGN(DBG_RESET, 0)  /**< Initial State. */
 ENUM_VAL(DBG_INIT)            /**< Debugger Initialized. */
+ENUM_VAL(DBG_CONFIGURED)        /**< Debugger has been configured by GDB Server */
 ENUM_VAL(DBG_MANUAL_BKPT_ARM)     /**< Manual ARM Breakpoint. */
 ENUM_VAL(DBG_NORMAL_BKPT_ARM)     /**< Normal ARM Breakpoint (Single Step, Normal). */
 ENUM_VAL(DBG_MANUAL_BKPT_THUMB)     /**< Manual Thumb Breakpoint. */
@@ -229,6 +252,32 @@ ENUM_VAL(MSG_UNKNOWNCMD)          /**< Unrecognized Command Error. */
 ENUM_VAL(MSG_UNKNOWNPARAM)        /**< Unrecognized Parameter Error. */
 ENUM_VAL(MSG_UNKNOWNBRKPT)        /**< Unrecognized Breakpoint Error. */
 ENUM_END(dbg_msg_errno)
+
+/** Register Enums
+ *
+ * Register Enums.
+ * The enums must be consecutive, starting from -1
+ */
+ENUM_BEGIN
+ENUM_VALASSIGN(REG_CPSR, -1)  /**< Previous Mode CPSR */
+ENUM_VAL(REG_R0)              /**< User Reg R0 */
+ENUM_VAL(REG_R1)              /**< User Reg R1 */
+ENUM_VAL(REG_R2)              /**< User Reg R2 */
+ENUM_VAL(REG_R3)              /**< User Reg R3 */
+ENUM_VAL(REG_R4)              /**< User Reg R4 */
+ENUM_VAL(REG_R5)              /**< User Reg R5 */
+ENUM_VAL(REG_R6)              /**< User Reg R6 */
+ENUM_VAL(REG_R7)              /**< User Reg R7 */
+ENUM_VAL(REG_R8)              /**< User Reg R8 */
+ENUM_VAL(REG_R9)              /**< User Reg R9 */
+ENUM_VAL(REG_R10)             /**< User Reg R10 */
+ENUM_VAL(REG_R11)             /**< User Reg R11 */
+ENUM_VAL(REG_R12)             /**< User Reg R12 */
+ENUM_VAL(REG_SP)              /**< Previous Mode SP (R13) */
+ENUM_VAL(REG_LR)              /**< Previous Mode LR (R14) */
+ENUM_VAL(REG_PC)              /**< Program Counter (R15) */
+
+ENUM_END(register_enum_t)
 
 
 #ifndef __ASSEMBLY__
