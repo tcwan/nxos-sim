@@ -19,6 +19,7 @@
 #define __ASSEMBLY__
 #include "debug_macros.h"
 #include "debug_stub.h"
+#include "debug_internals.h"
 #include "debug_comm.h"
 
 .bss
@@ -764,6 +765,9 @@ _hasMsg2Copy:
 
 /* Need to account for Packet Acknowledgement */
 1:  ldrb    r0, [r5]
+    teq     r0, #MSGBUF_CTRLC                 /* Look for Ctrl-C */
+    moveq	r0, r4							  /* If found, set R0 to current message length */
+    beq		exit_dbg__getDebugMsg			  /* and return  */
     teq     r0, #MSGBUF_NAKCHAR               /* Look for '-' */
     beq		exit_dbg__getMsgError			  /* FIXME: We can't handle retransmission, flag message error */
     teq     r0, #MSGBUF_ACKCHAR               /* Look for '+' */
@@ -959,17 +963,19 @@ exit_dbg__putMsgError:
 exit_dbg__putDebugMsg:
 	ldmfd	sp!, {r4,r5,pc}
 
-	.global dbg__requestRetransmission
-/* dbg__requestRetransmission
- *		Request for Retransmission due to received message Checksum error (Blocking) .
+	.global dbg__sendAckOrNak
+/* dbg__sendAckOrNak
+ *		Send Ack (for successful receipt of message)
+ *			or Nak (for Retransmission due to received message Checksum error) (Blocking) .
  *		On entry:
  *			No parameters (assume pointers were initialized previously using dbg__comm_init)
  *		On exit:
  *			r0: status (0: success, -1: error)
  *			r1: destroyed
- *      Note: A Retransmission is indicated by '-', which is prepended with the USB header and sent (without checksum)
+ *      Note: An Ack Or Nak is indicated by '+' or '-', which is prepended with the USB header and sent (without checksum)
+ *			  Sending Ack is only done for Continue and Step commands, where GDB does not expect any replies.
  */
-dbg__requestRetransmission:
+dbg__sendAckOrNak:
 	stmfd	sp!, {lr}
     ldr     r1, =debug_msgTxBufPtr              /* R2: data structure base pointer */
     ldr     r0, [r1]                            /* Tx buffer Start Address */

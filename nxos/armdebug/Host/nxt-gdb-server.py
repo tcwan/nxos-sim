@@ -22,9 +22,12 @@ import select
 import usb
 import struct
 
+CTRLC = chr(3)
+STATUS_QUERY = "$?#3F"
 DEFAULT_PORT = 2828
 SELECT_TIMEOUT = 0.1
 DEBUG = True
+DEBUG2 = False
 NXT_RECV_ERR = -1
 
 # Libusb 0.12.x blocks on USB reads
@@ -69,6 +72,14 @@ class NXTGDBServer:
         """Split datas in GDB commands and make segments with each command."""
         segs = [ ]
         self.in_buf += data
+        # Find Ctrl-C (assumed to be by itself and not following a normal command)
+        end = self.in_buf.find (CTRLC)
+        if end >= 0:
+            msg, self.in_buf = self.in_buf[0:end+1], self.in_buf[end+1:]
+            assert len (msg) <= self.pack_size, "Ctrl-C Command Packet too long!"
+            segs.append (self.pack (msg, 0))
+            end = self.in_buf.find (CTRLC)
+        
         end = self.in_buf.find ('#')
         # Is # found and enough place for the checkum?
         while end >= 0 and end < len (self.in_buf) - 2:
@@ -141,6 +152,9 @@ class NXTGDBServer:
                     data = client.recv (self.recv_size)
                     data = data.strip()
                     if len (data) > 0:
+                        #if len (data) == 1 and data.find(CTRLC) >= 0:
+                        #   print "CTRL-C Received!"
+                        #   data = STATUS_QUERY
                         if DEBUG:
                             print "[GDB->NXT] %s" % data
                         segments = self.segment (data)
@@ -152,12 +166,16 @@ class NXTGDBServer:
                                 # Some pyusb are buggy, ignore some "errors".
                                 if e.args != ('No error', ):
                                     raise e
-                        if s and LIBUSB_RECEIVE_BLOCKING:
+                        if segments != [] and LIBUSB_RECEIVE_BLOCKING:
+                            if DEBUG2:
+                                print "Accessing Blocking sock.recv()"
                             data = self.reassemble (brick.sock)
                     else:
                         client.close ()
                         client = None
                 if not LIBUSB_RECEIVE_BLOCKING:
+                    if DEBUG2:
+                         print "Accessing Non-Blocking sock.recv()"
                     data = self.reassemble (brick.sock)
                     
                 # Is there something from NXT brick?

@@ -72,7 +72,8 @@
  *	  px			get the value of one register (x)      hex data or ENN
  *	  Px=rrrr		set the value of one register (x) to   OK or ENN
  *					32-bit hex value rrrr.
- *					x = ['0','F'] for R0-R15, '!' for User CPSR
+ *					x = ['0','F'] for R0-R15,
+ *                  '18' for FPSCR (dummy), '19' for User CPSR
  *
  *    mAA..AA,LLLL  Read LLLL bytes at address AA..AA      hex data or ENN
  *    MAA..AA,LLLL:bb..bb
@@ -138,6 +139,7 @@
 
 #define __ASSEMBLY__
 #include "debug_stub.h"
+#include "debug_internals.h"
 #include "debug_macros.h"
 
 /* Macro definitions */
@@ -189,22 +191,27 @@
 
 .bss
 .align 4
-debug_curr_breakpoint:
-	.word	0x0
 debug_InMsgBuf:
 	.space	MSGBUF_SIZE,0
 debug_OutMsgBuf:
 	.space	MSGBUF_SIZE,0
 
 debug_state:
-    .byte   0x0
+    .byte   0x0									/* dbg_state_t variable */
 debug_mode:
     .byte   0x0                                 /* Boolean variable */
+debug_bkpt_type:
+    .byte   0x0                                 /* bkpt_type_t variable */
+debug_curr_breakpoint:
+    .byte   0x0
 
 .data
 .align 4
 debug_RetransmitFlag:
 	.byte	'-',0
+
+debug_AckOnlyFlag:
+	.byte	'+',0
 
 debug_ValidResponsePrefix:
 	.byte	'+','$',0
@@ -237,12 +244,56 @@ debug_cmdJumpTable:
 	.word	_dbg__cmd_Continue					/* 'c' */
 	.word	_dbg__nop							/* 's' */
 	.word	_dbg__nop							/* 'k' */
-	.word	_dbg__cmd_remove_breakpoint			/* 'z' */
-	.word	_dbg__cmd_insert_breakpoint			/* 'Z' */
+	.word	_dbg__cmd_RemoveBreakpoint			/* 'z' */
+	.word	_dbg__cmd_InsertBreakpoint			/* 'Z' */
 	.word	_dbg__cmd_Status					/* '?' */
 	.word	_dbg__cmd_Query						/* 'q' */
 	.word	_dbg__nop							/* 'Q' */
 	.word	0
+
+/* Rm Shifted Shift Type Jump Table
+ * On entry:
+ *      R0: Register Rm
+ *      R1: Shift/Rotate Amount
+ * On exit:
+ *      R0: RmShifted result
+ *
+ */
+debug_regShiftJumpTable:
+    .word   _reg_lsl                            /* 00 */
+    .word   _reg_lsr                            /* 01 */
+    .word   _reg_asr                            /* 02 */
+    .word   _reg_ror                            /* 03 */
+    .word   _reg_rrx                            /* 04 */
+
+/* Data Processing Instruction Jump Table
+ * On entry:
+ *      R0: Register Rn (Operand 1) value
+ *      R1: Operand 2 value
+ *      R2: Default Next Instruction Address
+ * On exit:
+ *      R0: Calculated result
+ *      R1, R2, R3: Destroyed
+ *
+ */
+debug_dataInstrJumpTable:
+    .word   _opcode_and                         /* 00 */
+    .word   _opcode_eor                         /* 01 */
+    .word   _opcode_sub                         /* 02 */
+    .word   _opcode_rsb                         /* 03 */
+    .word   _opcode_add                         /* 04 */
+    .word   _opcode_adc                         /* 05 */
+    .word   _opcode_sbc                         /* 06 */
+    .word   _opcode_rsc                         /* 07 */
+    .word   _opcode_tst                         /* 08 */
+    .word   _opcode_teq                         /* 09 */
+    .word   _opcode_cmp                         /* 0A */
+    .word   _opcode_cmn                         /* 0B */
+    .word   _opcode_orr                         /* 0C */
+    .word   _opcode_mov                         /* 0D */
+    .word   _opcode_bic                         /* 0E */
+    .word   _opcode_mvn                         /* 0F */
+
 
 /*
  * To determine the next instruction to execute, we need to check current (breakpointed) instruction
@@ -265,11 +316,11 @@ debug_cmdJumpTable:
 
 debug_armDecodeTable:
 	.word	0x0000f000, 0x0c00f000, _arm_data_instr_handler	/* Data Processing instr with Rd = R15 */
-	.word	0x012fff10, 0x0ffffff0, _arm_bx_blx_handler		/* BX or BLX */
+	.word	0x012fff10, 0x0ffffff0, _arm_bx_blx_handler		/* BX or BLX. Note v4t does not have BLX instr */
 	.word	0x0410f000, 0x0410f000, _arm_ldr_pc_handler		/* LDR with Rd = PC */
-/*	.word	0x06000010, 0x0e000010, _arm_undef_handler	*/	/* Undefined instr: shouldn't occur, as it would've been trapped already. See _dbg_next_instruction_addr */
+/*	.word	0x06000010, 0x0e000010, _arm_undef_handler	*/	/* Undefined instr: shouldn't occur, as it would've been trapped already. See _dbg_following_instruction_addr */
 	.word	0x08108000, 0x0e108000, _arm_ldm_pc_handler		/* LDM {pc} */
-	.word	0x0a000000, 0x0e000000, _arm_b_bl_handler		/* B or BL. Note v4t does not have BLX instr */
+	.word	0x0a000000, 0x0e000000, _arm_b_bl_blx_handler	/* B, BL or BLX. Note v4t does not have BLX instr */
 	.word	0x0c000000, 0x0c000000, _arm_coproc_swi_handler	/* Coprocessor instr or SWI */
 	.word	0x0,0x0,0x0										/* Null Entry */
 
@@ -288,7 +339,7 @@ debug_thumbDecodeTable:
 	.hword	0xe000, 0xf800
 	.word	_thumb_b_handler					/* B */
 	.hword	0xf000, 0xf000
-	.word	_thumb_long_b_handler				/* Long BL or BLX (4 bytes) Note: b11 (H) indicates 1st or 2nd instr */
+	.word	_thumb_long_bl_blx_handler			/* Long BL or BLX (4 bytes) Note: b11 (H) indicates 1st or 2nd instr */
 	.hword	0x0,0x0
 	.word	0x0									/* Null Entry */
 
@@ -358,7 +409,7 @@ debug_armComplexCCTable:
 	.extern dbg__hasDebugMsg			/* Check for message from the communications link */
 	.extern dbg__getDebugMsg			/* Read a message from the communications link */
 	.extern	dbg__putDebugMsg			/* Write a message to the communications link */
-	.extern dbg__requestRetransmission	/* Request Retransmission due to Checksum Error */
+	.extern dbg__sendAckOrNak			/* Send Ack or Nak to indicate success/failure of message receipt */
 	.extern dbg__runloopTasks           /* Platform specific Run Loop processing */
 
 
@@ -478,7 +529,7 @@ dbg__bkpt_init:
 	bl		_dbg__clear_breakpoints
 	mov		r2, #0
 	ldr		r1, =debug_curr_breakpoint
-	str		r2, [r1]
+	strb	r2, [r1]
 	ldr		r0, =debug_InMsgBuf
 	strb	r2, [r0]
 	ldr		r1, =debug_OutMsgBuf
@@ -521,7 +572,7 @@ dbg__thumb_bkpt_handler:
 	teq	r4, #0					/* Check if AUTO flag set */
 	bne	_process_auto_breakpoint
 /* else */
-	_dbg_setstate DBG_NORMAL_BKPT_THUMB
+	_dbg_set_bkpt_type DBG_NORMAL_BKPT_THUMB
 	b	_process_normal_breakpoint
 
 	.global	dbg__arm_bkpt_handler
@@ -544,7 +595,7 @@ dbg__arm_bkpt_handler:
 	teq	r4, #0					/* Check if AUTO flag set */
 	bne	_process_auto_breakpoint
 /* else */
-	_dbg_setstate DBG_NORMAL_BKPT_ARM
+	_dbg_set_bkpt_type DBG_NORMAL_BKPT_ARM
 /*	b	_process_normal_breakpoint */
 
 _process_normal_breakpoint:
@@ -563,14 +614,28 @@ _process_auto_breakpoint:
 	bl	_dbg__activate_one_breakpoint
 	bl	_dbg__restore_singlestep
 	bl	_dbg__clear_singlestep
-	b	__dbg__resume_execution
+	_dbg_set_bkpt_type DBG_AUTO_BKPT
+	b	_dbg__switch2undefmode
+
+/* _dbg__switch2undefmode
+ *      Common internal routine to return execution to user program
+ */
+_dbg__switch2undefmode_withAck:
+	bl		__dbg__procAckOnly				/* send Ack to keep GDB server happy */
+	bl      dbg__runloopTasks               /* Service run loop tasks */
+_dbg__switch2undefmode:
+    bl  	_dbg__flush_icache
+    msr     cpsr_c, #(MODE_UND | CPSR_FIQ | CPSR_IRQ)         /* Configure Undef Mode */
+    _dbg_setmode FALSE                  	/* Debug Mode = False */
+    ldr     lr, =resume_execution
+    mov     pc, lr                          /* Exit via UNDEF mode */
 
 _process_manual_breakpoint_thumb:
-	_dbg_setstate DBG_MANUAL_BKPT_THUMB
+	_dbg_set_bkpt_type DBG_MANUAL_BKPT_THUMB
 	b	dbg__bkpt_waitCMD
 
 _process_manual_breakpoint_arm:
-	_dbg_setstate DBG_MANUAL_BKPT_ARM
+	_dbg_set_bkpt_type DBG_MANUAL_BKPT_ARM
 /*	b	dbg__bkpt_waitCMD */
 
 dbg__bkpt_inactive:
@@ -602,10 +667,21 @@ dbg__bkpt_waitCMD_cont:
 	bl		dbg__getDebugMsg				/* Read new message from Debugger, buflen in R0, 0 if none, -1 if error, msgbuf pointer in R1 */
 	cmp		r0, #0
 	beq     dbg__bkpt_waitCMD_cont          /* No message yet, do housekeeping tasks */
-	blt		__dbg__procChecksumError		/* Message invalid, checksum error? */
-/* Message now has $<packet info>\0 */
+	bgt		_proc_command					/* valid message, process it */
+	bl		__dbg__procChecksumError		/* Message invalid, checksum error? */
+	b		dbg__bkpt_waitCMD_cont
+
+_proc_command:
+/* Message now has Ctrl-C or $<packet info>\0 */
     mov     r4, r1							/* Use R4 as buffer pointer */
-	ldrb	r0, [r4], #1					/* Look for '$' */
+	ldrb	r0, [r4], #1					/* Look for Ctrl-C or '$' */
+	teq		r0, #MSGBUF_CTRLC
+	bne		_dbg_check_gdb_command
+	/* Ctrl-C detected, do nothing (wait for next command from GDB) */
+	bl		__dbg__procAckOnly				/* send Ack */
+	b		dbg__bkpt_waitCMD_cont
+
+_dbg_check_gdb_command:
 	teq		r0, #MSGBUF_STARTCHAR
 	movne	r0, #MSG_ERRFORMAT				/* Message Format invalid (not '$') */
 	bne		_dbg__cmdError					/* Shouldn't happen */
@@ -629,18 +705,44 @@ _dbg__cmdExists:
 	_dbg_jumpTableHandler	debug_cmdJumpTable, r2, r3		/* Call Command Handler Routine, use R2 as jump address pointer */
 	b 		dbg__bkpt_waitCMD_cont
 
-__dbg__procChecksumError:
-    _dbg_outputRetransmitFlag
-	bl		dbg__requestRetransmission		/* Request message retransmission from GDB server */
-	cmp		r0, #0
-	beq		dbg__bkpt_waitCMD_cont			/* Sending of retransmission request succeeded */
-	bl      dbg__runloopTasks               /* Service run loop tasks */
-	b 		__dbg__procChecksumError		/* Retry retransmission */
-
 _dbg__cmdError:
 	_dbg_outputMsgStatusErr
 	bl		dbg__putDebugMsg				/* Send error response to the GDB server */
 	b 		dbg__bkpt_waitCMD_cont
+
+
+/* __dbg__procAckOnly
+ *		Send Ack to GDB due to Continue or Step
+ *		On entry:
+ *			None
+ *		On exit:
+ *			r0-r3: destroyed
+ */
+__dbg__procAckOnly:
+	stmfd	sp!, {lr}
+    _dbg_outputAckOnlyFlag
+	b		_cont_sendAckOrNak				/* Acknowledge Continue or Step command from GDB server */
+
+/* __dbg__procChecksumError
+ *		Request Retransmission from GDB due to Checksum error
+ *		On entry:
+ *			None
+ *		On exit:
+ *			r0-r3: destroyed
+ */
+__dbg__procChecksumError:
+	stmfd	sp!, {lr}
+    _dbg_outputRetransmitFlag
+	/* b		_cont_sendAckOrNak	*/		/* Acknowledge Continue or Step command from GDB server */
+
+_cont_sendAckOrNak:
+	bl		dbg__sendAckOrNak				/* send Ack or Nak to GDB server */
+	cmp		r0, #0
+	beq		_cont_sendAckOrNak_exit			/* Sending of Ack or Nak succeeded */
+	bl      dbg__runloopTasks               /* Service run loop tasks */
+	b 		_cont_sendAckOrNak				/* Retry Ack or Nak transmission */
+_cont_sendAckOrNak_exit:
+    ldmfd   sp!, {pc}
 
 /* _dbg__cmdChar2Index
  *		Convert Command Character to Jump Table Index
@@ -776,8 +878,8 @@ _dbg__cmd_Query:
 
 /* _dbg__cmd_GetOneReg
  *		Get One Register Value Command Handler
- *		Valid command parameter x is from '0' to 'F' for User Mode Registers R0-R15
- *		                             CPSR register is '!'
+ *		Valid command parameter x is from '0' to 'F' for User Mode Registers R0-R15,
+ *			'18' for FPSCR (dummy), and '19' for CPSR
  *		On entry:
  *			r0: parameter buffer pointer (contents after '$' and '<cmdchar>')
  *              x
@@ -788,15 +890,11 @@ _dbg__cmd_Query:
 _dbg__cmd_GetOneReg:
 	stmfd	sp!, {lr}
 	bl      __dbg__cmdParamLen
-	teq		r1, #CMD_REG_GETONE_PARAMLEN	/* Check for correct length */
-	bne		__dbg__procCmdParamError		/* Unexpected input, report error */
-	ldrb    r0, [r0]                        /* Load Register index parameter */
-	teq		r0, #MSGBUF_CPSRREG				/* Check for CPSR register indicator */
-	moveq	r0, #REG_CPSR					/* Use CPSR Enum (-1) */
-	beq		_dbg__proc_getRegister			/* Handle User CPSR */
-	bl		char2hex						/* Convert to Hex value (assume input is valid) */
-	cmp		r0, #NIBBLE0					/* sanity check, (though it is not foolproof as input char in 0x0-0xF (ctrl-chars) will pass through) */
-	bhi		__dbg__procCmdParamError		/* Non-hex char, report error */
+	cmp		r1, #CMD_REG_GETONE_MINPARAMLEN	/* Check for correct length */
+	blo		__dbg__procCmdParamError		/* Unexpected input, report error */
+ 	cmp		r1, #CMD_REG_GETONE_MAXPARAMLEN	/* Check for correct length */
+	bhi		__dbg__procCmdParamError		/* Unexpected input, report error */
+    bl      ascii2hex_varlen_be             /* convert ASCII reg enum to Hex (in R0), R1 has address of next buffer char */
 
 _dbg__proc_getRegister:
 	mov		r3, r0							/* Keep register index safe */
@@ -808,10 +906,10 @@ _dbg__proc_getRegister:
 	ldmfd	sp!, {pc}
 
 /* _dbg_outputOneRegValue
- *		Given Register Enum (-1: CPSR, 0-F: R0-R15), output hex char to buffer
+ *		Given Register Enum (0-F: R0-R15, 0x19: CPSR, OtherVal: dummy), output hex char to buffer
  *		On entry:
  *          r0: output message buffer pointer
- *			r1: register enum (-1, 0-F)
+ *			r1: register enum (0-F, 0x19)
  *		On exit:
  *			r0: updated (points to next character slot at end of Output Buffer)
  *			r1: original output message buffer pointer
@@ -819,18 +917,39 @@ _dbg__proc_getRegister:
  */
 _dbg_outputOneRegValue:
 	stmfd	sp!, {lr}
-	add		r2, r1, #DBGSTACK_USERREG_INDEX	/* Convert register enum to Debug Stack index */
+	cmp		r1, #REG_PC
+	addls	r2, r1, #DBGSTACK_USERREG_INDEX	/* Convert register enum to Debug Stack index */
+	bls		_retrieve_RegVal
+
+	cmp		r1, #REG_CPSR
+	moveq	r2, #DBGSTACK_USERCPSR_INDEX	/* convert register enum to Debug Stack index */
+	beq		_retrieve_RegVal
+
+	cmp		r1, #REG_FPSCR
+	bne		_exit_dbg_outputOneRegValue		/* No match, skip */
+
+_output_dummy_fpscr:
+	/* Output Dummy FPSCR value */
+	mov		r1, #0
+	b		_output2buffer					/* Output all zeros for FPSCR */
+
+_retrieve_RegVal:
 	_getdbgregisterfromindex r2, r1			/* Retrieve Register contents into R1 */
+
+_output2buffer:
+
 #ifdef __BIG_ENDIAN__
 	bl		word2ascii_be				    /* Convert and put hex chars into Output Message Buffer */
 #else
     bl      word2ascii_le                   /* Convert and put hex chars into Output Message Buffer */
 #endif
+
+_exit_dbg_outputOneRegValue:
 	ldmfd	sp!, {pc}
 
 /* _dbg__cmd_GetAllRegs
  *		Get All Register Values Command Handler
- *		Output Buffer returns register values in the order: User R0, R1, R2, ..., R15, FPSCR (dummy), CPSR
+ *		Output Buffer returns register values in the order: User R0, R1, R2, ..., R15, CPSR
  *		On entry:
  *			r0: parameter buffer pointer (contents after '$' and '<cmdchar>')
  *              <NULL> (no parameters)
@@ -853,16 +972,6 @@ _dbg__cmd_GetAllRegs:
 	cmp		r3, #REG_PC
 	bls		1b								/* process all the registers */
 _get_cpsr:
-#if 0
-	/* GDB was not happy when this was added */
-	/* Output Dummy FPSCR value */
-	mov		r1, #0
-#ifdef __BIG_ENDIAN__
-	bl		word2ascii_be				    /* Convert and put hex chars into Output Message Buffer */
-#else
-    bl      word2ascii_le                   /* Convert and put hex chars into Output Message Buffer */
-#endif
-#endif
 	mov		r1, #REG_CPSR					/* Output User CPSR Value last */
 	bl		_dbg_outputOneRegValue			/* update output buffer */
 
@@ -871,17 +980,34 @@ _get_cpsr:
 	ldmfd	sp!, {pc}
 
 /* _dbg_setOneRegValue
- *		Given Register Enum (-1: CPSR, 0-F: R0-R15), set register to buffer contents
+ *		Given Register Enum (0-F: R0-R15, 0x19: CPSR, OtherVal: dummy), output hex char to buffer
  *		On entry:
  *          r0: parameter buffer pointer
- *			r1: register enum (-1, 0-F)
+ *			r1: register enum (0-F, 0x19)
  *		On exit:
  *          r0: (Updated) Address of parameter in buffer
  *          r1, r2, r3: destroyed
  */
 _dbg_setOneRegValue:
     stmfd   sp!, {lr}
-	add		r2, r1, #DBGSTACK_USERREG_INDEX	/* Convert register enum to Debug Stack index */
+	cmp		r1, #REG_PC
+	addls	r2, r1, #DBGSTACK_USERREG_INDEX	/* Convert register enum to Debug Stack index */
+	bls		_store_RegVal
+
+	cmp		r1, #REG_CPSR
+	moveq	r2, #DBGSTACK_USERCPSR_INDEX	/* convert register enum to Debug Stack index */
+	beq		_store_RegVal
+
+	cmp		r1, #REG_FPSCR
+	bne		_exit_dbg_setOneRegValue		/* No match, skip */
+	/* FIXME: If we get SetAllRegs with FP reg values, this will not skip pass the FP regs! */
+
+_set_dummy_fpscr:
+	/* Set dummy FPSCR value (ignored) */
+	add		r1, r0, #CMD_REG_REGPARAMLEN	/* Just increment the pointer */
+	b		_done_store_RegVal
+
+_store_RegVal:
 #ifdef __BIG_ENDIAN__
     bl      ascii2word_be
 #else
@@ -889,41 +1015,39 @@ _dbg_setOneRegValue:
 #endif
     /* R0: value, R1: pointer to next char in buffer */
     _setdbgregisterfromindex r2, r0, r3     /* Set Register contents in R0, using index in R2, and scratch register R3 */
+_done_store_RegVal:
 	mov		r0, r1							/* Copy buffer pointer to next parameter to R0 for return value */
+_exit_dbg_setOneRegValue:
     ldmfd   sp!, {pc}
 
 
 /* _dbg__cmd_SetOneReg
  *      Set One Register Value Command Handler
- *      Valid command parameter x is from '0' to 'F' for User Mode Registers R0-R15
- *                                   CPSR register is '!'
+ *		Valid command parameter x is from '0' to 'F' for User Mode Registers R0-R15,
+ *			'18' for FPSCR (dummy), and '19' for CPSR
  *      On entry:
  *          r0: parameter buffer pointer (contents after '$' and '<cmdchar>')
  *              x=rrrr
  *      On exit:
- *          r0, r1, r2, r3: destroyed
+ *          r0, r1, r2, r3, r4: destroyed
  *
  */
 _dbg__cmd_SetOneReg:
     stmfd   sp!, {lr}
     bl      __dbg__cmdParamLen
-    teq     r1, #CMD_REG_SETONE_PARAMLEN    /* Check for correct length */
-    bne     __dbg__procCmdParamError        /* Unexpected input, report error */
-    mov     r3, r0                          /* Keep parameter buffer address in R3 */
-    ldrb    r1, [r3], #1                    /* Load Register enum parameter */
-    _check_msgassignment r3
+    cmp     r1, #CMD_REG_SETONE_MINPARAMLEN    /* Check for correct length */
+    blo     __dbg__procCmdParamError        /* Unexpected input, report error */
+    cmp     r1, #CMD_REG_SETONE_MAXPARAMLEN    /* Check for correct length */
+    bhi     __dbg__procCmdParamError        /* Unexpected input, report error */
+
+    bl      ascii2hex_varlen_be             /* convert ASCII reg enum to Hex (in R0), R1 has address of next buffer char */
+	mov		r4, r0							/* Keep enum in R4 */
+    _check_msgassignment r1					/* R1 points to next char in buffer */
     bne     __dbg__procCmdParamError        /* Can't find '=' */
-    teq     r1, #MSGBUF_CPSRREG             /* Check for CPSR register indicator */
-    moveq   r1, #REG_CPSR				    /* Use CPSR enum (-1) */
-    beq     _dbg__proc_setRegister          /* Handle User CPSR */
-    mov     r0, r1                          /* Move register enum to R0 for subsequent processing */
-    bl      char2hex                        /* Convert to Hex value (assume input is valid) */
-    cmp     r0, #NIBBLE0                    /* sanity check, (though it is not foolproof as input char in 0x0-0xF (ctrl-chars) will pass through) */
-    bhi     __dbg__procCmdParamError        /* Non-hex char, report error */
-	mov		r1, r0							/* move register enum to R1 to call _dbg_setOneRegValue */
 
 _dbg__proc_setRegister:
-    mov     r0, r3                          /* Retrieve parameter buffer pointer */
+	mov		r0, r1							/* move parameter buffer pointer to R0 */
+    mov     r1, r4                          /* and retrieve enum to R1 to call _dbg_setOneRegValue */
     bl      _dbg_setOneRegValue
     b       __dbg__procCmdOk
 
@@ -933,7 +1057,7 @@ _dbg__proc_setRegister:
  *          r0: parameter buffer pointer (contents after '$' and '<cmdchar>')
  *              rrrrRRRRrrrr... (17 registers)
  *      On exit:
- *          r0, r1, r2, r3: destroyed
+ *          r0, r1, r2, r3, r4: destroyed
  *
  */
 _dbg__cmd_SetAllRegs:
@@ -960,7 +1084,8 @@ _set_cpsr:
 #endif
 	mov		r0, r1							/* Copy buffer pointer to next parameter to R0 for return value */
 #endif
-    mov     r1, #REG_CPSR				    /* Use CPSR enum (-1) */
+
+    mov     r1, #REG_CPSR				    /* Use CPSR enum */
 	bl		_dbg_setOneRegValue				/* R0: next parameter address pointer */
     ldrb    r0, [r0]
     teq     r0, #0                          /* Look for ASCIIZ character to terminate loop */
@@ -1058,50 +1183,121 @@ _dbg__cmd_WriteMem:
 
 /* _dbg__cmd_Continue
  *      Continue User Program Execution Command Handler
+ *      Setup breakpoints before resuming execution of program.
+ *
+ *      If Address is specified, update the next instruction address to specified address
+ *
+ *      If this is a Normal Breakpoint, then we need to install an Autobreakpoint at next instruction address
+ *          and resume from current (Breakpoint) exception address
+ *      Else (it is a Manual Breakpoint or Address Specified)
+ *          We need to resume from the next instruction address
  *      On entry:
  *          r0: parameter buffer pointer (contents after '$' and '<cmdchar>')
  *              Optional: AA..AA
  *      On exit:
- *          r0, r1, r2: destroyed
+ *          r0-r7: destroyed
  *			Note: This routine does not return to caller. Instead it switches
  *				  operating mode to UNDEF and returns to previously active program
  */
 _dbg__cmd_Continue:
+    /* Don't put anything on the stack, we won't return to the Debugger Run Loop */
     bl      __dbg__cmdParamLen
-    cmp     r1, #CMD_REG_CONTINUE_PARAMLEN  /* Check for correct parameter length */
-    beq     _dbg__cmd_processContinue       /* Continue from current PC */
-#if 0
-    cmp     r1, #CMD_REG_CONTINUEFROM_PARAMLEN  /* Check for correct parameter length */
-    bne     __dbg__procCmdParamError        /* Unexpected input, report error */
-    bl      ascii2word_be                   /* convert ASCII address location to Hex (in R0), R1 has address of next buffer char */
-#endif
+    cmp     r1, #CMD_CONTINUE_MINPARAMLEN  /* Check for correct parameter length */
+    beq     _dbg__cont_check_breakpoint_type          /* Continue from current PC */
+
+_dbg__cont_fromAddr:
     bl      ascii2hex_varlen_be             /* convert ASCII address to Hex (in R0), R1 has address of next buffer char */
     /* Continue from Specified Address */
     mov     r2, #DBGSTACK_NEXTINSTR_INDEX   /* The Next Instruction Pointer for Resume is in index 0 of the Debug Stack */
     _setdbgregisterfromindex r2, r0, r1     /* Set Register contents in R0, using index in R2, and scratch register R1 */
+    b       _dbg__cont_is_manual_bkpt_or_address_specified
 
-_dbg__cmd_processContinue:
-/* FIXME: Currently we assume that the trigger is a Manual Breakpoint, i.e., no need to
-   restore instructions to memory, and handle auto-breakpoints (needed to reenable the memory
-   breakpoint that was triggered) */
+_dbg__cont_check_breakpoint_type:
+    _dbg_get_bkpt_type   r0
+    teq r0, #DBG_MANUAL_BKPT_ARM
+    beq _dbg__cont_is_manual_bkpt_or_address_specified
+    teq r0, #DBG_MANUAL_BKPT_THUMB
+    beq _dbg__cont_is_manual_bkpt_or_address_specified
 
-@@@@@
-#if 0
-/* Not part of the GDB Remote Protocol spec. Messages are sent only when system halts, not when we resume */
-__dbg__sendOkBeforeResume:
-    _dbg_outputMsgStatusOk
-    bl      dbg__putDebugMsg                /* Send Ok response to the GDB server */
-    cmp     r0, #0
-    beq     _dbg__switch2undefmode          /* Sending of retransmission request succeeded */
-    bl      dbg__runloopTasks               /* Service run loop tasks */
-    b       __dbg__sendOkBeforeResume       /* Retry retransmission */
-#endif
+_dbg__cont_is_normal_breakpoint:
+/* FIXME: _dbg_following_instruction_addr doesn't actually work currently.
+   This breaks normal breakpoints which need to determine the next instruction to execute
+   (for placing the autobreakpoint) prior to returning.
+*/
+    mov		r2, #DBGSTACK_USERPC_INDEX      /* Retrieve Aborted Instruction PC from the Debug Stack */
+    _getdbgregisterfromindex r2, r0         /* Retrieve Register contents into R0 */
+    mov		r2, #DBGSTACK_NEXTINSTR_INDEX   /* The Next Instruction Pointer for Resume is in index 0 of the Debug Stack */
+    _setdbgregisterfromindex r2, r0, r1     /* Set Register contents in R0, using index in R2, and scratch register R1 */
+    bl  	_dbg_following_instruction_addr /* following instruction address returned in r1 */
+    bl  	_dbg__install_singlestep        /* Setup Single Step, next instruction address returned in r1 */
+    _dbg_getcurrbkpt_index r0               /* load current breakpoint index in memory */
+    bl  	_dbg__activate_autobreakpoint   /* pass next instruction address in r1 */
+	b		_dbg__switch2undefmode_withAck
 
-_dbg__switch2undefmode:
-    msr     cpsr_c, #(MODE_UND | CPSR_FIQ | CPSR_IRQ)         /* Configure Undef Mode */
-    _dbg_setmode FALSE                  	/* Debug Mode = False */
-    ldr     lr, =resume_execution
-    mov     pc, lr                          /* Exit via UNDEF mode */
+_dbg__cont_is_manual_bkpt_or_address_specified:
+    bl      _dbg__activate_breakpoints      /* Restore exisiting breakpoints */
+    b       _dbg__switch2undefmode_withAck
+
+/* _dbg__cmd_Step
+ *      Step User Program Execution Command Handler
+ *      Setup breakpoints before resuming execution of program.
+ *
+  *      If Address is specified, update the next instruction address to specified address
+ *
+ *      If this is a Normal Breakpoint, then we need to install a Step Breakpoint at next instruction address
+ *          and resume from current (Breakpoint) exception address
+ *      Else (it is a Manual Breakpoint or Address specified)
+ *          We need to install a Step Breakpoint at the following instruction address (after the next instruction address)
+ *          and resume from the next instruction address
+ *      On entry:
+ *          r0: parameter buffer pointer (contents after '$' and '<cmdchar>')
+ *              Optional: AA..AA
+ *      On exit:
+ *          r0-r7: destroyed
+ *          Note: This routine does not return to caller. Instead it switches
+ *                operating mode to UNDEF and returns to previously active program
+ */
+_dbg__cmd_Step:
+    /* Don't put anything on the stack, we won't return to the Debugger Run Loop */
+    bl      __dbg__cmdParamLen
+    cmp     r1, #CMD_STEP_MINPARAMLEN       /* Check for correct parameter length */
+    beq     _dbg__step_check_breakpoint_type          /* Step from current PC */
+
+_dbg__step_fromAddr:
+    bl      ascii2hex_varlen_be             /* convert ASCII address to Hex (in R0), R1 has address of next buffer char */
+    /* Step from Specified Address */
+    mov     r2, #DBGSTACK_NEXTINSTR_INDEX   /* The Next Instruction Pointer for Resume is in index 0 of the Debug Stack */
+    _setdbgregisterfromindex r2, r0, r1     /* Set Register contents in R0, using index in R2, and scratch register R1 */
+    b       _dbg__step_is_manual_bkpt_or_address_specified
+
+_dbg__step_check_breakpoint_type:
+    _dbg_get_bkpt_type   r0
+    teq 	r0, #DBG_MANUAL_BKPT_ARM
+    beq 	_dbg__step_is_manual_bkpt
+    teq 	r0, #DBG_MANUAL_BKPT_THUMB
+    beq 	_dbg__step_is_manual_bkpt
+
+_dbg__step_is_normal_breakpoint:
+/* FIXME: _dbg_following_instruction_addr doesn't actually work currently.
+   This breaks normal breakpoints which need to determine the next instruction to execute
+   (for placing the autobreakpoint) prior to returning.
+*/
+    mov     r2, #DBGSTACK_USERPC_INDEX      /* Retrieve Aborted Instruction PC from the Debug Stack */
+    _getdbgregisterfromindex r2, r0         /* Retrieve Register contents into R0 */
+    mov     r2, #DBGSTACK_NEXTINSTR_INDEX   /* The Next Instruction Pointer for Resume is in index 0 of the Debug Stack */
+    _setdbgregisterfromindex r2, r0, r1     /* Set Register contents in R0, using index in R2, and scratch register R1 */
+    b       _dbg__step_is_manual_bkpt_or_address_specified
+
+_dbg__step_is_manual_bkpt:
+    mov     r2, #DBGSTACK_NEXTINSTR_INDEX   /* The Next Instruction Pointer for Resume is in index 0 of the Debug Stack */
+    _getdbgregisterfromindex r2, r0         /* Retrieve Register contents into R1 */
+    /* b       _dbg__step_is_manual_bkpt_or_address_specified */
+
+_dbg__step_is_manual_bkpt_or_address_specified:
+    bl  	_dbg_following_instruction_addr /* following instruction address returned in r1 */
+    bl  	_dbg__install_singlestep        /* Setup Single Step, next instruction address returned in r1 */
+	bl		_dbg__activate_singlestep
+    b       _dbg__switch2undefmode_withAck
 
 
 /* _dbg__proc_brkpt_params
@@ -1126,7 +1322,7 @@ _dbg__proc_brkpt_params:
     _check_msgseparator r3
     bne     _dbg__proc_brkpt_params_error   /* Something wrong with the parameters */
     mov     r0, r3                          /* Check Address */
-    bl      ascii2word_be                      /* R0: value, R1: pointer to next char slot */
+    bl      ascii2hex_varlen_be             /* convert ASCII address to Hex (in R0), R1 has address of next buffer char */
     mov     r3, r0                          /* Keep breakpoint address in R3 */
     _check_msgseparator r1
     bne     _dbg__proc_brkpt_params_error   /* Something wrong with the parameters */
@@ -1144,7 +1340,7 @@ _exit_dbg__proc_brkpt_params:
     mov     r0, r3                          /* return breakpoint address */
     ldmfd   sp!, {pc}
 
-/* _dbg__cmd_insert_breakpoint
+/* _dbg__cmd_InsertBreakpoint
  *		Add Breakpoint
  *      On entry:
  *          r0: parameter buffer pointer (contents after '$' and '<cmdchar>')
@@ -1152,11 +1348,11 @@ _exit_dbg__proc_brkpt_params:
  *      On exit:
  *          r0, r1, r2, r3: destroyed
  */
-_dbg__cmd_insert_breakpoint:
+_dbg__cmd_InsertBreakpoint:
     stmfd   sp!, {lr}
     bl      __dbg__cmdParamLen
-    teq     r1, #CMD_BKPT_INSERT_PARAMLEN   /* Check for correct length */
-    bne     __dbg__procCmdParamError        /* Unexpected input, report error */
+    teq     r1, #CMD_BKPT_INSERT_MINPARAMLEN   /* Check for correct length */
+    blo     __dbg__procCmdParamError        /* Unexpected input, report error */
     bl      _dbg__proc_brkpt_params         /* R0: Breakpoint Address */
     teq     r0, #0
     beq     __dbg__procBreakpointAddrError  /* Thumb2 instructions, or unknown kind */
@@ -1169,7 +1365,7 @@ _dbg__cmd_insert_breakpoint:
 	bl     _dbg__install_one_breakpoint		/*	r0: index, r1: instruction address */
     b       __dbg__procCmdOk
 
-/* _dbg__cmd_remove_breakpoint
+/* _dbg__cmd_RemoveBreakpoint
  *		Remove Breakpoint
  *		On entry:
  *          r0: parameter buffer pointer (contents after '$' and '<cmdchar>')
@@ -1177,11 +1373,11 @@ _dbg__cmd_insert_breakpoint:
  *      On exit:
  *          r0, r1, r2, r3: destroyed
  */
-_dbg__cmd_remove_breakpoint:
+_dbg__cmd_RemoveBreakpoint:
     stmfd   sp!, {lr}
     bl      __dbg__cmdParamLen
-    teq     r1, #CMD_BKPT_REMOVE_PARAMLEN  /* Check for correct length */
-    bne     __dbg__procCmdParamError       /* Unexpected input, report error */
+    teq     r1, #CMD_BKPT_REMOVE_MINPARAMLEN  /* Check for correct length */
+    blo     __dbg__procCmdParamError       /* Unexpected input, report error */
     bl      _dbg__proc_brkpt_params        /* R0: Breakpoint Address */
     teq     r0, #0
     beq     __dbg__procBreakpointAddrError /* Thumb2 instructions, or unknown kind */
@@ -1194,46 +1390,7 @@ _dbg__cmd_remove_breakpoint:
     b       __dbg__procCmdOk
 
 
-/* _dbg__cmd_run
- *		Continue execution of program
- */
-_dbg__cmd_run:
-	bl	_dbg__activate_breakpoints
-	b	__dbg__resume_execution
 
-/* _dbg__cmd_step
- *		Single Step execution of program
- */
-_dbg__cmd_step:
-	bl	_dbg_next_instruction_addr					/* next instruction address returned in r1 */
-	bl	_dbg__install_singlestep					/* Setup Single Step */
-	bl	_dbg__activate_singlestep
-	b	__dbg__resume_execution
-
-/* _dbg__cmd_cont
- *		Continue execution of program.
- *		If this is a Normal Breakpoint, then we need to install an Autobreakpoint at next instruction address
- *			and resume from current (Breakpoint) exception address
- *		Else (it is a Manual Breakpoint)
- *			We need to resume from the next instruction address
- */
-_dbg__cmd_cont:
-/* FIXME: What happens if we call this when we did not stop at a Breakpoint previously? */
-	_dbg_getstate	r0
-	ldr	r1, =DBG_MANUAL_BKPT_ARM
-	teq	r0, r1
-	beq	__dbg_is_manual_breakpoint
-
-	bl	_dbg_next_instruction_addr					/* next instruction address returned in r1 */
-	bl	_dbg__install_singlestep					/* Setup Single Step, next instruction address returned in r1 */
-	_dbg_getcurrbkpt_index r0							/* load current breakpoint index in memory */
-	bl	_dbg__activate_autobreakpoint				/* pass next instruction address in r1 */
-	b	__dbg__resume_execution
-
-__dbg_is_manual_breakpoint:
-	bl	_dbg_next_instruction_addr					/* Skip Manual Breakpoint Instruction(s) */
-	bl	_dbg__activate_breakpoints
-	b	__dbg__resume_execution
 
 /****************************************************************************
 // Selected Routines from the eCos arm_stub.c related to next instruction address
@@ -1693,11 +1850,14 @@ void __single_step (void)
 
  ****************************************************************************/
 
-
-/* _dbg_next_instruction_addr
- *		Determine the address of the next instruction to execute.
+/* _dbg_following_instruction_addr
+ *		Determine the address of the following instruction to execute.
+ *      On entry:
+ *          R0: Address of the instruction to be (re)executed
  *		On exit:
- *			R1: Instruction Address (31 bits, b0 = THUMB flag)
+ *          R0: Destroyed
+ *			R1: Following Instruction Address (31 bits, b0 = THUMB flag)
+ *          R2-R7: Destroyed
  *
  *	Here we make use of the Debugger Stack which contains the address of the aborted instruction that will be reexecuted
  *	when we resume the program.
@@ -1710,55 +1870,144 @@ void __single_step (void)
  *	We need to check the aborted instruction type, to see if it is a branch instruction, before we can determine
  *	the next instruction address (for inserting a Breakpoint).
  */
-_dbg_next_instruction_addr:
+_dbg_following_instruction_addr:
+    stmfd   sp!, {lr}
 /* We assume that any BKPT instructions in the code will be Manual Breakpoints,
  * i.e., the Debugger does not leave stray Single Step / Auto / Normal breakpoints in memory
  */
+    mov     r6, r0                                      /* Keep instruction address in R6 */
+    mov     r2, #DBGSTACK_USERCPSR_INDEX                /* Retrieve User CPSR */
+    _getdbgregisterfromindex r2, r1                     /* Retrieve Register contents into R1 */
+    and     r4, r1, #CPSR_THUMB                         /* store Thumb Mode status in R4 */
+    mov     r5, r1, lsr #28                             /* store CPSR condition flags in R5[3:0] */
 
-	mov		r2, #DBGSTACK_USERCPSR_INDEX				/* Retrieve User CPSR */
-	_getdbgregisterfromindex r2, r0						/* Retrieve Register contents into R0 */
- 	and		r4, r0, #CPSR_THUMB							/* store Thumb Mode status in R4 */
- 	mov		r5, r0, lsr #28								/* store CPSR condition flags in R5[3:0] */
+_dbg_get_aborted_instr:
+1:  teq     r4, #0                                      /* Check if it is ARM or Thumb instruction */
+    ldrneh  r0, [r6]                                    /* Load Thumb instruction opcode using Addr in R6 into R0 */
+    ldrne   r2, =(BKPT16_INSTR | BKPT16_MANUAL_BKPT)    /* check for Thumb Manual Breakpoint Instruction */
+    ldreq   r0, [r6]                                    /* Load ARM instruction opcode using Addr in R6 into R0 */
+    ldreq   r2, =(BKPT32_INSTR | BKPT32_MANUAL_BKPT)    /* check for ARM Manual Breakpoint Instruction */
+    teq     r0, r2                                      /* Is instruction opcode (R0) == Manual Breakpoint opcode (R2)? */
+    bne     2f                                          /* Not Manual breakpoint */
+    teq     r4, #0                                      /* Check if it is ARM or Thumb Manual Breakpoint */
+    addne   r6, r6, #2                                  /* Is Manual Breakpoint, Skip to next Thumb instruction */
+    addeq   r6, r6, #4                                  /* Is Manual Breakpoint, Skip to next ARM instruction */
+    b       1b                                          /* To protect against a sequence of Manual Breakpoint Instructions */
 
-	_dbg_getabortedinstr_addr	r2						/* Retrieve aborted instruction address */
-1:	teq		r4, #0										/* Check if it is ARM or Thumb instruction */
-	ldrneh	r0, [r2]
-	ldrne	r1, =(BKPT16_INSTR | BKPT16_MANUAL_BKPT)	/* check for Thumb Manual Breakpoint Instruction */
-	ldreq	r0, [r2]
-	ldreq	r1, =(BKPT32_INSTR | BKPT32_MANUAL_BKPT)	/* check for ARM Manual Breakpoint Instruction */
-	teq		r0, r1
-	bne		2f											/* Not Manual breakpoint */
-	teq		r4, #0										/* Check if it is ARM or Thumb instruction */
-	addne	r2, r2, #2									/* Is Manual Breakpoint, Skip to next Thumb instruction */
-	addeq	r2, r2, #4									/* Is Manual Breakpoint, Skip to next ARM instruction */
-	_dbg_setabortedinstr_addr	r2						/* Update aborted instruction address */
-	b		1b											/* To protect against a sequence of Manual Breakpoint Instructions */
-
-/* Here, r0 contains the instruction which will be reexecuted when program resumes. We need to dissect it to see if
- * it is a branch instruction.
+/* Here, R0 contains the instruction opcode which will be (re)executed when program resumes.
+ * We need to dissect it to see if it is a branch instruction.
  * For ARM instructions, we also need to evaluate the current (breakpointed) instruction to see if it'll execute.
- * If not, then the next instruction is the instruction following the current instruction.
+ * If not, then the following instruction is at the address following the address of the opcode in R0 (Default Following Instruction Address).
  */
 2:
-	/* Use R6 to store candidate next instruction address */
-	teq		r4, #0										/* Check if it is ARM or Thumb instruction */
-	beq		_next_instr_is_arm
-_next_instr_is_thumb:
-	add		r6, r2, #2									/* set next Thumb instruction address */
-	/*_is_thumb_branch_instr	r0		*/					/* check if the current instruction is a branch instruction */
-_next_instr_is_arm:
-	add		r6, r2, #4									/* Is ARM, set next ARM instruction address */
-@@@@@@@@@
-	bx	lr
+    teq     r4, #0                                      /* Check if it is ARM or Thumb instruction */
+    beq     _following_instr_is_arm
+_following_instr_is_thumb:
+    add     r6, r6, #2                                  /* Store following Thumb instruction address to R1 */
+    orr     r6, r6, #BKPT_STATE_THUMB_FLAG              /* Set b0 to indicate Thumb instruction */
+    /* R0: Candidate Instruction Opcode
+     * R5[3:0]: CPSR condition codes
+     * R6: Default Following Instruction Address (PC+2)
+     */
+    bl      _eval_thumb_instruction						/* following address is either ARM or Thumb */
+    /* We must set this the Thumb bit only within the instruction handler since BX would switch modes */
+    b       _exit_dbg_following_instruction_addr
 
-/* __dbg__resume_execution
- *		cleanup, resume execution of program.
- *		Restore User Mode Regsiters from Debugger Stack, and resume execution from aborted instruction
+_following_instr_is_arm:
+    add     r6, r6, #4                                  /* Store following ARM instruction address to R1 */
+    /* R0: Candidate Instruction Opcode
+     * R5[3:0]: CPSR condition codes
+     * R6: Default Following Instruction Address (PC+4)
+     */
+    bl      _eval_arm_instruction
+
+_exit_dbg_following_instruction_addr:
+    mov     r1, r0                                      /* Return Actual Following Instruction Address in R1 (B0 set to indicate Thumb mode) */
+    ldmfd   sp!, {pc}
+
+
+/* _eval_arm_instruction
+ *      Evaluate ARM instruction to determine following instruction address
+ *      On entry:
+ *          R0: instruction to be executed
+ *          R5[3:0]: CPSR condition codes
+ *          R6: Default Following Instruction Address (PC+4)
+ *      On exit:
+ *          R0: following instruction address (B0 set to indicate Thumb mode)
+ *          R1-R7: destroyed
  */
-__dbg__resume_execution:
-@@@@@@
-	bl	_dbg__flush_icache
-	b __dbg__resume_execution
+_eval_arm_instruction:
+    stmfd   sp!, {lr}
+    mov     r4, r0                      /* Keep Instruction Opcode in R4 */
+    bl      _dbg_check_arm_condcode
+    teq     r0, #FALSE
+    moveq   r0, r6                      /* False (don't execute), so use Default Following Instruction Address */
+    bne     _exit_eval_arm_instruction
+
+_will_execute_arm_instr:
+    mov     r0, r4                      /* Copy instruction opcode to R0 as Code Handler parameter */
+    mov     r1, #0                      /* initialize ARM Decode Entry Table index register */
+1:
+    _dbg_armDecodeEntry r2, r3, r4, r1  /* instrreg (R2), instrmask (R3), codehandler (R4), indexreg (R1) */
+    teq     r2, #0                      /* Check for Null Entry (End of Table marker) */
+    moveq   r0, r6                      /* End of Table, no match found, so use Default Following Instruction Address */
+    beq     _exit_eval_arm_instruction
+    and     r7, r0, r3                  /* Use R7 to check masked instruction opcode (from R0) to see if it matches template (in R2) */
+    teq     r7, r2
+    addne   r1, r1, #1                  /* No match, so keep looking */
+    bne     1b
+
+_call_arm_code_handler:
+    mov     r1, r6                      /* Copy Default Following Instruction Address to R1 as Code Handler Parameter */
+    mov     lr, pc
+    bx      r4                          /* Call Code Handler with R0: Instruction Opcode, R1: Default Following Instruction Address */
+_exit_eval_arm_instruction:
+    /* Returned Following Address Instruction in R0 (B0 set to indicate Thumb mode)  */
+    ldmfd   sp!, {pc}
+
+/* _eval_thumb_instruction
+ *      Evaluate Thumb instruction to determine following instruction address
+ *      On entry:
+ *          R0: instruction to be executed
+ *          R5[3:0]: CPSR condition codes
+ *          R6: Default Following Instruction Address (PC+2)
+ *      On exit:
+ *          R0: following instruction address (B0 set to indicate Thumb mode)
+ *          R1-R7: destroyed
+ */
+_eval_thumb_instruction:
+    stmfd   sp!, {lr}
+#if 0
+    mov     r4, r0                      /* Keep Instruction Opcode in R4 */
+	/* Only B<cond> instructions are conditionally executed, deal with it in that Code Handler */
+    bl      _dbg_check_thumb_condcode
+    teq     r0, #FALSE
+    moveq   r0, r6                      /* False (don't execute), so use Default Following Instruction Address */
+    bne     _exit_eval_thumb_instruction
+
+_will_execute_thumb_instr:
+    mov     r0, r4                      /* Copy instruction opcode to R0 as Code Handler parameter */
+#endif
+    mov     r1, #0                      /* initialize Thumb Decode Entry Table index register */
+1:
+    _dbg_thumbDecodeEntry r2, r3, r4, r1  /* instrreg (R2), instrmask (R3), codehandler (R4), indexreg (R1) */
+    teq     r2, #0                      /* Check for Null Entry (End of Table marker) */
+    moveq   r0, r6                      /* End of Table, no match found, so use Default Following Instruction Address */
+    beq     _exit_eval_thumb_instruction
+
+    and     r7, r0, r3                  /* Use R5 to check masked instruction opcode (from R0) to see if it matches template (in R2) */
+    teq     r7, r2
+    addne   r1, r1, #1                  /* No match, so keep looking */
+    bne     1b
+
+_call_thumb_code_handler:
+    mov     r1, r6                      /* Copy Default Following Instruction Address to R1 as Code Handler Parameter */
+    mov     lr, pc
+    bx      r4                          /* Call Code Handler with R0: Instruction Opcode, R1: Default Following Instruction Address */
+_exit_eval_thumb_instruction:
+    /* Returned Following Address Instruction in R0 */
+    ldmfd   sp!, {pc}
+
 
 /****************************************************************************
  *
@@ -1773,6 +2022,7 @@ __dbg__resume_execution:
  *			R5[3:0]: CPSR condition codes
  *		On exit:
  *			R0: will_execute (boolean)
+ *          R1-R3: Destroyed
  */
 
 _dbg_check_arm_condcode:
@@ -1872,20 +2122,552 @@ _dbg_check_arm_condcode_exit:
 	ldmfd	sp!, {r6, pc}
 
 
-_arm_data_instr_handler:	/* Data Processing instr with Rd = R15 */
-_arm_bx_blx_handler:		/* BX or BLX */
-_arm_ldr_pc_handler:		/* LDR with Rd = PC */
-_arm_ldm_pc_handler:		/* LDM {pc} */
-_arm_b_bl_handler:		/* B or BL. Note v4t does not have BLX instr */
-_arm_coproc_swi_handler:	/* Coprocessor instr or SWI */
+/* _arm_rmshifted_val
+ *      Calculate value of Shifted Rm (operand)
+ *      On entry:
+ *          R0[11:0]: Shifted Rm operand
+ *      On exit:
+ *          R0: value of Shifted Rm
+ *          R1, R2, R3: destroyed
+ */
+_arm_rmshifted_val:
+    stmfd   sp!, {lr}
+    ldr     r3, =(NIBBLE2|BYTE0)
+    and     r3, r0, r3                      /* 12 bit Shifted Register operand, copied to R3 */
+    and     r2, r3, #NIBBLE0                /* Register Rn Enum in R2 */
+    _regenum2index  r2, r2                  /* Convert Enum into Index in R2 */
+    _getdbgregisterfromindex r2, r0         /* Retrieve Register Rn contents from Index (R2) into R0 */
+
+    tst     r3, #0x10                       /* B4: Immediate (0) or Register (1) shift count */
+    /* check bitshift op */
+    and     r3, r3, #0x60                   /* shift type */
+    mov     r3, r3, lsr #5                  /* convert into shift type jumptable index */
+    bne     _arm_get_reg_shift              /* Flags set previously via TST r3 (B4) */
+_arm_calc_const_shift:
+    movs    r1, r3, lsr #7                  /* Immediate shift count, 5 bit unsigned value in R1 */
+    bne     _arm_calc_shifted_rm_val        /* Non-zero shift count, process normally */
+    /* Must check for RRX == ROR #0 */
+    teq     r3, #0x3                        /* ROR == 0x3 */
+    addeq   r3, r3, #1
+    b       _arm_calc_shifted_rm_val
+
+_arm_get_reg_shift:
+    mov     r2, r3, lsr #8                  /* Register-based shift count, 4 bit register enum in R2 */
+    _regenum2index  r2, r2                  /* Convert Enum into Index in R2 */
+    _getdbgregisterfromindex r2, r1         /* Retrieve Register value (shift count) from Index (R2) into R1 */
+
+_arm_calc_shifted_rm_val:
+    _dbg_jumpTableHandler   debug_regShiftJumpTable, r2, r3     /* Calculate RmShifted value from R0: Rn Register val, R1: Shift/Rotate val */
+    ldmfd   sp!, {pc}
+
+/* Rm Shifted Shift Type Jump Table Routines
+ * On entry:
+ *      R0: Register Rm
+ *      R1: Shift/Rotate Amount
+ * On exit:
+ *      R0: RmShifted result
+ *      R1, R2: destroyed
+ *
+ */
+_reg_lsl:
+    lsl     r0, r0, r1
+    bx      lr
+
+_reg_lsr:
+    lsr     r0, r0, r1
+    bx      lr
+
+_reg_asr:
+    asr     r0, r0, r1
+    bx      lr
+
+_reg_ror:
+    ror     r0, r0, r1
+    bx      lr
+
+_reg_rrx:
+    moveq   r2, #DBGSTACK_USERCPSR_INDEX    /* convert register enum to Debug Stack index */
+    _getdbgregisterfromindex r2, r1         /* Retrieve CPSR contents from Index (R2) into R1 */
+    ands    r1, r1, #CPSR_CFLAG            /* Keep C Flag */
+    movne   r1, #0x80000000                 /* Set B31 if C Flag set */
+    lsr     r0, r0, #1                      /* Rm >> 1 */
+    orr     r0, r0, r1                      /* Put C flag into B31 */
+    bx      lr
+
+
+/* _arm_data_instr_handler
+ *      ARM Data Processing Instruction with Rd == R15
+ *      On entry:
+ *          R0: instruction to be executed
+ *          R1: Default Following Instruction Address (PC+4)
+ *          R5[3:0]: CPSR condition codes
+ *      On exit:
+ *          R0: following instruction address
+ *          R1, R2, R3, R4, R5, R6: Destroyed
+ */
+_arm_data_instr_handler:
+    stmfd   sp!, {lr}
+    mov     r6, r1                          /* save Following Instruction Address in R6 */
+    ldr     r1, =0x0FBF0000
+    and     r4, r0, r1                      /* Keep instruction Opcode in R4 */
+    ldr     r1, =0x010F0000
+    cmp     r4, r1                          /* Check for MSR / MRS instruction */
+
+_arm_is_msr_mrs_instr:
+    moveq   r0, r6                          /* Copy default next instruciton address to R0 */
+    beq     _exit_arm_data_instr_handler    /* Return default next instruction address */
+
+    /* Not MSR / MRS, so process normally */
+_arm_normal_data_instr:
+    and     r4, r0, #0x01E00000             /* Mask Instruction Opcode into R4 */
+    and     r5, r0, #0x000F0000             /* Store Rn (Operand 1) Register Enum into R5[19:16] */
+    lsr     r5, r5, #16                     /* Shift into R5[3:0] */
+
+_arm_check_operand2_type:
+    tst     r0, #0x02000000                 /* Check for Immediate (1) or Register (0) Operand 2 */
+    beq     _arm_op2_is_reg
+
+_arm_op2_is_imm:
+    and     r1, r0, #BYTE0                  /* 8 bit unsigned constant in R1 */
+    and     r2, r0, #NIBBLE2                /* (rotate count / 2) in R2[11:8] */
+    lsr     r2, r2, #7                      /* actual rotate count in R2[4:0] */
+    ror     r1, r1, r2                      /* Rotated constant in R1 */
+    b       _arm_get_operand1_val
+
+_arm_op2_is_reg:
+    ldr     r1, =(NIBBLE2|BYTE0)
+    and     r0, r0, r1                      /* 12 bit register operand in R1 */
+    bl      _arm_rmshifted_val              /* R0 contains the Rm shifted val */
+    mov     r1, r0                          /* move to R1 for later processing */
+
+_arm_get_operand1_val:
+    _regenum2index  r5, r1                  /* Convert Enum into Index in R1 */
+    _getdbgregisterfromindex r1, r0         /* Retrieve Register contents from Index (R1) into R4 */
+    teq     r5, #REG_PC                     /* Check if it is PC relative */
+    addeq   r0, r0, #8                      /* adjust for PC relative (+8) */
+
+_arm_calc_data_instr_val:
+    mov     r2, r6                          /* Retrieve Following Instruction Address in R6 to R2 */
+    /* Calculate data instruction value from R0: Rn Register (Op1) val, R1: Operand 2 val, R2: Default Next Instr Addr */
+    _dbg_jumpTableHandler   debug_dataInstrJumpTable, r3, r4    /* Next Instruction Address in R0 */
+_exit_arm_data_instr_handler:
+    ldmfd   sp!, {pc}
+
+
+/* Data Processing Instruction Jump Table Routines
+ * On entry:
+ *      R0: Register Rn (Operand 1) value
+ *      R1: Operand 2 value
+ *      R2: Default Next Instruction Address (PC+4)
+ * On exit:
+ *      R0: Calculated result
+ *      R1, R2, R3: Destroyed
+ *
+ */
+_opcode_and:
+    and r0, r0, r1
+    bx  lr
+
+_opcode_eor:
+    eor r0, r0, r1
+    bx  lr
+
+_opcode_sub:
+    sub r0, r0, r1
+    bx  lr
+
+_opcode_rsb:
+    rsb r0, r0, r1
+    bx  lr
+
+_opcode_add:
+    add r0, r0, r1
+    bx  lr
+
+_opcode_adc:
+    /* Op1 + Op2 + C */
+    moveq   r2, #DBGSTACK_USERCPSR_INDEX    /* convert register enum to Debug Stack index */
+    _getdbgregisterfromindex r2, r3         /* Retrieve CPSR contents from Index (R2) into R3 */
+    ands    r3, r3, #CPSR_CFLAG             /* Keep C Flag, NE if C set */
+    add     r0, r0, r1
+    addne   r0, r0, #1                      /* Add C if set */
+    bx      lr
+
+_opcode_sbc:
+    /* Op1 - Op2 + C - 1 */
+    moveq   r2, #DBGSTACK_USERCPSR_INDEX    /* convert register enum to Debug Stack index */
+    _getdbgregisterfromindex r2, r3         /* Retrieve CPSR contents from Index (R2) into R3 */
+    ands    r3, r3, #CPSR_CFLAG             /* Keep C Flag, NE if C set */
+    sub     r0, r0, r1
+    subeq   r0, r0, #1                      /* If C clear, subtract 1, else (C - 1) = 0 */
+    bx      lr
+
+_opcode_rsc:
+    /* Op2 - Op1 + C - 1 */
+    moveq   r2, #DBGSTACK_USERCPSR_INDEX    /* convert register enum to Debug Stack index */
+    _getdbgregisterfromindex r2, r3         /* Retrieve CPSR contents from Index (R2) into R3 */
+    ands    r3, r3, #CPSR_CFLAG             /* Keep C Flag, NE if C set */
+    rsb     r0, r0, r1
+    subeq   r0, r0, #1                      /* If C clear, subtract 1, else (C - 1) = 0 */
+    bx  lr
+
+_opcode_tst:
+_opcode_teq:
+_opcode_cmp:
+_opcode_cmn:
+    mov r0, r2          /* Next Instruction Address is not modified */
+    bx  lr
+
+_opcode_orr:
+    orr r0, r0, r1
+    bx  lr
+
+_opcode_mov:
+    mov r0, r1          /* Operand 1 is ignored */
+    bx  lr
+
+_opcode_bic:
+    bic r0, r0, r1
+    bx  lr
+
+_opcode_mvn:
+    mvn r0, r1          /* Operand 1 is ignored */
+    bx  lr
+
+
+/* _arm_bx_blx_handler
+ *      BX or BLX Rm Handler. Note v4t does not have BLX instr
+ *      On entry:
+ *          R0: instruction to be executed
+ *          R1: Default Following Instruction Address (PC+4)
+ *          R5[3:0]: CPSR condition codes
+ *      On exit:
+ *          R0: following instruction address (B0 set to indicate Thumb mode)
+ *          R1, R2: destroyed
+ */
+_arm_bx_blx_handler:
+    stmfd   sp!, {lr}
+    and     r0, r0, #NIBBLE0                /* Register Rn Enum in R0 */
+    _regenum2index  r0, r1                  /* Convert Enum into Index in R1 */
+    _getdbgregisterfromindex r1, r0         /* Retrieve Register contents from Index (R1) into R0 */
+	/* Here, the register value would have B0 set to indicate switch to Thumb mode  */
+#if 0
+    bic     r0, #0x01                       /* Clear R0[0] since it is used to indicates Thumb mode */
+#endif
+    ldmfd   sp!, {pc}
+
+/* _arm_ldr_pc_handler
+ *      LDR with Rd = PC
+ *      On entry:
+ *          R0: instruction to be executed
+ *          R1: Default Following Instruction Address (PC+4)
+ *          R5[3:0]: CPSR condition codes
+ *      On exit:
+ *          R0: following instruction address
+ *          R1, R2, R3, R4, R5: destroyed
+ */
+
+_arm_ldr_pc_handler:
+    stmfd   sp!, {lr}
+    mov     r5, r0                          /* Keep a copy of the instruction in R5 */
+    and     r0, r0, #NIBBLE4                /* Register Rn Enum in R0[19:16] */
+    lsr     r0, r0, #16                     /* Move Rn Enum to R0[3:0] */
+    _regenum2index  r0, r1                  /* Convert Enum into Index in R1 */
+    _getdbgregisterfromindex r1, r4         /* Retrieve Register contents from Index (R1) into R4 */
+    teq     r0, #REG_PC                     /* Check if it is PC relative */
+    addeq   r4, r4, #8                      /* adjust for PC relative (+8) */
+    tst     r5, #0x01000000                 /* Pre (1) or Post (0) Indexed */
+    beq     _exit_arm_ldr_pc_handler        /* If Post-Indexed, just return value of Rn */
+    /* Pre-Indexed */
+    ldr     r0, =(NIBBLE2|BYTE0)
+    and     r0, r5, r0                      /* 12 bit Immediate value or Shifted Reg operand */
+    tst     r5, #0x02000000                 /* Immediate (0) or Register (1) */
+    beq     _calc_ldr_pc_offset             /* Immediate value is already in R0 */
+
+_get_shiftedreg_val:
+    bl      _arm_rmshifted_val              /* Convert Rm shifted operand into value in R0 */
+
+_calc_ldr_pc_offset:
+    tst     r5, #0x00800000                 /* Add (1) or Subtract (0) */
+    addne   r4, r4, r0                      /* If Add, R2 = Rn + value */
+    subeq   r4, r4, r0                      /* If Sub, R2 = Rn - value */
+
+_exit_arm_ldr_pc_handler:
+    mov     r0, r4                          /* Return next instruction address in R0 */
+    ldmfd   sp!, {pc}
+
+
+/* _arm_ldm_pc_handler
+ *      LDM {pc}
+ *      On entry:
+ *          R0: instruction to be executed
+ *          R1: Default Following Instruction Address (PC+4)
+ *          R5[3:0]: CPSR condition codes
+ *      On exit:
+ *          R0: following instruction address
+ *          R1, R2, R3: destroyed
+ *
+ *      FIXME: The algorithm from eCos arm_stub.c does not deal with the Pre/Post-Indexed addressing (P) bit.
+ */
+_arm_ldm_pc_handler:
+    stmfd   sp!, {lr}
+    and     r3, r0, #0x000F0000             /* Store Rn (Operand 1) Register Enum into R3[19:16] */
+    lsr     r3, r3, #16                     /* Shift into R3[3:0] */
+
+_arm_get_Rn_val:
+    _regenum2index  r3, r2                  /* Convert Enum into Index in R2 */
+    _getdbgregisterfromindex r2, r1         /* Retrieve Register contents from Index (R2) into R1 */
+    teq     r3, #REG_PC                     /* Check if it is PC relative */
+    addeq   r1, r1, #8                      /* adjust Rn (R1) for PC relative (+8) */
+
+_arm_get_regcount:
+    mov     r2, #0                          /* Initialize reg_count (R2) to 0 */
+    mov     r3, r0, lsl #16					/* Keep HLFWORD0 containing vector bits in R3[31:16] */
+	/* This shortens the checking to a max of 16 iterations, since the PC bit should be set */
+1:  movs    r3, r3, lsl #1                  /* count number of '1' bits */
+    addcs   r2, r2, #1                      /* increment reg_count (R2) if C Flag set */
+    bne     1b                              /* continue until vector is empty */
+
+_arm_check_updown_offset:
+    tst     r0, #0x00800000                 /* Check Up (1) or Down (0) */
+    addne   r1, r1, r2, lsl #2              /* Ascending: Rn (R1) += reg_count (R2) x 4 */
+    subeq   r1, r1, #4                      /* Descending: Rn (R1) -= 4 */
+    ldr     r0, [r1]                        /* Retrieve stack content for new PC value */
+    ldmfd   sp!, {pc}
+
+
+
+/* _arm_b_bl_blx_handler
+ *      B, BL or BLX <offset>. Note v4t does not have BLX instr
+ *      On entry:
+ *          R0: instruction to be executed
+ *          R1: Default Following Instruction Address (PC+4)
+ *          R5[3:0]: CPSR condition codes
+ *      On exit:
+ *          R0: following instruction address
+ *          R1, R2, R3: destroyed
+ */
+
+_arm_b_bl_blx_handler:
+    stmfd   sp!, {lr}
+#ifndef __ARM6OR7__
+	/* armv5t or later, has BLX support */
+	mov		r3, r0							/* Copy instruction to R3 */
+#endif
+
+_arm_b_bl_blx_get_offset:
+    and     r0, r0, #(BYTE2|BYTE1|BYTE0)    /* Encoded Branch offset in R0[23:0] */
+    lsl		r0, r0, #(32-24)				/* Shift to R0[31:8] */
+    asr		r0, r0, #(32-25)				/* Actual Signed offset = Encode Offset x 2 in R0[25:0] */
+	add		r1, r1, #4						/* R1: (PC+4) + 4 */
+    add     r0, r0, r1                      /* Calculate Branch Target Address R0: (PC+8) + signed offset */
+
+#ifndef __ARM6OR7__
+	/* armv5t or later, has BLX support */
+	and		r2, r3, #0xFE000000				/* Mask out Condition Code and Opcode */
+	teq		r2, #0xFA000000					/* Look for BLX */
+	bne		_exit_arm_b_bl_blx_handler		/* No, it is a B/BL instruction */
+	tst		r3, #0x01000000					/* H bit for Thumb Halfword Address */
+	orrne	r0, r0, #0x02					/* Set Halfword Address R0[1] */
+    orr   	r0, r0, #0x01           		/* Set R0[0] since it is used to indicates Thumb mode */
+#endif
+
+_exit_arm_b_bl_blx_handler:
+    ldmfd   sp!, {pc}
+
+/* _arm_coproc_swi_handler
+ *      SVC (SWI) or Coprocessor instruction
+ *      On entry:
+ *          R0: instruction to be executed
+ *          R1: Default Following Instruction Address (PC+4)
+ *          R5[3:0]: CPSR condition codes
+ *      On exit:
+ *          R0: following instruction address
+ *          R1, R2: destroyed
+ */
+
+_arm_coproc_swi_handler:
+    and     r2, r0, #0x0F000000
+    teq     r2, #0x0F000000                 /* SVC (SWI) instruction */
+
+_arm_swi_instr:
+    ldreq   r0, =SVC_VECTOR                 /* Return SVC Vector Address */
+    beq     _exit_arm_coproc_swi_handler
+
+_arm_coproc_instr:
+    mov     r0, r1                          /* Use default Following Instruction Address */
+_exit_arm_coproc_swi_handler:
+	bx	    lr
+
+
+/* _thumb_bx_blx_handler
+ *      BX or BLX Handler. Note: b7 (H1) is not matched in the mask (should be 0); armv4t does not support BLX.
+ *      On entry:
+ *          R0: instruction to be executed
+ *          R1: Default Following Instruction Address (PC+2)
+ *          R5[3:0]: CPSR condition codes
+ *      On exit:
+ *          R0: following instruction address (B0 set to indicate Thumb mode)
+ *          R1: destroyed
+ */
+_thumb_bx_blx_handler:
+    stmfd   sp!, {lr}
+    and     r0, r0, #0x78                	/* Register Rn Enum in R0[6:3] (Hi-Reg indicated by B6) */
+    mov		r0, r0, lsr #3					/* Shift Rn Enum to R0[3:0] */
+    _regenum2index  r0, r1                  /* Convert Enum into Index in R1 */
+    _getdbgregisterfromindex r1, r0         /* Retrieve Register contents from Index (R1) into R0 */
+	/* Here, the register value would have R0[0] set to indicate switch to Thumb mode  */
+    ldmfd   sp!, {pc}
+
+/* _thumb_poppc_handler
+ *     PUSH/POP, specifically POP {Rlist,PC}
+ *      On entry:
+ *          R0: instruction to be executed
+ *          R1: Default Following Instruction Address (PC+2)
+ *          R5[3:0]: CPSR condition codes
+ *      On exit:
+ *          R0: following instruction address (B0 set to indicate Thumb mode)
+ *          R1: destroyed
+ */
+_thumb_poppc_handler:
+    stmfd   sp!, {lr}
+
+_thumb_get_SP_val:
+	mov		r2, #DBGSTACK_USERSP_INDEX		/* Set Register Index (R2) to SP Index */
+    _getdbgregisterfromindex r2, r1         /* Retrieve SP contents from Index (R2) into R1 */
+
+_thumb_get_regcount:
+    mov     r2, #0                          /* Initialize reg_count (R2) to 0 */
+    mov     r3, r0, lsl #24					/* Keep BYTE0 containing vector bits in R3[31:24] */
+	/* This shortens the checking to a max of 8 iterations */
+1:  movs    r3, r3, lsl #1                  /* count number of '1' bits */
+    addcs   r2, r2, #1                      /* increment reg_count (R2) if C Flag set */
+	add		r1, r1, #4						/* Walk the stack to locate the PUSHed LR (POP PC) value */
+    bne     1b                              /* continue until vector is empty */
+	ldr		r0, [r1]						/* Retrieve new PC value */
+#if 0
+	/* PC Value should have B0 set */
+    orr     r0, r0, #0x01           		/* Force R0[0] since it is used to indicates Thumb mode */
+#endif
+    ldmfd   sp!, {pc}
+
+
+/* _thumb_bcond_swi_handler
+ *      B<cond> or SWI (SVC)
+ *      On entry:
+ *          R0: instruction to be executed
+ *          R1: Default Following Instruction Address (PC+2)
+ * 			R5[3:0]: CPSR condition codes
+ *      On exit:
+ *          R0: following instruction address (B0 set to indicate Thumb mode)
+ *          R1-R6: destroyed
+ */
+_thumb_bcond_swi_handler:
+	mov		r4, r0					        /* Keep instruction in R4 */
+    and     r2, r0, #0x0F00					/* Keep Condition Code R2[11:8] */
+    teq     r2, #0x0F00 	                /* SVC (SWI) instruction */
+_thumb_swi_instr:
+    ldreq   r0, =SVC_VECTOR                 /* Return SVC Vector Address */
+    beq     _exit_thumb_bcond_swi_handler	/* Switch to ARM mode for SVC */
+_thum_bcond_unused_instr:
+    teq		r2, #0x0E00
+    moveq   r0, r6                          /* False (don't execute), so use Default Following Instruction Address */
+    beq     _exit_thumb_bcond_instr
+
+_thumb_bcond_instr:
+	mov     r6, r1                          /* Store Default Following Instruction Address in R6 */
+	lsl		r0, r2, #(32-12)		        /* Shift condition code in R2[11:8] to R0[31:28] to match ARM cond-code format */
+	bl		_dbg_check_arm_condcode	        /* Use ARM condition code checking routine to test (R4, R6 unchanged) */
+    teq     r0, #FALSE
+    moveq   r0, r6                          /* False (don't execute), so use Default Following Instruction Address */
+    beq     _exit_thumb_bcond_instr
+
+_thumb_calc_bcond_offset:
+    lsl		r0, r4, #(32-8)					/* Shift 8-bit offset in R4[7:0] to R0[31:24] */
+    asr		r0, r0, #(32-9)					/* Convert into 9-bit signed offset in R0[8:0] */
+    add		r0, r6, r0						/* PC+2 + signed offset */
+    add		r0, r0, #2						/* PC+4 + signed offset */
+_exit_thumb_bcond_instr:
+    orr     r0, r0, #0x01                   /* Set R0[0] since it is used to indicates Thumb mode */
+_exit_thumb_bcond_swi_handler:
 	bx	lr
 
-_thumb_bx_blx_handler:				/* BX or BLX. Note: b7 (H1) is not matched in the mask */
-_thumb_poppc_handler:				/* PUSH/POP, specifically POP {Rlist,PC} */
-_thumb_bcond_swi_handler:			/* B<cond> or SWI */
-_thumb_b_handler:					/* B */
-_thumb_long_b_handler:				/* Long BL or BLX (4 bytes) Note: b11 (H) indicates 1st or 2nd instr */
-	bx	lr
+/* _thumb_b_handler
+ *      B
+ *      On entry:
+ *          R0: instruction to be executed
+ *          R1: Default Following Instruction Address (PC+2)
+ *          R5[3:0]: CPSR condition codes
+ *      On exit:
+ *          R0: following instruction address (B0 set to indicate Thumb mode)
+ *          R1: destroyed
+ *		Note: The signed offset is 12-bits (encoded value x 2)
+ */
+_thumb_b_handler:
+    stmfd   sp!, {lr}
+    lsl		r0, r0, #(32-11)		/* Shift 11-bit offset in R0[10:0] to R0[31:21] */
+    asr		r0, r0, #(32-12)		/* Convert into 12-bit signed offset in R0[11:0] */
+    add		r0, r1, r0				/* PC+2 + signed offset */
+    add		r0, r0, #2				/* PC+4 + signed offset */
+    orr     r0, r0, #0x01           /* Set R0[0] since it is used to indicates Thumb mode */
+    ldmfd   sp!, {pc}
+
+
+/* _thumb_long_bl_blx_handler
+ *      Long BL or BLX (4 bytes) Note: b11 (H) indicates 1st or 2nd instr; armv4t does not support BLX.
+ *      On entry:
+ *          R0: instruction to be executed
+ *          R1: Default Following Instruction Address (PC+2)
+ *          R5[3:0]: CPSR condition codes
+ *      On exit:
+ *          R0: following instruction address (B0 set to indicate Thumb mode)
+ *          R1, R2, R3: destroyed
+ *		Note: The BL instruction (0xFxxx) should be in pairs (Dual 16-bit instructions).
+ *		The first instruction should have (H=0) to indicate the upper 11 bits of the encoded offset
+ *		The second instruction should have (H=1) to indicate the lower 11 bits of the encoded offset
+ *		The signed offset is 23 bits (encoded value x 2)
+ *
+ *		Note2: The BLX instruction (0xExxx) encodes the first instruciton using BL (0xFxxx) with H=0,
+ *		while the second instruction has a different opcode value (0xExxx), with H=1.
+ *		BLX is only used to switch to an ARM target.
+ */
+_thumb_long_bl_blx_handler:
+    stmfd   sp!, {lr}
+	tst		r0, #0x0800					/* Check H bit */
+	bne		_return_default_thumb_following_instr	/* H=1 as first instruction shouldn't happen */
+
+_thumb_is_1st_bl_blx_instruction:
+    lsl		r0, r0, #(32-11)			/* Shift 11-bit offset in R0[10:0] to R0[31:21] */
+    asr		r0, r0, #(32-23)			/* Convert into 12-bit signed offset in R0[22:12] */
+    ldrh	r3, [r1]					/* Get second instruction in pair into R3 */
+	tst		r3, #0x0800					/* Check H bit */
+	beq		_exit_thumb_long_bl_blx_handler	/* H=0 as second instruction shouldn't happen */
+
+    lsl		r2, r3, #(32-11)			/* Shift 11-bit offset in R3[10:0] to R2[31:21] */
+    lsr		r2, r2, #(32-12)			/* Convert into 12-bit unsigned offset in R2[11:0] */
+	orr		r0, r0, r2					/* Combine offsets */
+    add		r0, r1, r0					/* PC+2 + signed offset */
+    add		r0, r0, #2					/* PC+4 + signed offset */
+
+_thumb_is_2nd_bl_blx_instruction:
+    and		r3, r3, #0x0F000			/* Keep instruction opcode in R3 */
+
+    cmp		r3, #0x0F000				/* Look for BL */
+    orreq   r0, r0, #0x01           	/* Match, set R0[0] since it is used to indicates Thumb mode */
+	beq		_exit_thumb_long_bl_blx_handler
+
+#ifndef __ARM6OR7__
+	/* v5t or higher architecture */
+	cmp		r3, #0x0E000				/* Look for BLX */
+	biceq	r0, r0, #0x03				/* Match, Force ARM address */
+    beq		_exit_thumb_long_bl_blx_handler
+#endif
+
+_return_default_thumb_following_instr:
+	mov	r0, r1							/* Return default Following Instruction Address */
+
+_exit_thumb_long_bl_blx_handler:
+    ldmfd   sp!, {pc}
 
 
 /****************************************************************************

@@ -52,7 +52,8 @@
         add      \instrmask, \instrmask, \indexreg, lsl #3
         ldm      \instrmask, {\instrreg, \codehandler}                  /* LSHW: IID, MSHW: IBM */
         mov      \instrmask, \instrreg, lsr #16
-        and      \instrreg, \instrreg, #HLFWRD0
+        mov      \instrreg, \instrreg, lsl #16
+        mov      \instrreg, \instrreg, lsr #16                          /* Keep HLFWORD0 containing instruction */
         .endm
 
 /* _dbg_armDecodeEntry
@@ -120,6 +121,20 @@
         subs    \sizereg, \sizereg, #1
         bne      1b
         .endm
+
+/* _dbg_outputAckOnlyFlag
+ *      Return Flag ('+') for Continue or Step
+ *      On exit:
+ *        R0: Pointer to Output Buffer ASCIIZ location
+ *        R1: destroyed
+ *        R2: destroyed
+ */
+        .macro  _dbg_outputAckOnlyFlag
+        ldr      r0, =debug_OutMsgBuf
+        ldr      r1, =debug_AckOnlyFlag                  /* ASCIIZ terminated */
+        _dbg_stpcpy     r0, r1, r2
+        .endm
+
 
 /* _dbg_outputRetransmitFlag
  *      Return Flag ('-') for Checksum Error (retransmission needed)
@@ -233,8 +248,7 @@
  *        indexreg contains debugger stack index value (0-max index)
  */
 	.macro	_regenum2index indexenum, indexreg
-    mov     \indexreg, #indexenum
-    add     \indexreg, \indexreg, #DBGSTACK_USERREG_INDEX /* Convert register index to Debug Stack index, keep in R1 */
+    add     \indexreg, \indexenum, #DBGSTACK_USERREG_INDEX /* Convert register index to Debug Stack index */
     .endm
 
 /* _getdbgregisterfromindex
@@ -289,7 +303,7 @@
  */
 	.macro _dbg_getstate	reg
 	ldr	 \reg, =debug_state
-	ldrb \reg, [\reg]
+	ldrb     \reg, [\reg]
 	.endm
 
 /* _dbg_setstate
@@ -300,7 +314,7 @@
 	.macro _dbg_setstate	state
 	mov	 r0, #\state
 	ldr	 r1, =debug_state
-	strb r0, [r1]
+	strb     r0, [r1]
 	.endm
 
 /* _dbg_getmode
@@ -310,7 +324,7 @@
  */
 	.macro _dbg_getmode	reg
 	ldr	 \reg, =debug_mode
-	ldrb \reg, [\reg]
+	ldrb     \reg, [\reg]
 	.endm
 
 /* _dbg_setmode
@@ -321,8 +335,31 @@
 	.macro _dbg_setmode	mode
 	mov	 r0, #\mode
 	ldr	 r1, =debug_mode
-	strb r0, [r1]
+	strb     r0, [r1]
 	.endm
+
+/* _dbg_get_bkpt_type
+ *      Get Breakpoint Type
+ *      On exit:
+ *        reg: Breakpoint Type
+ */
+        .macro _dbg_get_bkpt_type     reg
+        ldr      \reg, =debug_bkpt_type
+        ldrb     \reg, [\reg]
+        .endm
+
+/* _dbg_set_bkpt_type
+ *      Set Breakpoint Type to given value
+ *      On exit:
+ *        r0, r1: destroyed
+ */
+        .macro _dbg_set_bkpt_type     bkpt_type
+        mov      r0, #\bkpt_type
+        ldr      r1, =debug_bkpt_type
+        strb     r0, [r1]
+        .endm
+
+
 
 /* _dbg_getcurrbkpt_index
  *	Get current breakpoint index
@@ -331,7 +368,7 @@
  */
 	.macro _dbg_getcurrbkpt_index   reg
 	ldr	 \reg, =debug_curr_breakpoint
-	ldr	 \reg, [\reg]
+	ldrb \reg, [\reg]
 	.endm
 
 /* _dbg_setcurrbkpt_index
@@ -341,29 +378,8 @@
  */
 	.macro _dbg_setcurrbkpt_index  reg
 	ldr	 r1, =debug_curr_breakpoint
-	str	 \reg, [r1]
+	strb \reg, [r1]
 	.endm
-
-/* _dbg_getabortedinstr_addr
- *	Get aborted instruction address
- *	On exit:
- *	  reg: aborted instruction address
- */
-        .macro _dbg_getabortedinstr_addr  reg
-	ldr	 \reg, =__debugger_stack_bottom__
-	ldr	 \reg, [\reg]
-	.endm
-
-/* _dbg_setabortedinstr_addr
- *	Set aborted instruction address
- *	On exit:
- *	  r1: destroyed
- */
-        .macro _dbg_setabortedinstr_addr  reg
-        ldr   r1, =__debugger_stack_bottom__
-        str   \reg, [r1]
-        .endm
-
 
  /*@}*/
 
