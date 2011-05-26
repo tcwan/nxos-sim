@@ -25,20 +25,43 @@ below for the building requirements.
 
 2. Requirements
 ^^^^^^^^^^^^^^^
+The goal for NxOS is to have a cross-platform hosting (development) environment.
+A basic setup would include:
+  * Integrated Development Environment (Eclipse)
+  * ARM Cross-Compiler Toolchain (GNU GCC)
+  * Host-based GDB Server (Python-based) and Client (GDB for ARM)
+  * Firmware Downloading Tool (NeXT Tool [GUI] or NeXTTool [CLI] from brixcc.sourceforge.net)
 
-Building and testing NxOS requires a few softwares and libraries. Since most of
+Building and testing NxOS requires a few software packages and libraries. Since most of
 the external utilities are written in Python, you will need a working installation
-of Python (www.python.org). You will also need libusb and the python-pyusb packages,
-needed by PyNXT to upload an NxOS kernel to the brick.
+of Python (www.python.org). Python 2.7 (not 3.x) is recommended, especially for 
+the Mac OSX platform if remote debugging using GDB is desired.
 
-  * Python >= 2.4
+On Mac OSX (and Windows?), the following packages are needed:
+  * LEGO Mindstorms Fantom Drivers
+  * Python >= 2.7 (not 3.x)
+  * pyfantom
+  * nxt-python >= 2.1.0
+
+On Linux platforms, the following packages are needed:
+  * Python >= 2.4 (not 3.x)
   * libusb
   * python-pyusb
   * PyBluez (if you want to upload/boot from the enhanced fw using bluetooth)
+  * nxt-python >= 2.1.0
 
-You will also need a working ARM cross-compilation chain. To ease
-the process, you will find in the scripts/ directory an automatic
-fetcher/builder :
+
+NeXT Tool (available from the brixcc website) by John Hansen is available for 
+Windows, Mac OSX and Linux for uploading firmware and files to the NXT. It has 
+a GUI interface and is probably the most stable tool for this purpose currently.
+A Command line version (NeXTTool) is also available.
+
+Alternatively, command line tools written in Python are provided with NxOS to 
+perform similar firmware uploading and control tasks, but is no longer actively
+supported. PyNXT is used to upload an NxOS kernel to the brick.
+
+To ease the process of setuping a working ARM cross-compilation chain,
+you will find in the scripts/ directory an automatic fetcher/builder :
 
   % mkdir -p ~/arm-gcc/
   % cd $_
@@ -65,12 +88,12 @@ Finally, connect the brick to your computer with the USB cable, and do:
 
 The script will then ask you for the kernel to upload, and then upload the
 firmware to the brick's RAM, ROM (flash) or to RAM of the enhanced
-NXT-standard-firmware from John Hansen (available where brikcc is available).
+NXT-standard-firmware from John Hansen (available where brixcc is available).
 
 To upload using RAM (kernel_samba.bin) or flash (kernel_rom.bin) the NXT must
 be in SAMBA-mode, which is achieved pressing the button in the hole below the
 USB-port (using a LEGO-antenna or such). To upload to the enhanced firmware
-(kernel.rxe), you have to install the enhanced firmware from John Hansens. This
+(kernel.rxe), you have to install the enhanced firmware from John Hansen. This
 gives the advantage that the NxOS-kernel is stored like any other program on
 the NXT and you can still use NXT-G, NBC witout the need to reflash the
 firmware. The disadvantage is, that you will have less RAM available for your
@@ -87,5 +110,14 @@ scons are stored in a file namend scons.options.
 4. Notes and FAQ
 ^^^^^^^^^^^^^^^^
 
-Anything?
+NxOS was started by David Anderson (http://www.natulte.net) and other collaborators in 2007.
+It is a ground-up development of a reusable OS base for the Mindstorm NXT platform.
+There are some architectural similarilties to LeJOS but most of the drivers have been rewritten.
 
+Currently NxOS only has the base layer (hardware initialization, interrupt handlers, and drivers).
+There is no scheduler provided so all programs execute in bare-metal mode using a hand-crafted event loop. 
+
+Debugging support is provided via a GDB stub implemented in the firmware. Communications is over USB, there
+is no need for any additional hardware (JTAG) debugging equipment. The only caveat is that Interrupt code
+cannot be stepped through safely, since the debugger uses Undefined Instructions to trigger itself.
+(Note: stepping and setting breakpoints is not working yet in BETA 1).
