@@ -17,6 +17,8 @@
 
 #include "base/drivers/_usb.h"
 
+#include "base/lib/fantom/fantom.h"
+
 /* The USB controller supports up to 4 endpoints. */
 #define N_ENDPOINTS 4
 
@@ -548,11 +550,12 @@ static U32 usb_manage_setup_packet(void) {
   return packet.request;
 }
 
-
 /* The main USB interrupt handler. */
 static void usb_isr(void) {
   U8 endpoint = 127;
   U32 csr, isr;
+  U8 *reply;
+  U32 replyLen;
 
   isr = *AT91C_UDP_ISR;
 
@@ -653,6 +656,12 @@ static void usb_isr(void) {
       }
 
       usb_read_data(endpoint);
+      if (fantom_filter_packet(usb_state.rx_data, usb_state.rx_len, &reply, &replyLen)) {
+        /* message was a fantom packet, so send any reply and clear it from our read buffers */
+        if (replyLen > 0)
+          usb_write_data(2, reply, replyLen);
+        usb_state.rx_len = 0;
+      }
 
       return;
     }
