@@ -656,7 +656,7 @@ static void usb_isr(void) {
       }
 
       usb_read_data(endpoint);
-      if (fantom_filter_packet(usb_state.rx_data, usb_state.rx_len, &reply, &replyLen)) {
+      if (fantom_filter_packet(usb_state.rx_data, usb_state.rx_len, &reply, &replyLen, FALSE)) {
         /* message was a fantom packet, so send any reply and clear it from our read buffers */
         if (replyLen > 0)
           usb_write_data(2, reply, replyLen);

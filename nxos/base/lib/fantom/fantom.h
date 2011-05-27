@@ -32,9 +32,10 @@
  * @param dataLen Length of the received message
  * @param reply Pointer to reply message
  * @param replyLen Length of the reply message
+ * @param isBTComms True if Bluetooth Comms used
  * @return True: packet filtered, False: Not a Fantom Packet.
  */
-bool fantom_filter_packet(U8 *data, U32 dataLen, U8 **reply, U32 *replyLen);
+bool fantom_filter_packet(U8 *data, U32 dataLen, U8 **reply, U32 *replyLen, bool isBTComms);
 
 /*@}*/
 /*@}*/
