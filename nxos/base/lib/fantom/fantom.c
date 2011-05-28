@@ -5,6 +5,7 @@
  * Redistribution of this file is permitted under
  * the terms of the GNU Public License (GPL) version 2.
  */
+#include "armdebug/Debugger/debug_stub.h"
 
 #include "base/at91sam7s256.h"
 
@@ -16,7 +17,6 @@
 #include "base/util.h"
 
 #include "base/lib/fantom/fantom.h"
-#include "armdebug/Debugger/debug_stub.h"
 
 /* Fantom Version System Command */
 #define SYSCMD_MSGTYPE 0x01
@@ -29,7 +29,7 @@ static U8 SysCmd_VersionResponse[7] = { 0x02, 0x88, 0x00, 0x7C, 0x01, 0x1C, 0x01
 #define GDB_PROTO_MSGTYPE 0x8d		/* Defined here to avoid including debug_internals.h */
 
 /* Filter Fantom related traffic (queries, GDB protocol) */
-bool fantom_filter_packet(U8 *data, U32 dataLen, U8 **reply, U32 *replyLen, bool isBTComms)
+bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms, void *isrReturnAddress)
 {
   /* WARNING: This routine is called from the ISR.
    * Consequently, the amount of processing done here must be as little as possible.
@@ -39,29 +39,28 @@ bool fantom_filter_packet(U8 *data, U32 dataLen, U8 **reply, U32 *replyLen, bool
    * As well as trap GDB remote protocol
    */
 
-	bool status = FALSE;
 	comm_chan_t comms;
+	bool status = FALSE;
 
-	*reply = NULL;
-	*replyLen = 0;
 	if (dataLen == 0)
 		return status;
 
 	switch (data[0]) {
 	case SYSCMD_MSGTYPE:
-		if ((dataLen == 2) && (data[1] == SysCmd_VersionQuery[1])) {
-			*reply = SysCmd_VersionResponse;
-			*replyLen = SYSCMD_VERSIONRESPONSE_LEN;
+		if ((*lenPtr == 2) && ((*msgPtr)[1] == SysCmd_VersionQuery[1])) {
+			*msgPtr = SysCmd_VersionResponse;
+			*lenPtr = SYSCMD_VERSIONRESPONSE_LEN;
 			status = TRUE;
 		}
 		break;
 
 	case GDB_PROTO_MSGTYPE:
 		comms = isBTComms ? COMM_BT : COMM_USB;
-		status = nxos__handleDebug(data, comms, dataLen);
-		break;
-
+		status = nxos__handleDebug(*msgPtr, comms, *lenPtr, isrReturnAddress);
+		/* Fall through */
 	default:
+		*msgPtr = NULL;
+		*lenPtr = 0;
 		break;
 	}
 	return status;

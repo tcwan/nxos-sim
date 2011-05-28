@@ -28,14 +28,16 @@
 
 /** Filter Fantom related traffic (queries, GDB protocol).
  *
- * @param data The received message
- * @param dataLen Length of the received message
- * @param reply Pointer to reply message
- * @param replyLen Length of the reply message
+ * @param msgPtr Received/Reply message pointer
+ * @param lenPtr Received/Reply message length pointer
  * @param isBTComms True if Bluetooth Comms used
+ * @param isrReturnAddress Address of Instruction interrupted by IRQ
  * @return True: packet filtered, False: Not a Fantom Packet.
+ *
+ * If False, msgPtr and lenPtr unchanged.
+ * If True, msgPtr and lenPtr will indicate reply if *lenPtr > 0
  */
-bool fantom_filter_packet(U8 *data, U32 dataLen, U8 **reply, U32 *replyLen, bool isBTComms);
+bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms, void *isrReturnAddress);
 
 /*@}*/
 /*@}*/

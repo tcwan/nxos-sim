@@ -554,10 +554,19 @@ static U32 usb_manage_setup_packet(void) {
 static void usb_isr(void) {
   U8 endpoint = 127;
   U32 csr, isr;
-  U8 *reply;
-  U32 replyLen;
+  U8 *messagePtr;
+  U32 messageLen;
+  U32 *isrReturnAddress;
 
   isr = *AT91C_UDP_ISR;
+
+  /* FIXME: The following code may still not get the SVC mode return address.
+   * Who calls usb_isr (via AIC vector)?
+   */
+  asm ("mov		%0, lr\n"			\
+		  : "=r" (isrReturnAddress)	\
+		  : "" (0) 					\
+		  :  );
 
   /* We sent a stall, the host has acknowledged the stall. */
   if (AT91C_UDP_CSR[0] & AT91C_UDP_ISOERROR)
@@ -656,10 +665,12 @@ static void usb_isr(void) {
       }
 
       usb_read_data(endpoint);
-      if (fantom_filter_packet(usb_state.rx_data, usb_state.rx_len, &reply, &replyLen, FALSE)) {
+      messagePtr = usb_state.rx_data;
+      messageLen = usb_state.rx_len;
+      if (fantom_filter_packet(&messagePtr, &messageLen, FALSE, isrReturnAddress)) {
         /* message was a fantom packet, so send any reply and clear it from our read buffers */
-        if (replyLen > 0)
-          usb_write_data(2, reply, replyLen);
+        if (messageLen > 0)
+          usb_write_data(2, messagePtr, messageLen);
         usb_state.rx_len = 0;
       }
 
