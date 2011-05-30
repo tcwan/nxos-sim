@@ -42,10 +42,10 @@ bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms, void *isrRet
 	comm_chan_t comms;
 	bool status = FALSE;
 
-	if (dataLen == 0)
+	if (*lenPtr == 0)
 		return status;
 
-	switch (data[0]) {
+	switch ((*msgPtr)[0]) {
 	case SYSCMD_MSGTYPE:
 		if ((*lenPtr == 2) && ((*msgPtr)[1] == SysCmd_VersionQuery[1])) {
 			*msgPtr = SysCmd_VersionResponse;
