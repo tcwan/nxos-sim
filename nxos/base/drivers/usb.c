@@ -82,8 +82,8 @@
  * piggybacking on Lego's device space, using an unused product ID.
  */
 static const U8 usb_device_descriptor[] = {
-  18, USB_DESC_TYPE_DEVICE, /* Packet size and type. */
-  0x00, 0x20, /* This packet is USB 2.0. */
+  0x12, USB_DESC_TYPE_DEVICE, /* Packet size and type. */
+  0x00, 0x02, /* This packet is USB 2.0. */
   2, /* Class code. */
   0, /* Sub class code. */
   0, /* Device protocol. */
@@ -100,7 +100,7 @@ static const U8 usb_device_descriptor[] = {
 };
 
 static const U8 usb_dev_qualifier_desc[] = {
-  10, USB_DESC_TYPE_DEVICE_QUALIFIER, /* Packet size and type. */
+  0x0A, USB_DESC_TYPE_DEVICE_QUALIFIER, /* Packet size and type. */
   0x00, 0x20, /* This packet is USB 2.0. */
   2, /* Class code */
   0, /* Sub class code */
@@ -124,7 +124,7 @@ static const U8 usb_nxos_full_config[] = {
    * 1 because the NXT is self-powered, bit 5 is 0 because the NXT
    * doesn't support remote wakeup, and bits 0-4 are 0 (reserved).
    */
-  0x40,
+  0xC0,
   0, /* Device power consumption, for non self-powered devices. */
 
 
@@ -220,6 +220,12 @@ static volatile struct {
 
   /* The currently selected USB configuration. */
   U8 current_config;
+
+  /* Holds the pending write request since USB is busy */
+  U8 *tx_rqst_data;
+
+  /* size of the pending write request data buffer */
+  U32 tx_rqst_size;
 
   /* Holds the state of the data transmissions on both EP0 and
    * EP2. This only gets used if the transmission needed to be split
@@ -521,13 +527,7 @@ static U32 usb_manage_setup_packet(void) {
     /* TODO: Make this a little nicer. Not quite sure how. */
 
     /* we can only active the EP1 if we have a buffer to get the data */
-    /* TODO: This was:
-     *
-     * if (usb_state.rx_len == 0 && usb_state.rx_size >= 0) {
-     *
-     * The second part always evaluates to TRUE.
-     */
-    if (usb_state.rx_len == 0) {
+    if (usb_state.rx_len == 0 && usb_state.rx_size > 0) {
       AT91C_UDP_CSR[1] = AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_OUT;
       while (AT91C_UDP_CSR[1] != (AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_OUT));
     }
@@ -554,12 +554,15 @@ static U32 usb_manage_setup_packet(void) {
 static void usb_isr(void) {
   U8 endpoint = 127;
   U32 csr, isr;
+#if 0
   U8 *messagePtr;
   U32 messageLen;
   U32 *isrReturnAddress;
+#endif
 
   isr = *AT91C_UDP_ISR;
 
+#if 0
   /* FIXME: The following code may still not get the SVC mode return address.
    * Who calls usb_isr (via AIC vector)?
    */
@@ -567,6 +570,7 @@ static void usb_isr(void) {
 		  : "=r" (isrReturnAddress)	\
 		  : "" (0) 					\
 		  :  );
+#endif
 
   /* We sent a stall, the host has acknowledged the stall. */
   if (AT91C_UDP_CSR[0] & AT91C_UDP_ISOERROR)
@@ -665,6 +669,7 @@ static void usb_isr(void) {
       }
 
       usb_read_data(endpoint);
+#if 0
       messagePtr = usb_state.rx_data;
       messageLen = usb_state.rx_len;
       if (fantom_filter_packet(&messagePtr, &messageLen, FALSE, isrReturnAddress)) {
@@ -673,6 +678,7 @@ static void usb_isr(void) {
           usb_write_data(2, messagePtr, messageLen);
         usb_state.rx_len = 0;
       }
+#endif
 
       return;
     }
@@ -700,7 +706,13 @@ static void usb_isr(void) {
 	  && usb_state.tx_data[endpoint] != NULL) {
 	usb_write_data(endpoint, usb_state.tx_data[endpoint],
 		      usb_state.tx_len[endpoint]);
-      } else {
+      } else if (usb_state.tx_rqst_data != NULL) {
+        /* check for any pending write requests for EP2 */
+        usb_write_data(2, usb_state.tx_rqst_data, usb_state.tx_rqst_size);
+        usb_state.tx_rqst_data = NULL;
+        /* usb_state.tx_rqst_size = 0; */ /* Not done to save some code */
+      }
+      else {
         /* then it means that we sent all the data and the host has acknowledged it */
         usb_state.status = USB_READY;
       }
@@ -780,7 +792,10 @@ void nx__usb_init(void) {
 
 
 bool nx_usb_can_write(void) {
-  return (usb_state.status == USB_READY);
+
+  /* return (usb_state.status == USB_READY); */
+
+  return (usb_state.tx_rqst_data == NULL);
 }
 
 
@@ -792,11 +807,17 @@ void nx_usb_write(U8 *data, U32 length) {
   NX_ASSERT(data != NULL);
   NX_ASSERT(length > 0);
 
-  /* TODO: Make call asynchronous */
-  while (usb_state.status != USB_READY);
+  /* while (usb_state.status != USB_READY); */
 
-  /* start sending the data */
-  usb_write_data(2, data, length);
+  /* Asynchronous write request call (overwrites any pending requests) */
+  if (usb_state.status == USB_READY) {
+    /* start sending the data */
+    usb_write_data(2, data, length);
+  }
+  else {
+    usb_state.tx_rqst_data = data;
+    usb_state.tx_rqst_size = length;
+  }
 }
 
 bool nx_usb_data_written(void) {
