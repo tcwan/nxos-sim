@@ -12,15 +12,16 @@ Summary:
 1. Introduction
 ^^^^^^^^^^^^^^^
 
-NxOS is an open source operating system that runs on the Lego Mindstorms NXT
-platform. It aims at providing a comprehensive base system that provides
-easy-to-use APIs to the NXT's hardware, including sensors, display and motors.
+NxOS is an open source operating system that runs on the Lego Mindstorms
+NXT platform. It aims at providing a comprehensive base system that
+provides easy-to-use APIs to the NXT's hardware, including sensors,
+display and motors.
 
-It also contains some libraries that developers of /application kernels/ may find
-of some interest, such as a file system or a GUI builder.
+It also contains some libraries that developers of /application kernels/
+may find of some interest, such as a file system or a GUI builder.
 
-NxOS is written in C, and must be cross-compiled to the ARM platform. See section 2
-below for the building requirements.
+NxOS is written in C, and must be cross-compiled to the ARM platform.
+See section 2 below for the building requirements.
 
 
 2. Requirements
@@ -30,18 +31,24 @@ A basic setup would include:
   * Integrated Development Environment (Eclipse)
   * ARM Cross-Compiler Toolchain (GNU GCC)
   * Host-based GDB Server (Python-based) and Client (GDB for ARM)
+  * Enhanced NXT Firmware by John Hansen from brixcc.sourceforge.net
   * Firmware Downloading Tool (NeXT Tool [GUI] or NeXTTool [CLI] from brixcc.sourceforge.net)
 
-Building and testing NxOS requires a few software packages and libraries. Since most of
-the external utilities are written in Python, you will need a working installation
-of Python (www.python.org). Python 2.7 (not 3.x) is recommended, especially for 
-the Mac OSX platform if remote debugging using GDB is desired.
+Building and testing NxOS requires a few software packages and
+libraries. Since most of the external utilities are written in Python,
+you will need a working installation of Python (www.python.org). Python
+2.6.x or 2.7 (not 3.x) is recommended, especially for the Mac OSX
+platform if remote debugging using GDB is desired.
 
 On Mac OSX (and Windows?), the following packages are needed:
   * LEGO Mindstorms Fantom Drivers
-  * Python >= 2.7 (not 3.x)
+  * Python >= 2.6 (not 3.x)
   * pyfantom
   * nxt-python >= 2.1.0
+
+For MacOS X (>= 10.5.x) users, don't forget to install the Lego driver
+Leopard update from the Lego software updates page, or you won't be able
+to communicate with the brick via USB.
 
 On Linux platforms, the following packages are needed:
   * Python >= 2.4 (not 3.x)
@@ -50,29 +57,50 @@ On Linux platforms, the following packages are needed:
   * PyBluez (if you want to upload/boot from the enhanced fw using bluetooth)
   * nxt-python >= 2.1.0
 
+2.1 Firmware Utilities
+^^^^^^^^^^^^^^^^^^^^^^
+NeXT Tool (available from the brixcc website) by John Hansen is
+available for Windows, Mac OSX and Linux for uploading firmware and
+files to the NXT. It has a GUI interface and is probably the most stable
+tool for this purpose currently. A Command line version (NeXTTool) is
+also available.
 
-NeXT Tool (available from the brixcc website) by John Hansen is available for 
-Windows, Mac OSX and Linux for uploading firmware and files to the NXT. It has 
-a GUI interface and is probably the most stable tool for this purpose currently.
-A Command line version (NeXTTool) is also available.
+Alternatively, command line tools written in Python are provided with
+NxOS to perform similar firmware uploading and control tasks, but is no
+longer actively supported. boot_firmware is a Python script used to
+upload an NxOS kernel to the brick. The PyNXT package can also be used
+to write the firmware image to the Flash.
 
-Alternatively, command line tools written in Python are provided with NxOS to 
-perform similar firmware uploading and control tasks, but is no longer actively
-supported. PyNXT is used to upload an NxOS kernel to the brick.
+2.2 Cross-Toolchain
+^^^^^^^^^^^^^^^^^^^
+The ARM Cross-compilation toolchain consists of the following components:
+  * Binutils >= 2.20.51.x
+  * GCC >= 4.5.x with Newlib >= 1.18
+  * GDB >= 7.1
+  
+The target should be the ARM EABI target (arm-none-eabi), ELF targets
+are not compliant with the ARM AAPCS standard.
 
-To ease the process of setuping a working ARM cross-compilation chain,
-you will find in the scripts/ directory an automatic fetcher/builder :
+It is advisable to obtain the ARM cross-compilation toolchain as a
+precompiled package. For Windows, http://www.yagarto.de/ has suitable
+ARM Cross-Toolchain. For Mac OSX, local MacPorts Port files have been 
+created to build the required components (FIXME: Give path to Portfiles).
+
+If you really want to build the ARM cross-compilation toolchain from
+source, you can find in the scripts/ directory an automatic
+fetcher/builder:
+
+(Note: The script is not up to date and has not been tested with the
+specified toolchain component versions)
 
   % mkdir -p ~/arm-gcc/
   % cd $_
   % ~/where/is/nxos/scripts/build-arm-toolchain.sh
   [...]
 
-Don't forget to add ~/arm-gcc/install/bin to your PATH environment variable.
+Don't forget to add ~/arm-gcc/install/bin to your PATH environment
+variable.
 
-For MacOS X (>= 10.5.x) users, don't forget to install the Lego
-driver Leopard update from the Lego software updates page, or you
-won't be able to communicate with the brick via USB.
 
 3. Building and testing
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -82,42 +110,84 @@ that contains base/, systems/, ...) and type:
 
   % scons appkernels=tests
 
-Finally, connect the brick to your computer with the USB cable, and do:
+To build and try another kernel, simply replace 'tests' with the name of
+the application kernel you want to build. The available kernels are the
+directory in systems/. You can also build several appkernels at once by
+using a comma-separated list. Once scons is called with appkernel=xyz,
+you only have to invoke scons without any arguments, because the options
+to scons are stored in a file namend scons.options.
 
-  % ./boot_firmware
+The kernel build process will generate the <kernel>*.elf as well as
+the <kernel>*.bin and <kernel>.rxe files.
 
-The script will then ask you for the kernel to upload, and then upload the
-firmware to the brick's RAM, ROM (flash) or to RAM of the enhanced
-NXT-standard-firmware from John Hansen (available where brixcc is available).
+The *.elf files will be used for remote debugging using the Cross-GDB tool.
 
-To upload using RAM (kernel_samba.bin) or flash (kernel_rom.bin) the NXT must
-be in SAMBA-mode, which is achieved pressing the button in the hole below the
-USB-port (using a LEGO-antenna or such). To upload to the enhanced firmware
-(kernel.rxe), you have to install the enhanced firmware from John Hansen. This
-gives the advantage that the NxOS-kernel is stored like any other program on
-the NXT and you can still use NXT-G, NBC witout the need to reflash the
-firmware. The disadvantage is, that you will have less RAM available for your
-program, because the program is started in RAM (as when you are uploading a
-kernel_samba.bin).
+3.1 Booting *.rxe Kernels
+^^^^^^^^^^^^^^^^^^^^^^^^^
+*.rxe kernels are stored in the Flash of the NXT firmware like normal
+NXT firmware files, which are then loaded and execute from RAM. To
+execute the *.rxe kernels on the NXT, you have to install the enhanced
+firmware from John Hansen. This gives the advantage that the NxOS-kernel
+is stored like any other program on the NXT and you can still use NXT-G,
+NBC without the need to reflash the firmware.  The disadvantage is, that
+you will have less RAM available for your program, because the program
+is started in RAM (as when you are uploading a <kernel>_samba.bin).
 
-To build and try another kernel, simply replace 'tests' by the name
-of the application kernel you want to build. The available kernels
-are the directory in systems/. You can also build several appkernels at
-once by using a comma-separated list. Once scons is called with appkernel=xyz,
-you only have to invoke scons without any arguments, because the options to
-scons are stored in a file namend scons.options.
+To load the *.rxe kernel, use either John Hansen's NeXT Tools or else
+the boot_firmware tool (unmaintained) [See 3.2 on how to upload using
+boot_firmware].
+
+The *.rxe kernels loaded using NeXT Tools are executed (booted) by
+selecting it from the NXT Firmware menu and started by pressing the
+orange button when the menu shows "Run".
+
+3.2 Booting *.bin Kernels
+^^^^^^^^^^^^^^^^^^^^^^^^^
+*.bin kernels replace the standard firmware entirely, and can either
+execute from RAM (<kernel>_samba.bin) or Flash (<kernel>_rom.bin) The
+boot_firmware tool (unmaintained) can be used to load the *.bin (as well
+as *.rxe) kernels to the NXT
+
+Connect the brick to your computer with the USB cable, and do:
+
+% ./boot_firmware
+
+The script will then ask you for the kernel to upload, and then upload
+the *.bin firmware to the brick's RAM, ROM (flash) or *.rxe firmware to
+RAM of the enhanced NXT-standard-firmware from John Hansen.
+
+To upload using RAM (<kernel>_samba.bin) or flash (<kernel>_rom.bin) the
+NXT must be in SAMBA-mode, which is achieved pressing the button in the
+hole below the USB-port (using a LEGO-antenna or such).
+
+WARNING: This step erases all the files, data and firmware on the NXT.
+If you wish to use NXT-G or NBC in the future, you would need to have a
+copy of the firmware and other files available for re-download later.
+
+3.3. Debugging
+^^^^^^^^^^^^^^
+Remote Debugging using GDB works best with RAM-based kernels. This is
+because Dynamically generated Breakpoints can only be inserted into RAM
+locations. Flash based kernels can only make use of pre-defined Manual
+Breakpoints (inserted into the source code at specific places).
+
+[FIXME: More details needed]
 
 4. Notes and FAQ
 ^^^^^^^^^^^^^^^^
 
-NxOS was started by David Anderson (http://www.natulte.net) and other collaborators in 2007.
-It is a ground-up development of a reusable OS base for the Mindstorm NXT platform.
-There are some architectural similarilties to LeJOS but most of the drivers have been rewritten.
+NxOS was started by David Anderson (http://www.natulte.net) and other
+collaborators in 2007. It is a ground-up development of a reusable OS
+base for the Mindstorm NXT platform. There are some architectural
+similarilties to LeJOS but most of the drivers have been rewritten.
 
-Currently NxOS only has the base layer (hardware initialization, interrupt handlers, and drivers).
-There is no scheduler provided so all programs execute in bare-metal mode using a hand-crafted event loop. 
+Currently NxOS only has the base layer (hardware initialization,
+interrupt handlers, and drivers). There is no scheduler provided so all
+programs execute in bare-metal mode using a hand-crafted event loop.
 
-Debugging support is provided via a GDB stub implemented in the firmware. Communications is over USB, there
-is no need for any additional hardware (JTAG) debugging equipment. The only caveat is that Interrupt code
-cannot be stepped through safely, since the debugger uses Undefined Instructions to trigger itself.
-(Note: stepping and setting breakpoints is not working yet in BETA 1).
+Debugging support is provided via a GDB stub implemented in the
+firmware. Communications is over USB, there is no need for any
+additional hardware (JTAG) debugging equipment. The only caveat is that
+Interrupt code cannot be stepped through safely, since the debugger uses
+Undefined Instructions to trigger itself. (Note: stepping and setting
+breakpoints is not working yet in BETA 1).
