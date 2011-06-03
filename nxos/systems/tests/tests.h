@@ -19,6 +19,7 @@ void tests_display(void);
 void tests_sysinfo(void);
 void tests_sensors(void);
 void tests_tachy(void);
+void tests_fantom(void);
 void tests_usb(void);
 void tests_usb_hardcore(void);
 void tests_radar(void);

@@ -26,7 +26,9 @@ void main(void) {
   nx_systick_install_scheduler(security_hook);
 
   //tests_all();
-  tests_usb();
+  tests_fantom();
+
+  //tests_usb();
   //tests_bt();
   //tests_usb_hardcore();
   //tests_radar();
@@ -37,5 +39,5 @@ void main(void) {
   //tests_ht_gyro();
   //tests_ht_irlink();
   //tests_digitemp();
-  tests_sysinfo();
+  //tests_sysinfo();
 }

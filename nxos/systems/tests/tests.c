@@ -31,6 +31,8 @@
 #include "base/drivers/bt.h"
 #include "base/drivers/_uart.h"
 
+#include "base/lib/fantom/fantom.h"
+
 #include "tests/tests.h"
 #include "tests/fs.h"
 
@@ -724,6 +726,67 @@ void tests_bt(void) {
   nx_systick_wait_ms(1000);
 
   nx_bt_debug();
+
+  goodbye();
+}
+
+
+void tests_fantom(void) {
+  U16 i;
+  U32 lng = 0;
+  U32 count = 0;
+
+  char buffer[NX_USB_PACKET_SIZE];
+  U8 *messagePtr;
+  U32 *isrReturnAddress = NULL;
+
+  hello();
+
+  // Enable EP1
+  nx_usb_read((U8 *)&buffer, NX_USB_PACKET_SIZE * sizeof(char));
+
+  while(1) {
+    nx_display_cursor_set_pos(0, 0);
+    nx_display_string("Waiting Fantom message ...");
+    nx_display_uint(count);
+
+
+
+    for (i = 0 ; i < 500 && !nx_usb_data_read(); i++)
+    {
+      nx_systick_wait_ms(200);
+    }
+
+    if (i >= 500)
+      break;
+
+
+    nx_display_clear();
+
+    lng = nx_usb_data_read();
+     nx_display_cursor_set_pos(0, 0);
+     nx_display_string("Received Fantom message ...");
+     nx_display_uint(lng);
+
+    messagePtr = (U8 *)buffer;
+    if (fantom_filter_packet(&messagePtr, (U32 *)&lng, FALSE, isrReturnAddress)) {
+      /* message was a fantom packet, so send any reply and clear it from our read buffers */
+      if (lng > 0)
+        nx_usb_write(messagePtr, lng);
+    }
+    // Reenable EP1
+    nx_usb_read((U8 *)&buffer, NX_USB_PACKET_SIZE * sizeof(char));
+
+    nx_display_cursor_set_pos(0, 4);
+    nx_display_string("Sent Fantom message ...");
+    nx_display_uint(lng);
+    count++;
+
+    nx_systick_wait_ms(1000);
+
+    nx_display_clear();
+
+  }
 
   goodbye();
 }
