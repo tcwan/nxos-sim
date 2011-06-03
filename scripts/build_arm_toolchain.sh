@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2008 the NxOS developers
+# Copyright (c) 2008-2011 the NxOS developers
 #
 # See AUTHORS for a full list of the developers.
 #
@@ -15,23 +15,23 @@ SRCDIR=$ROOT/src
 BUILDDIR=$ROOT/build
 PREFIX=$ROOT/install
 
-GCC_URL=http://ftp.gnu.org/pub/gnu/gcc/gcc-4.4.0/gcc-core-4.4.0.tar.bz2
-GCC_VERSION=4.4.0
+GCC_URL=http://ftp.gnu.org/pub/gnu/gcc/gcc-4.5.1/gcc-core-4.5.1.tar.bz2
+GCC_VERSION=4.5.1
 GCC_DIR=gcc-$GCC_VERSION
 
-BINUTILS_URL=http://ftp.gnu.org/gnu/binutils/binutils-2.19.1.tar.bz2
-BINUTILS_VERSION=2.19.1
+BINUTILS_URL=http://ftp.gnu.org/gnu/binutils/binutils-2.20.51.0.9.tar.bz2
+BINUTILS_VERSION=2.20.51.0.9
 BINUTILS_DIR=binutils-$BINUTILS_VERSION
 
-NEWLIB_URL=ftp://sources.redhat.com/pub/newlib/newlib-1.17.0.tar.gz
-NEWLIB_VERSION=1.17.0
+NEWLIB_URL=ftp://sources.redhat.com/pub/newlib/newlib-1.18.0.tar.gz
+NEWLIB_VERSION=1.18.0
 NEWLIB_DIR=newlib-$NEWLIB_VERSION
 
-GDB_URL=ftp://ftp.gnu.org/gnu/gdb/gdb-6.8.tar.bz2
-GDB_VERSION=6.8
+GDB_URL=ftp://ftp.gnu.org/gnu/gdb/gdb-7.1.tar.bz2
+GDB_VERSION=7.1
 GDB_DIR=gdb-$GDB_VERSION
 
-echo "I will build an arm-elf cross-compiler:
+echo "I will build an arm-none-eabi cross-compiler:
 
   Prefix: $PREFIX
   Sources: $SRCDIR
@@ -105,7 +105,7 @@ export PATH=$PREFIX/bin:$PATH
 mkdir -p $BUILDDIR/$BINUTILS_DIR
 cd $BUILDDIR/$BINUTILS_DIR
 
-$SRCDIR/$BINUTILS_DIR/configure --target=arm-elf --prefix=$PREFIX \
+$SRCDIR/$BINUTILS_DIR/configure --target=arm-none-eabi --prefix=$PREFIX \
     --disable-werror --enable-interwork --enable-multilib --with-float=soft \
     && make all install
 ) || exit 1
@@ -114,7 +114,7 @@ $SRCDIR/$BINUTILS_DIR/configure --target=arm-elf --prefix=$PREFIX \
 # Stage 2: Patch the GCC multilib rules, then build the gcc compiler only
 #
 (
-MULTILIB_CONFIG=$SRCDIR/$GCC_DIR/gcc/config/arm/t-arm-elf
+MULTILIB_CONFIG=$SRCDIR/$GCC_DIR/gcc/config/arm/t-arm-none-eabi
 
 echo "
 
@@ -126,7 +126,7 @@ MULTILIB_DIRNAMES += normal interwork
 mkdir -p $BUILDDIR/$GCC_DIR
 cd $BUILDDIR/$GCC_DIR
 
-$SRCDIR/$GCC_DIR/configure --target=arm-elf --prefix=$PREFIX \
+$SRCDIR/$GCC_DIR/configure --target=arm-none-eabi --prefix=$PREFIX \
     --enable-interwork --enable-multilib --with-float=soft \
     --enable-languages="c" --with-newlib \
     --with-headers=$SRCDIR/$NEWLIB_DIR/newlib/libc/include \
@@ -141,7 +141,7 @@ $SRCDIR/$GCC_DIR/configure --target=arm-elf --prefix=$PREFIX \
 mkdir -p $BUILDDIR/$NEWLIB_DIR
 cd $BUILDDIR/$NEWLIB_DIR
 
-$SRCDIR/$NEWLIB_DIR/configure --target=arm-elf --prefix=$PREFIX \
+$SRCDIR/$NEWLIB_DIR/configure --target=arm-none-eabi --prefix=$PREFIX \
     --enable-interwork --enable-multilib --with-float=soft \
     && make all install
 ) || exit 1
@@ -162,7 +162,7 @@ make all install
 mkdir -p $BUILDDIR/$GDB_DIR
 cd $BUILDDIR/$GDB_DIR
 
-$SRCDIR/$GDB_DIR/configure --target=arm-elf --prefix=$PREFIX \
+$SRCDIR/$GDB_DIR/configure --target=arm-none-eabi --prefix=$PREFIX \
     --disable-werror --enable-interwork --enable-multilib --with-float=soft \
     && make all install
 ) || exit 1
