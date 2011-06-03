@@ -21,9 +21,9 @@
 /* Fantom Version System Command */
 #define SYSCMD_MSGTYPE 0x01
 #define SYSCMD_VERSIONQUERY_LEN 2
-static U8 SysCmd_VersionQuery[2] = { SYSCMD_MSGTYPE, 0x88 };
+static U8 SysCmd_VersionQuery[SYSCMD_VERSIONQUERY_LEN] = { SYSCMD_MSGTYPE, 0x88 };
 #define SYSCMD_VERSIONRESPONSE_LEN 7
-static U8 SysCmd_VersionResponse[7] = { 0x02, 0x88, 0x00, 0x7C, 0x01, 0x1C, 0x01 };
+static U8 SysCmd_VersionResponse[SYSCMD_VERSIONRESPONSE_LEN] = { 0x02, 0x88, 0x00, 0x7C, 0x01, 0x1C, 0x01 };
 
 /* GDB Protcol Message Type */
 #define GDB_PROTO_MSGTYPE 0x8d		/* Defined here to avoid including debug_internals.h */
