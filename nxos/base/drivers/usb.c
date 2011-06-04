@@ -704,7 +704,7 @@ static void usb_isr(void) {
       nx_usb_fantom_read(NULL, 0);
 
 #else
-      usb_read_data(endpoint, usb_state.rx_data, usb_state.rx_size, &(usb_state.rx_len));
+      usb_read_data(endpoint, usb_state.rx_data, usb_state.rx_size, (U32 *)&(usb_state.rx_len));
 #endif
 
       return;
