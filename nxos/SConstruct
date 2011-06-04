@@ -235,10 +235,14 @@ else:
 mycflags.append('-g')
 mycflags.append('-ggdb')
 mycflags.append('-D__NXOS__')
+mycflags.append('-D__DBGENABLE__')
+mycflags.append('-D__FANTOMENABLE__')
 
 myasflags.append('-g')
 myasflags.append('-ggdb')
 myasflags.append('-D__NXOS__')
+myasflags.append('-D__DBGENABLE__')
+myasflags.append('-D__FANTOMENABLE__')
 
 env.Replace(CCFLAGS = mycflags, ASFLAGS = myasflags )
 
