@@ -31,4 +31,8 @@ v1:     .long nx__irq_handler
 v2:     .long nx__prefetch_abort_handler
 v3:     .long nx__data_abort_handler
 v4:     .long nx__unhandled_exception
+#ifdef __DBGENABLE__
 v5:     .long undef_handler
+#else
+v5:     .long nx__default_undef_handler
+#endif
