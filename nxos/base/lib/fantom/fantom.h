@@ -37,7 +37,7 @@
  * If False, msgPtr and lenPtr unchanged.
  * If True, msgPtr and lenPtr will indicate reply if *lenPtr > 0
  */
-bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms, void *isrReturnAddress);
+bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms);
 
 /*@}*/
 /*@}*/

@@ -5,18 +5,17 @@
  * Redistribution of this file is permitted under
  * the terms of the GNU Public License (GPL) version 2.
  */
-#include "armdebug/Debugger/debug_stub.h"
 
 #include "base/at91sam7s256.h"
 
 #include "base/types.h"
-#include "base/interrupts.h"
 #include "base/assert.h"
-#include "base/drivers/systick.h"
-#include "base/drivers/aic.h"
 #include "base/util.h"
 
 #include "base/lib/fantom/fantom.h"
+#ifdef __DBGENABLE__
+#include "armdebug/Debugger/debug_stub.h"
+#endif
 
 /* Fantom Version System Command */
 #define SYSCMD_MSGTYPE 0x01
@@ -29,7 +28,7 @@ static U8 SysCmd_VersionResponse[SYSCMD_VERSIONRESPONSE_LEN] = { 0x02, 0x88, 0x0
 #define GDB_PROTO_MSGTYPE 0x8d		/* Defined here to avoid including debug_internals.h */
 
 /* Filter Fantom related traffic (queries, GDB protocol) */
-bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms, void *isrReturnAddress)
+bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms)
 {
   /* WARNING: This routine is called from the ISR.
    * Consequently, the amount of processing done here must be as little as possible.
@@ -39,7 +38,7 @@ bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms, void *isrRet
    * As well as trap GDB remote protocol
    */
 
-	comm_chan_t comms;
+	// comm_chan_t comms;
 	bool status = FALSE;
 
 	if (*lenPtr == 0)
@@ -53,11 +52,12 @@ bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms, void *isrRet
 			status = TRUE;
 		}
 		break;
-
+#ifdef __DBGENABLE__
 	case GDB_PROTO_MSGTYPE:
-		comms = isBTComms ? COMM_BT : COMM_USB;
-		status = nxos__handleDebug(*msgPtr, comms, *lenPtr, isrReturnAddress);
+		// comms = isBTComms ? COMM_BT : COMM_USB;
+		status = nxos__handleDebug(*msgPtr, (isBTComms ? COMM_BT : COMM_USB), *lenPtr);
 		/* Fall through */
+#endif
 	default:
 		*msgPtr = NULL;
 		*lenPtr = 0;
