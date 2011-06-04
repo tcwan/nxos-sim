@@ -733,17 +733,20 @@ void tests_bt(void) {
 
 void tests_fantom(void) {
   U16 i;
-  U32 lng = 0;
   U32 count = 0;
 
   char buffer[NX_USB_PACKET_SIZE];
-  U8 *messagePtr;
-  U32 *isrReturnAddress = NULL;
 
   hello();
 
   // Enable EP1
+#if !defined (__FANTOMENABLE__) && !defined (__DBGENABLE__)
+  U32 lng = 0;
+  U8 *messagePtr;
   nx_usb_read((U8 *)&buffer, NX_USB_PACKET_SIZE * sizeof(char));
+#else
+  nx_usb_fantom_read((U8 *)&buffer, NX_USB_PACKET_SIZE * sizeof(char));
+#endif
 
   while(1) {
     nx_display_cursor_set_pos(0, 0);
@@ -760,6 +763,7 @@ void tests_fantom(void) {
     if (i >= 500)
       break;
 
+#if !defined (__FANTOMENABLE__) && !defined (__DBGENABLE__)
 
     nx_display_clear();
 
@@ -769,7 +773,7 @@ void tests_fantom(void) {
      nx_display_uint(lng);
 
     messagePtr = (U8 *)buffer;
-    if (fantom_filter_packet(&messagePtr, (U32 *)&lng, FALSE, isrReturnAddress)) {
+    if (fantom_filter_packet(&messagePtr, (U32 *)&lng, FALSE)) {
       /* message was a fantom packet, so send any reply and clear it from our read buffers */
       if (lng > 0)
         nx_usb_write(messagePtr, lng);
@@ -785,7 +789,7 @@ void tests_fantom(void) {
     nx_systick_wait_ms(1000);
 
     nx_display_clear();
-
+#endif
   }
 
   goodbye();
