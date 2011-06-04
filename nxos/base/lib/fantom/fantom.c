@@ -39,7 +39,7 @@ bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms)
    */
 
 	// comm_chan_t comms;
-	bool status = FALSE;
+	bool status = (isBTComms != isBTComms);	/* FALSE: needed to stop compiler complaints about unused variable */
 
 	if (*lenPtr == 0)
 		return status;
