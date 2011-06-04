@@ -73,7 +73,10 @@ nx__irq_handler:
         ands lr, lr, #7
         eornes lr, lr, #7
 
-        /* Switch to either sys or svc mode to save the state. */
+        /* Switch to either sys or svc mode to save the state.
+         * If usr/sys -> sys
+         * Else (any other state) -> svc
+         */
         msreq cpsr_c, #(MODE_SYS | IRQ_FIQ_MASK)
         msrne cpsr_c, #(MODE_SVC | IRQ_FIQ_MASK)
 
