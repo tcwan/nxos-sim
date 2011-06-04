@@ -17,7 +17,9 @@
 
 #include "base/drivers/_usb.h"
 
+#if defined (__FANTOMENABLE__) || defined(__DBGENABLE__)
 #include "base/lib/fantom/fantom.h"
+#endif
 
 /* The USB controller supports up to 4 endpoints. */
 #define N_ENDPOINTS 4
@@ -236,7 +238,7 @@ static volatile struct {
   U8 *tx_data[2];
   U32 tx_len[2];
 
-  /* Used to write the data from the EP1
+  /* Used to write the data from EP1
    */
   U8 *rx_data;
 
@@ -246,11 +248,24 @@ static volatile struct {
   /* length of the read packet (0 if none) */
   U32 rx_len;
 
+#if defined (__FANTOMENABLE__) || defined (__DBGENABLE__)
+  /* Used to write fantom messages from EP1
+   */
+  U8 *fantom_message;
+
+  /* size of the fantom message buffer */
+  U32 fantom_msg_size;
+
+  /* length of the fantom message (0 if none) */
+  U32 fantom_msg_len;
+
+#endif
 
   /* The USB controller has two hardware input buffers. This remembers
    * the one currently in use.
    */
   U8 current_rx_bank;
+
 } usb_state;
 
 
@@ -318,9 +333,9 @@ static void usb_write_data(int endpoint, const U8 *ptr, U32 length) {
 
 
 /* Read one data packet from the USB controller.
- * Assume that usb_state.rx_data and usb_state.rx_len are set.
+ * Either fantom_msg parameters or rx data buffer parameters are passed in.
  */
-static void usb_read_data(int endpoint) {
+static void usb_read_data(int endpoint, U8 *buffer, U32 buffersize, U32 *length) {
   U16 i;
   U16 total;
 
@@ -334,19 +349,19 @@ static void usb_read_data(int endpoint) {
   }
 
   /* must not happen ! */
-  if (usb_state.rx_len > 0)
+  if (*length > 0)
     return;
 
   total = (AT91C_UDP_CSR[endpoint] & AT91C_UDP_RXBYTECNT) >> 16;
 
   /* we start reading */
-  /* all the bytes will be put in rx_data */
+  /* all the bytes will be put in buffer */
   for (i = 0 ;
-       i < total && i < usb_state.rx_size ;
+       i < total && i < buffersize ;
        i++)
-    usb_state.rx_data[i] = AT91C_UDP_FDR[1];
+    buffer[i] = AT91C_UDP_FDR[1];
 
-  usb_state.rx_len = i;
+  *length = i;
 
 
   /* if we have read all the byte ... */
@@ -527,7 +542,11 @@ static U32 usb_manage_setup_packet(void) {
     /* TODO: Make this a little nicer. Not quite sure how. */
 
     /* we can only active the EP1 if we have a buffer to get the data */
-    if (usb_state.rx_len == 0 && usb_state.rx_size > 0) {
+    if (((usb_state.rx_len == 0) && (usb_state.rx_size > 0))
+#if defined (__FANTOMENABLE__) || defined(__DBGENABLE__)
+    		|| ((usb_state.fantom_msg_len == 0) && (usb_state.fantom_msg_size > 0))
+#endif
+   	) {
       AT91C_UDP_CSR[1] = AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_OUT;
       while (AT91C_UDP_CSR[1] != (AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_OUT));
     }
@@ -554,10 +573,9 @@ static U32 usb_manage_setup_packet(void) {
 static void usb_isr(void) {
   U8 endpoint = 127;
   U32 csr, isr;
-#if 0
+#if defined (__FANTOMENABLE__) || defined(__DBGENABLE__)
   U8 *messagePtr;
   U32 messageLen;
-  U32 *isrReturnAddress;
 #endif
 
   isr = *AT91C_UDP_ISR;
@@ -668,16 +686,25 @@ static void usb_isr(void) {
         while (AT91C_UDP_CSR[1] & AT91C_UDP_EPEDS);
       }
 
-      usb_read_data(endpoint);
-#if 0
-      messagePtr = usb_state.rx_data;
-      messageLen = usb_state.rx_len;
-      if (fantom_filter_packet(&messagePtr, &messageLen, FALSE, isrReturnAddress)) {
-        /* message was a fantom packet, so send any reply and clear it from our read buffers */
+#if defined (__FANTOMENABLE__) || defined (__DBGENABLE__)
+      usb_read_data(endpoint, usb_state.fantom_message, usb_state.fantom_msg_size, (U32 *)&(usb_state.fantom_msg_len));
+      messagePtr = usb_state.fantom_message;
+      messageLen = usb_state.fantom_msg_len;
+      if (fantom_filter_packet(&messagePtr, &messageLen, FALSE)) {
+        /* returned TRUE: fantom message received, so send any reply and clear it from our read buffers */
         if (messageLen > 0)
           usb_write_data(2, messagePtr, messageLen);
-        usb_state.rx_len = 0;
+      } else {
+    	/* returned FALSE: not a fantom message, copy message to rx data buffer */
+    	messageLen = MIN(usb_state.fantom_msg_len, usb_state.rx_size);
+    	memcpy(usb_state.rx_data, usb_state.fantom_message, messageLen);
+    	usb_state.rx_len = messageLen;
       }
+      /* reset fantom_message buffer, reenable EP1 */
+      nx_usb_fantom_read(NULL, 0);
+
+#else
+      usb_read_data(endpoint, usb_state.rx_data, usb_state.rx_size, &(usb_state.rx_len));
 #endif
 
       return;
@@ -847,3 +874,29 @@ U32 nx_usb_data_read(void)
 {
   return usb_state.rx_len;
 }
+
+#if defined (__FANTOMENABLE__) || defined (__DBGENABLE__)
+void nx_usb_fantom_read(U8 *data, U32 length)
+{
+  /* If data is NULL, just reset the message length, and re-enable EP1 */
+  if (data != NULL) {
+	  usb_state.fantom_message = data;
+	  usb_state.fantom_msg_size = length;
+  }
+  NX_ASSERT_MSG(usb_state.fantom_message != NULL,
+		"Fantom Message Buffer Not Set!");
+  usb_state.fantom_msg_len  = 0;
+
+  if (usb_state.status > USB_UNINITIALIZED
+      && usb_state.status != USB_SUSPENDED) {
+    AT91C_UDP_CSR[1] |= AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_OUT;
+  }
+}
+
+
+U32 nx_usb_fantom_data_read(void)
+{
+  return usb_state.fantom_msg_len;
+}
+#endif
+

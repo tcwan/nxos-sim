@@ -82,6 +82,22 @@ void nx_usb_read(U8 *data, U32 length);
 U32 nx_usb_data_read(void);
 
 
+#if defined (__FANTOMENABLE__) || defined (__DBGENABLE__)
+/**
+ * Specify where the next fantom message must be put
+ * @note if a packet has a size smaller than the provided one, then all the area won't be used
+ */
+void nx_usb_fantom_read(U8 *data, U32 length);
+
+/**
+ * Indicates when the fantom message have been read.
+ * @note initial value = 0 ;  reset to 0 after each call to nx_usb_fantom_read()
+ * @return the packet size read
+ */
+U32 nx_usb_fantom_data_read(void);
+
+#endif
+
 /*@}*/
 /*@}*/
 
