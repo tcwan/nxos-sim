@@ -24,9 +24,11 @@
 #include "drivers/i2c.h"
 
 #include "base/_core.h"
+#ifdef __DBGENABLE__
 #include "armdebug/Debugger/debug_stub.h"
 #ifdef TEST_DBGBKPT
 #include "armdebug/Debugger/debug_test.h"
+#endif
 #endif
 
 /* main() is the entry point into the custom payload, not included in
@@ -100,12 +102,19 @@ void nx_core_register_shutdown_handler(nx_closure_t handler) {
 
 void nx__kernel_main(void) {
   core_init();
-  dbg__bkpt_init();
   check_boot_errors();
+#ifdef __DBGENABLE__
+  dbg__bkpt_init();
 #ifdef TEST_DBGBKPT
   dbg__test_arm_bkpt();                 /* Routine to trigger a manual ARM Breakpoint */
   dbg__test_thumb_bkpt();               /* Routine to trigger a manual Thumb Breakpoint */
 #endif
+#endif
+
+#if defined(__FANTOMENABLE__) && !defined(__DBGENABLE__)
+  fantom_init();
+#endif
+
   main();
   if( NX_BOOT_FROM_ENH_FW )
     nx_core_reset();
