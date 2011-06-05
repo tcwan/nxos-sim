@@ -72,7 +72,7 @@ bool nx_usb_data_written(void);
  * Specify where the next read data must be put
  * @note if a packet has a size smaller than the provided one, then all the area won't be used
  */
-void nx_usb_read(U8 *data, U32 length);
+void nx_usb_read(U8 *data, U32 size);
 
 /**
  * Indicates when the data have been read.
@@ -87,7 +87,7 @@ U32 nx_usb_data_read(void);
  * Specify where the next fantom message must be put
  * @note if a packet has a size smaller than the provided one, then all the area won't be used
  */
-void nx_usb_fantom_read(U8 *data, U32 length);
+void nx_usb_fantom_read(U8 *data, U32 size);
 
 /**
  * Indicates when the fantom message have been read.

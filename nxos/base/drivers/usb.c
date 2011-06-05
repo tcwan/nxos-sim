@@ -857,10 +857,10 @@ bool nx_usb_is_connected(void) {
 }
 
 
-void nx_usb_read(U8 *data, U32 length)
+void nx_usb_read(U8 *data, U32 size)
 {
   usb_state.rx_data = data;
-  usb_state.rx_size = length;
+  usb_state.rx_size = size;
   usb_state.rx_len  = 0;
 
   if (usb_state.status > USB_UNINITIALIZED
@@ -876,12 +876,12 @@ U32 nx_usb_data_read(void)
 }
 
 #if defined (__FANTOMENABLE__) || defined (__DBGENABLE__)
-void nx_usb_fantom_read(U8 *data, U32 length)
+void nx_usb_fantom_read(U8 *data, U32 size)
 {
   /* If data is NULL, just reset the message length, and re-enable EP1 */
   if (data != NULL) {
 	  usb_state.fantom_message = data;
-	  usb_state.fantom_msg_size = length;
+	  usb_state.fantom_msg_size = size;
   }
   NX_ASSERT_MSG(usb_state.fantom_message != NULL,
 		"Fantom Message Buffer Not Set!");
