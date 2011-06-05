@@ -234,15 +234,31 @@ else:
     myasflags.append('-Wa,-mcpu=arm7tdmi,-mfpu=softfpa')
 mycflags.append('-g')
 mycflags.append('-ggdb')
+#################################################################
+# Debugger and Fantom Support Flags
+#
+# If armdebug is desired, the following flags must be defined:
+# __NXOS__, __DBGENABLE__
+#
+# (__NXOS__ selects armdebug for NxOS)
+#
+# If Fantom Driver support (no debugging) is desired, 
+# the following flag is needed:
+# __FANTOMENABLE__
+#
+# Flag precedence:
+# __DBGENABLE__ >= __FANTOMENABLE__ > None
+#
+#################################################################
 mycflags.append('-D__NXOS__')
 mycflags.append('-D__DBGENABLE__')
-mycflags.append('-D__FANTOMENABLE__')
+#mycflags.append('-D__FANTOMENABLE__')
 
 myasflags.append('-g')
 myasflags.append('-ggdb')
 myasflags.append('-D__NXOS__')
 myasflags.append('-D__DBGENABLE__')
-myasflags.append('-D__FANTOMENABLE__')
+#myasflags.append('-D__FANTOMENABLE__')
 
 env.Replace(CCFLAGS = mycflags, ASFLAGS = myasflags )
 
