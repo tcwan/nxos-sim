@@ -26,12 +26,18 @@
  */
 /*@{*/
 
+/** Initialize Fantom library support.
+ *
+ * @param fantom_msg Receive Fantom message pointer
+ * @param size Receive Fantom message max size
+ */
+void fantom_init(U8 *fantom_msg, U32 size);
+
 /** Filter Fantom related traffic (queries, GDB protocol).
  *
  * @param msgPtr Received/Reply message pointer
  * @param lenPtr Received/Reply message length pointer
  * @param isBTComms True if Bluetooth Comms used
- * @param isrReturnAddress Address of Instruction interrupted by IRQ
  * @return True: packet filtered, False: Not a Fantom Packet.
  *
  * If False, msgPtr and lenPtr unchanged.

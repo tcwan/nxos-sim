@@ -12,9 +12,16 @@
 #include "base/assert.h"
 #include "base/util.h"
 
+#include "base/drivers/usb.h"
+
 #include "base/lib/fantom/fantom.h"
+
 #ifdef __DBGENABLE__
 #include "armdebug/Debugger/debug_stub.h"
+#include "armdebug/Debugger/debug_internals.h"
+
+/* GDB Protcol Message Type */
+//#define GDB_PROTO_MSGTYPE 0x8d		/* Defined here to avoid including debug_internals.h */
 #endif
 
 /* Fantom Version System Command */
@@ -24,8 +31,15 @@ static U8 SysCmd_VersionQuery[SYSCMD_VERSIONQUERY_LEN] = { SYSCMD_MSGTYPE, 0x88 
 #define SYSCMD_VERSIONRESPONSE_LEN 7
 static U8 SysCmd_VersionResponse[SYSCMD_VERSIONRESPONSE_LEN] = { 0x02, 0x88, 0x00, 0x7C, 0x01, 0x1C, 0x01 };
 
-/* GDB Protcol Message Type */
-#define GDB_PROTO_MSGTYPE 0x8d		/* Defined here to avoid including debug_internals.h */
+
+
+void fantom_init(U8 *fantom_msg, U32 size)
+{
+	/* Setup for USB */
+	nx_usb_fantom_read(fantom_msg, size);
+
+	/* TODO: Setup for Bluetooth */
+}
 
 /* Filter Fantom related traffic (queries, GDB protocol) */
 bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms)
