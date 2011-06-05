@@ -19,9 +19,6 @@
 #ifdef __DBGENABLE__
 #include "armdebug/Debugger/debug_stub.h"
 #include "armdebug/Debugger/debug_internals.h"
-
-/* GDB Protcol Message Type */
-//#define GDB_PROTO_MSGTYPE 0x8d		/* Defined here to avoid including debug_internals.h */
 #endif
 
 /* Fantom Version System Command */
