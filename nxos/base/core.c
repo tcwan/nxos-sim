@@ -31,6 +31,13 @@
 #endif
 #endif
 
+#if defined(__FANTOMENABLE__) && !defined(__DBGENABLE__)
+#include "base/lib/fantom/fantom.h"
+
+/* Fantom Message Buffer is needed to filter fantom messages */
+static U8 fantom_msg_buffer[NX_USB_PACKET_SIZE];
+#endif
+
 /* main() is the entry point into the custom payload, not included in
  * the NxOS core.
  */
@@ -112,7 +119,7 @@ void nx__kernel_main(void) {
 #endif
 
 #if defined(__FANTOMENABLE__) && !defined(__DBGENABLE__)
-  fantom_init();
+  fantom_init(fantom_msg_buffer, NX_USB_PACKET_SIZE);
 #endif
 
   main();
