@@ -700,8 +700,6 @@ static void usb_isr(void) {
     	memcpy(usb_state.rx_data, usb_state.fantom_message, messageLen);
     	usb_state.rx_len = messageLen;
       }
-      /* reset fantom_message buffer, reenable EP1 */
-      nx_usb_fantom_read(NULL, 0);
 
 #else
       usb_read_data(endpoint, usb_state.rx_data, usb_state.rx_size, (U32 *)&(usb_state.rx_len));
