@@ -16,10 +16,12 @@
 
 #include "base/lib/fantom/fantom.h"
 
+
 #ifdef __DBGENABLE__
 #include "armdebug/Debugger/debug_stub.h"
 #include "armdebug/Debugger/debug_internals.h"
 #endif
+
 
 /* Fantom Version System Command */
 #define SYSCMD_MSGTYPE 0x01
@@ -32,10 +34,15 @@ static U8 SysCmd_VersionResponse[SYSCMD_VERSIONRESPONSE_LEN] = { 0x02, 0x88, 0x0
 
 void fantom_init(U8 *fantom_msg, U32 size)
 {
+        NX_ASSERT(fantom_msg != NULL);
+        NX_ASSERT(size > 0);
+
+#if defined (__FANTOMENABLE__) || defined (__DBGENABLE__)
 	/* Setup for USB */
 	nx_usb_fantom_read(fantom_msg, size);
 
 	/* TODO: Setup for Bluetooth */
+#endif
 }
 
 /* Filter Fantom related traffic (queries, GDB protocol) */
@@ -59,8 +66,12 @@ bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms)
 		if ((*lenPtr == 2) && ((*msgPtr)[1] == SysCmd_VersionQuery[1])) {
 			*msgPtr = SysCmd_VersionResponse;
 			*lenPtr = SYSCMD_VERSIONRESPONSE_LEN;
-                        /* fantom command processed: reset fantom_message buffer, reenable EP1 */
+
+#if defined (__FANTOMENABLE__) || defined (__DBGENABLE__)
+                       /* fantom command processed: reset fantom_message buffer, reenable EP1 */
 			nx_usb_fantom_read(NULL, 0);
+#endif
+
 			status = TRUE;
 		}
 		break;
@@ -81,3 +92,4 @@ bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms)
 	}
 	return status;
 }
+
