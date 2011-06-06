@@ -23,12 +23,32 @@
 #endif
 
 
+/* Fantom Message Types */
+#define DIRECTCMD_MSGTYPE 0x00
+#define SYSTEMCMD_MSGTYPE 0x01
+#define REPLYCMD_MSGTYPE 0x02
+
 /* Fantom Version System Command */
-#define SYSCMD_MSGTYPE 0x01
 #define SYSCMD_VERSIONQUERY_LEN 2
-static U8 SysCmd_VersionQuery[SYSCMD_VERSIONQUERY_LEN] = { SYSCMD_MSGTYPE, 0x88 };
+static U8 SysCmd_VersionQuery[SYSCMD_VERSIONQUERY_LEN] = { SYSTEMCMD_MSGTYPE, 0x88 };
 #define SYSCMD_VERSIONRESPONSE_LEN 7
-static U8 SysCmd_VersionResponse[SYSCMD_VERSIONRESPONSE_LEN] = { 0x02, 0x88, 0x00, 0x7C, 0x01, 0x1C, 0x01 };
+/* FIXME: The following contains dummy data */
+static U8 SysCmd_VersionResponse[SYSCMD_VERSIONRESPONSE_LEN] = { REPLYCMD_MSGTYPE, 0x88, 0x00,
+      0x81, 0x01, /* Protocol Version: Minor (use 129+ for NxOS), Major (must be 1 for Fantom support) v.1.129 */
+      0x81, 0x01  /* Firmware Version: Minor (use 129+ for NxOS), Major (must be 1 for Fantom support) v.1.129 */
+};
+
+/* Fantom Get Info System Command */
+#define SYSCMD_GETINFOQUERY_LEN 2
+static U8 SysCmd_GetInfoQuery[SYSCMD_GETINFOQUERY_LEN] = { SYSTEMCMD_MSGTYPE, 0x9B };
+#define SYSCMD_GETINFORESPONSE_LEN 33
+/* FIXME: The following contains dummy data */
+static U8 SysCmd_GetInfoResponse[SYSCMD_GETINFORESPONSE_LEN] = { REPLYCMD_MSGTYPE, 0x9B, 0x00,
+       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* NXT Name: 14 + ASCIIZ */
+       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* BT Address: 7 bytes */
+       0x00, 0x00, 0x00, 0x00, /* BT Signal Strength: U32 (Little Endian) */
+       0x00, 0x00, 0x00, 0x00  /* Available Flash Size: U32 (Little Endian) */
+};
 
 
 
@@ -62,18 +82,26 @@ bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms)
 		return status;
 
 	switch ((*msgPtr)[0]) {
-	case SYSCMD_MSGTYPE:
-		if ((*lenPtr == 2) && ((*msgPtr)[1] == SysCmd_VersionQuery[1])) {
-			*msgPtr = SysCmd_VersionResponse;
-			*lenPtr = SYSCMD_VERSIONRESPONSE_LEN;
+	case SYSTEMCMD_MSGTYPE:
+		if (*lenPtr == 2) {
+                    if ((*msgPtr)[1] == SysCmd_VersionQuery[1]) {
+                      *msgPtr = SysCmd_VersionResponse;
+                      *lenPtr = SYSCMD_VERSIONRESPONSE_LEN;
+                      status = TRUE;
+                    } else if ((*msgPtr)[1] == SysCmd_GetInfoQuery[1]) {
+                      *msgPtr = SysCmd_GetInfoResponse;
+                      *lenPtr = SYSCMD_GETINFORESPONSE_LEN;
+                      status = TRUE;
+                    }
+		}
 
 #if defined (__FANTOMENABLE__) || defined (__DBGENABLE__)
-                       /* fantom command processed: reset fantom_message buffer, reenable EP1 */
-			nx_usb_fantom_read(NULL, 0);
+		if (TRUE == status) {
+                    /* fantom command processed: reset fantom_message buffer, reenable EP1 */
+                    nx_usb_fantom_read(NULL, 0);
+		}
 #endif
 
-			status = TRUE;
-		}
 		break;
 #ifdef __DBGENABLE__
 	/* WARNING: This assumes that any message matching the NXT_GDBMSG_TELEGRAMTYPE header is a GDB message packet.
