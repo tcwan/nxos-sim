@@ -65,7 +65,7 @@ bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms)
 		}
 		break;
 #ifdef __DBGENABLE__
-	/* WARNING: This assumes that any message matching the GDB_PROTO_MSGTYPE header is a GDB message packet.
+	/* WARNING: This assumes that any message matching the NXT_GDBMSG_TELEGRAMTYPE header is a GDB message packet.
 	 * It will break any user data transmission containing such a packet starting byte in its data stream.
 	 */
 	case NXT_GDBMSG_TELEGRAMTYPE:
