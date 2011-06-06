@@ -745,12 +745,12 @@ void tests_fantom(void) {
   U8 *messagePtr;
   nx_usb_read((U8 *)&buffer, NX_USB_PACKET_SIZE * sizeof(char));
 #else
-  nx_usb_fantom_read((U8 *)&buffer, NX_USB_PACKET_SIZE * sizeof(char));
+  fantom_init((U8 *)&buffer, NX_USB_PACKET_SIZE * sizeof(char));
 #endif
 
   while(1) {
     nx_display_cursor_set_pos(0, 0);
-    nx_display_string("Waiting Fantom message ...");
+    nx_display_string("Waiting for Fantom message ...");
     nx_display_uint(count);
 
 
@@ -759,6 +759,8 @@ void tests_fantom(void) {
     {
       nx_systick_wait_ms(200);
     }
+
+    count++;
 
     if (i >= 500)
       break;
@@ -775,15 +777,16 @@ void tests_fantom(void) {
     messagePtr = (U8 *)buffer;
     if (fantom_filter_packet(&messagePtr, (U32 *)&lng, FALSE)) {
       /* message was a fantom packet, so send any reply and clear it from our read buffers */
-      if (lng > 0)
+      if (lng > 0) {
         nx_usb_write(messagePtr, lng);
+        nx_display_cursor_set_pos(0, 4);
+        nx_display_string("Sent Fantom message ...");
+        nx_display_uint(lng);
+      }
     }
     // Reenable EP1
     nx_usb_read((U8 *)&buffer, NX_USB_PACKET_SIZE * sizeof(char));
 
-    nx_display_cursor_set_pos(0, 4);
-    nx_display_string("Sent Fantom message ...");
-    nx_display_uint(lng);
     count++;
 
     nx_systick_wait_ms(1000);
