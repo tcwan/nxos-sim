@@ -49,7 +49,6 @@ bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms)
    * As well as trap GDB remote protocol
    */
 
-	// comm_chan_t comms;
 	bool status = (isBTComms != isBTComms);	/* FALSE: needed to stop compiler complaints about unused variable */
 
 	if (*lenPtr == 0)
@@ -60,13 +59,19 @@ bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms)
 		if ((*lenPtr == 2) && ((*msgPtr)[1] == SysCmd_VersionQuery[1])) {
 			*msgPtr = SysCmd_VersionResponse;
 			*lenPtr = SYSCMD_VERSIONRESPONSE_LEN;
+                        /* fantom command processed: reset fantom_message buffer, reenable EP1 */
+			nx_usb_fantom_read(NULL, 0);
 			status = TRUE;
 		}
 		break;
 #ifdef __DBGENABLE__
+	/* WARNING: This assumes that any message matching the GDB_PROTO_MSGTYPE header is a GDB message packet.
+	 * It will break any user data transmission containing such a packet starting byte in its data stream.
+	 */
 	case GDB_PROTO_MSGTYPE:
-		// comms = isBTComms ? COMM_BT : COMM_USB;
-		status = nxos__handleDebug(*msgPtr, (isBTComms ? COMM_BT : COMM_USB), *lenPtr);
+		nxos__handleDebug(*msgPtr, (isBTComms ? COMM_BT : COMM_USB), *lenPtr);
+		/* Returned status ignored, since we don't want it to propagate up to caller */
+                status = TRUE;
 		/* Fall through */
 #endif
 	default:
