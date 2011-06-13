@@ -662,8 +662,8 @@ dbg__arm_bkpt_handler:
 /*	b	_process_normal_breakpoint */
 
 _process_normal_breakpoint:
-	bl	_dbg__restore_breakpoints
-	bl	_dbg__restore_singlestep
+	bl	_dbg__restore_breakpoints	/* includes restoring single step */
+/*	bl	_dbg__restore_singlestep */
 	bl	_dbg__clear_singlestep
 	bl	_dbg__flush_icache
 	b	dbg__bkpt_waitCMD
@@ -720,6 +720,8 @@ dbg__bkpt_offset_outofrange:
 dbg__bkpt_waitCMD:
 	/* We enter this code section when a Breakpoint Triggers */
     _dbg_setmode TRUE                       /* Debug Mode = True */
+	msr	cpsr_c, #(MODE_ABT)					/* Re-enable Interrupts */
+
 	_dbg_getstate r0
 	cmp		r0, #DBG_CONFIGURED
 	blo		dbg__bkpt_waitCMD_cont			/* Not configured yet, don't send Breakpoint Signal Response */
