@@ -32,7 +32,7 @@
 #include "base/drivers/_uart.h"
 
 #include "base/lib/fantom/fantom.h"
-
+#include "armdebug/Debugger/debug_stub.h"
 #include "tests/tests.h"
 #include "tests/fs.h"
 
@@ -748,6 +748,7 @@ void tests_fantom(void) {
   fantom_init((U8 *)&buffer, NX_USB_PACKET_SIZE * sizeof(char));
 #endif
 
+  dbg_breakpoint_arm();
   while(1) {
     nx_display_cursor_set_pos(0, 0);
     nx_display_string("Waiting for Fantom message ...");
