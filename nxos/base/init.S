@@ -12,7 +12,7 @@
 
 #include "asm_decls.h"
 
-#define IRQ_STACK_GUARD 	/* Insert a stack guard value at top of IRQ stack */
+#define ENABLE_STACK_GUARD 	/* Insert a stack guard value at top of selected stacks */
 #define STACK_GUARD_VAL 0xDEADBEEF
 /*
  * Definition of a few constants, for readability.
@@ -225,25 +225,42 @@ wait_mclk_3:
          * properly in the linker script.
          */
 
-        /* Set up the IRQ stack. */
-        msr cpsr_c, #(MODE_IRQ | IRQ_FIQ_MASK)
-        ldr sp, =__irq_stack__
-        bic sp, sp, #7
-
-#ifdef IRQ_STACK_GUARD
-		/* install IRQ stack guard */
+        ldr	r0, =__ram_userspace_end__
+        bic r0, r0, #7
+#ifdef ENABLE_STACK_GUARD
+		/* setup stack guard value */
         ldr r1, =STACK_GUARD_VAL
-        str r1, [sp]
 #endif
+
+        /* Set up the IRQ stack (moved to top of RAM). */
+        msr cpsr_c, #(MODE_IRQ | IRQ_FIQ_MASK)
+        mov sp, r0
+
+        /* Set up the SYS/User stack (moved to top of RAM). */
+        /* Note: Currently SYS/User Mode is not used.
+         * If we enable user tasks scheduling, the stack initialization
+         * for IRQ vs. User modes would have to be changed.
+         */
+        msr cpsr_c, #(MODE_SYS | IRQ_FIQ_MASK)
+        mov sp, r0
+
         /* Set up the abort mode stack. */
         msr cpsr_c, #(MODE_ABT | IRQ_FIQ_MASK)
-        ldr sp, =__ram_userspace_end__
+        ldr sp, =__abort_stack__
         bic sp, sp, #7
+		/* There is no need to setup a stack guard value,
+		 * since that slot contains part of the Debugger state
+		 * and will be overwritten
+		 */
 
         /* Set up the supervisor mode stack. */
         msr cpsr_c, #(MODE_SVC | IRQ_FIQ_MASK)
         ldr sp, =__supervisor_stack__
         bic sp, sp, #7
+#ifdef ENABLE_STACK_GUARD
+		/* store stack guard value */
+        str r1, [sp]
+#endif
 
         /* Set up initial frame pointers for C code in both Arm
          * and Thumb modes. */
