@@ -39,6 +39,7 @@ nx__unhandled_exception:
  * User/System Task (USR/SYS) -> System (SYS) Mode
  * NxOS Task (SVC) -> Supervisor (SVC) Mode
  * Debugger Task (ABT/UNDEF) -> Abort (ABT) Mode
+ * All other reserved modes -> Abort (ABT) Mode
  *
  * The interrupt stack frame consists of the following
  * Registers: SPSR, PC, LR, R12, R3, R2, R1, R0
@@ -49,11 +50,78 @@ nx__unhandled_exception:
 
         .global nx__irq_handler
 nx__irq_handler:
-        sub lr, lr, #4
-/* Stub code for now */
-        stmfd sp!, {lr}
-        ldmfd sp!, {pc}^
+		/* The IRQ stack is not used at all. Hence, SP is used as a temporary variable R13 */
+		mov		r13, r0			/* Keep R0 in SP_irq temporarily */
+		sub		r0, lr, #4		/* Adjust return address (interrupted instruction address), copy to R0 for mode switch */
+		mov		r14, r1			/* Keep R1 in LR_irq temporarily */
+		mrs		r1, spsr		/* Retrieve SPSR_irq */
 
+        /* Compare the SPSR mode bits to both 0000 and 1111 (usr/sys mode). */
+        ands 	r1, r1, #7		/* eq (0) == User Mode */
+        eornes 	r1, r1, #7		/* ne (!0) && eor #7 => eq (0) == SYS mode) */
+		mrs		r1, spsr		/* Reload SPSR_irq */
+
+        msreq	cpsr_c, #(MODE_SYS | IRQ_MASK)	/* Match, so switch to SYS Mode */
+		beq		_irq_save_stack_frame
+
+		and		r1, r1, #MODE_MASK	/* check for other modes */
+		teq		r1, #MODE_SVC		/* Supervisor Mode? */
+		mrs		r1, spsr			/* Reload SPSR_irq */
+
+        msreq	cpsr_c, #(MODE_SVC | IRQ_MASK)	/* Match, so switch to SVC Mode */
+		beq		_irq_save_stack_frame
+
+        msr		cpsr_c, #(MODE_ABT | IRQ_MASK)	/* Else, goto Abort Mode (catch all) */
+
+_irq_save_stack_frame:
+		stmfd	sp!, {r0, r1}			/* Save interrupted instruction SPSR, PC to privileged mode stack */
+		stmfd	sp!, {r2-r3, r12, lr}	/* Save AAPCS clobbered registers to interrupt stack frame */
+		mov		r0, sp					/* Make privileged mode SP available in IRQ mode */
+		sub		sp, sp, #(2*4)			/* Reserve stack space for R0 & R1 */
+		mrs		r1, cpsr				/* retrieve current privileged mode */
+
+        msr		cpsr_c, #(MODE_IRQ | IRQ_MASK)	/* Return to IRQ mode to save R0 & R1 kept in SP_irq, LR_irq */
+		stmfd	r0, {r13, r14}			/* completed saving interrupt stack frame (SPSR, PC, LR, R12, R3, R2, R1, R0) */
+
+        /* Get the IVR value. */
+        ldr 	r2, =AT91C_AIC_IVR
+        ldr 	r0, [r2]
+
+        /* If we're in Protected mode (usually for JTAG debugging), we
+         * need to write back to the IVR register to tell the AIC it
+         * can dispatch other higher priority interrupts again.
+         * In normal mode, this has no effect, so we can safely do it.
+         */
+        str 	r2, [r2]
+
+		and		r1, r1, #MODE_MASK		/* Enable IRQ (& FIQ) */
+		msr		cpsr_c, r1				/* return to previous privileged mode */
+        /* Dispatch the IRQ to the registered handler. */
+        mov 	lr, pc
+        bx 		r0
+
+		/* Clean up and exit */
+		mrs		r1, cpsr
+		orr		r1, #IRQ_FIQ_MASK			/* Mask IRQ and FIQ */
+		msr		cpsr_c, r1					/* Disable interrupts to restore context */
+
+		mov		r0, sp						/* Pass privileged mode SP to IRQ Mode */
+		ldr		lr, [r0, #(5*4)]			/* Restore LR to privileged mode */
+		add		sp, sp, #(8*4)				/* unstack interrupt stack frame from current privileged mode */
+
+        /* Switch back to IRQ mode and tell the AIC that the interrupt has been
+         * handled.
+         */
+        msr 	cpsr_c, #(MODE_IRQ | IRQ_FIQ_MASK)
+        ldr 	lr, =AT91C_AIC_EOICR
+        str 	lr, [lr]
+
+		mov		sp, r0						/* Point SP_irq to interrupt stack frame */
+		ldr		r0, [sp, #(7*4)]			/* Load SPSR to R0 */
+		msr		spsr_csxf, r0				/* Restore SPSR_irq */
+
+		ldmfd	sp!, {r0-r3, r12, lr, pc}^	/* Return execution to interrupted instruction, restore CPSR from SPSR_irq */
+		/* Note: SP_irq does not contain an actual IRQ stack pointer, so it does not matter what value it has on exit */
 
 #else
 /* This is the original NxOS Nested Interrupt Handler.

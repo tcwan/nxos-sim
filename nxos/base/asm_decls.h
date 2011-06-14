@@ -25,11 +25,14 @@
  */
 /*@{*/
 
-/** This bitmask disables IRQ and FIQ handling in the CPSR.
+/** @ CPSR Bitmasks
  *
- * It should be <tt>orr</tt>'d or <tt>bic</tt>'d with a CPSR or SPSR.
+ * IRQ and FIQ Bitmasks should be <tt>orr</tt>'d or <tt>bic</tt>'d with a CPSR or SPSR.
  */
 #define IRQ_FIQ_MASK 0xC0
+#define IRQ_MASK 0x80
+#define FIQ_MASK 0x40
+#define MODE_MASK 0x1F
 
 /** @name Processor modes
  *
