@@ -14,16 +14,6 @@
 #define __ASSEMBLY__
 #include "at91sam7s256.h"
 
-/*
- * Definition of a few constants, for readability.
- */
-@ #define AIC_IVR 0xFFFFF100   /* AIC Interrupt Vector Register */
-@ #define AIC_EOICR 0xFFFFF130 /* End Of Interrupt Control Register */
-
-
-	.extern dbg__thumb_bkpt_handler
-	.extern dbg__arm_bkpt_handler
-
 /**********************************************************
  * Default handlers for unknown IRQ and FIQ interrupts, and
  * unknown exception handler.
@@ -36,6 +26,63 @@ nx__default_fiq:
 nx__unhandled_exception:
         b nx__unhandled_exception
 
+#if defined (__DBGENABLE__)
+/* Enhanced NxOS Nested Interrupt Handler.
+ * Based on notes from:
+ * "Building Bare Metal ARM Systems with GNU," Miro Samek,
+ * 2007, http://www.state-machine.com
+ *
+ * No context information is stored in IRQ mode.
+ * Instead, the interrupt context will be stored
+ * in the following priviledged modes:
+ *
+ * User/System Task (USR/SYS) -> System (SYS) Mode
+ * NxOS Task (SVC) -> Supervisor (SVC) Mode
+ * Debugger Task (ABT/UNDEF) -> Abort (ABT) Mode
+ *
+ * The interrupt stack frame consists of the following
+ * Registers: SPSR, PC, LR, R12, R3, R2, R1, R0
+ * which is identical to the ARM v7-M hardware
+ * interrupt stack frame (see ref: Miro Samek).
+ *
+ */
+
+        .global nx__irq_handler
+nx__irq_handler:
+        sub lr, lr, #4
+/* Stub code for now */
+        stmfd sp!, {lr}
+        ldmfd sp!, {pc}^
+
+
+#else
+/* This is the original NxOS Nested Interrupt Handler.
+ * It only knows about User/System and SVC (Supervisor)
+ * modes, and does not handle ABT (Abort)  mode operation
+ * used by the Debugger correctly.
+ *
+ * The main issue has to do with how context information
+ * for the top level interrupted routine (presumably
+ * a User Task) is stored completely in the System stack,
+ * whereas SVC top level routines as well as routines that
+ * were interrupted by nested interrupts are stored in the
+ * SVC stack, with partial state kept in the IRQ stack.
+ * Since the Debugger operates in Abort mode, the
+ * multiple context switches causes the nested interrupt
+ * handler to get confused as to which is the correct
+ * previous state to return execution to.
+ *
+ * It would be much cleaner if all context information
+ * were kept in one stack, and context switching eliminated
+ * to avoid context restoration issues.
+ *
+ * Unfortunately, IRQ mode cannot be used for nested
+ * interrupt processing since a second IRQ occuring
+ * during the execution of the BL instruction will
+ * corrupt LR_irq by overwriting the subroutine return
+ * address with the IRQ return address.
+ * http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.faqs/1456.html
+ */
 
 /**********************************************************
  * IRQ entry/exit routine. This gets called for all
@@ -139,7 +186,7 @@ nx__irq_handler:
 
         /* Restore execution to the main code. */
         ldmfd sp!, {pc}^
-
+#endif
 
 /**********************************************************
  * Abort entry points. These get run when the CPU enters
