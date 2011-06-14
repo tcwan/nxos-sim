@@ -13,7 +13,7 @@
 #include "asm_decls.h"
 
 #define IRQ_STACK_GUARD 	/* Insert a stack guard value at top of IRQ stack */
-
+#define STACK_GUARD_VAL 0xDEADBEEF
 /*
  * Definition of a few constants, for readability.
  */
@@ -232,7 +232,7 @@ wait_mclk_3:
 
 #ifdef IRQ_STACK_GUARD
 		/* install IRQ stack guard */
-        ldr r1, =0xdeadbeef
+        ldr r1, =STACK_GUARD_VAL
         str r1, [sp]
 #endif
         /* Set up the abort mode stack. */
