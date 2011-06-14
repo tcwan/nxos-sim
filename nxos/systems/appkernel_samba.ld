@@ -104,6 +104,7 @@ SECTIONS {
    */
   .stack  : ALIGN(8) {
     /* irq stack */
+    __irq_stack_bottom__ = . ;
     . += 0x60; /* 96b, which is 3*8*4, the maximum irq stack size. */
     __irq_stack__ = .;
 
