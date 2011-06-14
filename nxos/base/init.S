@@ -232,10 +232,16 @@ wait_mclk_3:
         ldr r1, =STACK_GUARD_VAL
 #endif
 
+#if !defined (__DBGENABLE__)
+		/* IRQ stack is only used if Debugger is not enabled.
+		 * Otherwise R13 (SP_irq) is used as a temporary variable
+		 * during interrupt processing. Please see interrupt.S
+		 * for more details.
+		 */
         /* Set up the IRQ stack (moved to top of RAM). */
         msr cpsr_c, #(MODE_IRQ | IRQ_FIQ_MASK)
         mov sp, r0
-
+#endif
         /* Set up the SYS/User stack (moved to top of RAM). */
         /* Note: Currently SYS/User Mode is not used.
          * If we enable user tasks scheduling, the stack initialization
