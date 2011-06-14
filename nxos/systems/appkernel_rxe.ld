@@ -111,16 +111,17 @@ SECTIONS {
    * time to provide a clean environment for the kernel.
    */
   .stack  : ALIGN(8) {
-    /* irq stack */
-    __irq_stack_bottom__ = . ;
-    . += 0x60; /* 96b, which is 3*8*4, the maximum irq stack size. */
-    __irq_stack__ = .;
-
     /* supervisor stack */
     __supervisor_stack_bottom__ = . ;
     . += 0x400; /* 1k supervisor stack. */
     __supervisor_stack__ = .;
     __supervisor_stack_top__ = . ;
+
+    /* abort stack */
+    __abort_stack_bottom__ = . ;
+    . += 0x200; /* 512b abort stack. */
+    __abort_stack__ = .;
+    __abort_stack_top__ = .;
     
     /* debugger state */
     __debugger_stack_bottom__ = . ;
