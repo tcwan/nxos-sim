@@ -6,6 +6,15 @@
  * the terms of the GNU Public License (GPL) version 2.
  */
 
+.data
+.align 4
+interrupts_count: .long 1
+#if defined (__DBGENABLE__)
+irq_nesting_level: .long -1		/* -1: Not in Interrupt; 0: Top Level Interrupt; 1+: Interrupt Nesting Level */
+	.global irq_stack_frame_address
+irq_stack_frame_address: .long 0
+#endif
+
 .text
 .code 32
 .align 0
@@ -46,6 +55,11 @@ nx__unhandled_exception:
  * which is identical to the ARM v7-M hardware
  * interrupt stack frame (see ref: Miro Samek).
  *
+ * This version also keeps track of the interrupt nesting
+ * level and stores the top level interrupted instruction
+ * address in order to let the Debugger know which instruction
+ * should be breakpointed when invoking the Debugger from
+ * Platform Operation Mode.
  */
 
         .global nx__irq_handler
@@ -80,6 +94,14 @@ _irq_save_stack_frame:
 		sub		r2, lr, #4				/* Adjust return address (interrupted instruction address), copy to R2 for stacking */
 		mrs		r3, spsr				/* Retrieve SPSR_irq to R3 for stacking */
 		stmfd	r0, {r2, r3}			/* completed saving interrupt stack frame (SPSR_irq, PC_irq, LR, R12, R3, R2, R1, R0) */
+
+		/* Interrupt Handler Housekeeping */
+		ldr		r3, =irq_nesting_level
+		ldr		r2, [r3]
+		adds	r2, r2, #1				/* Raise Nesting Level (0: Top Level Interrupt) */
+		str		r2, [r3]
+		movgt	r0, #0					/* Not Top Level Interrupt, clear Interrupted Stack Frame Address */
+		str		r0, [r3, #4]			/* Else Save Top Level Interrupt Stack Frame Address (for Debugger) */
 
         /* Get the IVR value. */
         ldr 	r2, =AT91C_AIC_IVR
@@ -120,6 +142,12 @@ _irq_exit_handler:
 		/* In IRQ Mode (IRQ & FIQ Enabled) */
         ldr 	lr, =AT91C_AIC_EOICR
         str 	lr, [lr]
+
+		/* Interrupt Handler Housekeeping */
+		ldr		r3, =irq_nesting_level
+		ldr		r2, [r3]
+		sub		r2, r2, #1					/* Decrease nesting level */
+		str		r2, [r3]
 
 		ldr		r1, [r0, #(7*4)]			/* Load SPSR to R1 */
 		msr		spsr_csxf, r1				/* Restore SPSR_irq */
@@ -346,4 +374,3 @@ nx_interrupts_enable:
         msr cpsr_c, r0
         bx lr
 
-interrupts_count: .long 1
