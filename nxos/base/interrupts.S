@@ -121,11 +121,10 @@ _irq_exit_handler:
         ldr 	lr, =AT91C_AIC_EOICR
         str 	lr, [lr]
 
-		mov		sp, r0						/* Point SP_irq to interrupt stack frame */
-		ldr		r0, [sp, #(7*4)]			/* Load SPSR to R0 */
-		msr		spsr_csxf, r0				/* Restore SPSR_irq */
+		ldr		r1, [r0, #(7*4)]			/* Load SPSR to R1 */
+		msr		spsr_csxf, r1				/* Restore SPSR_irq */
 
-		ldmfd	sp!, {r0-r3, r12, lr, pc}^	/* Return execution to interrupted instruction, restore CPSR from SPSR_irq */
+		ldmfd	r0, {r0-r3, r12, lr, pc}^	/* Return execution to interrupted instruction, restore CPSR from SPSR_irq */
 		/* Note: SP_irq does not contain an actual IRQ stack pointer,
 		 * whereas LR_irq is not used, so it does not matter what value they have on exit
 		 */
