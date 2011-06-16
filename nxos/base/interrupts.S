@@ -76,7 +76,7 @@ nx__irq_handler:
 
 		mrs		r13, spsr			/* Reload SPSR_irq */
 		and		r13, r13, #MODE_MASK	/* check for other modes */
-		teq		r1, #MODE_SVC		/* Supervisor Mode? */
+		teq		r13, #MODE_SVC		/* Supervisor Mode? */
         msreq	cpsr_c, #(MODE_SVC | IRQ_MASK)	/* Match, so switch to SVC Mode */
 		beq		_irq_save_stack_frame
 
