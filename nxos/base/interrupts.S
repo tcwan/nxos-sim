@@ -69,8 +69,8 @@ nx__irq_handler:
 		mrs		r13, spsr		/* Retrieve SPSR_irq */
 
         /* Compare the SPSR mode bits to both 0000 and 1111 (usr/sys mode). */
-        ands 	r13, r13, #7		/* eq (0) == User Mode */
-        eornes 	r13, r13, #7		/* ne (!0) && eor #7 => eq (0) == SYS mode) */
+        ands 	r13, r13, #0x0F		/* eq (0) == User Mode */
+        eornes 	r13, r13, #0x0F		/* ne (!0) && eor #0x0F => eq (0) == SYS mode) */
         msreq	cpsr_c, #(MODE_SYS | IRQ_MASK)	/* Match, so switch to SYS Mode */
 		beq		_irq_save_stack_frame
 
@@ -219,8 +219,8 @@ nx__irq_handler:
          */
 
         /* Compare the SPSR mode bits to both 0000 and 1111 (usr/sys mode). */
-        ands lr, lr, #7
-        eornes lr, lr, #7
+        ands lr, lr, #0x0F
+        eornes lr, lr, #0x0F
 
         /* Switch to either sys or svc mode to save the state.
          * If usr/sys -> sys
