@@ -735,7 +735,6 @@ void tests_fantom(void) {
   U16 i;
   U32 count = 0;
 
-  char buffer[NX_USB_PACKET_SIZE];
 
   hello();
 
@@ -743,12 +742,16 @@ void tests_fantom(void) {
 #if !defined (__FANTOMENABLE__) && !defined (__DBGENABLE__)
   U32 lng = 0;
   U8 *messagePtr;
+  char buffer[NX_USB_PACKET_SIZE];
   nx_usb_read((U8 *)&buffer, NX_USB_PACKET_SIZE * sizeof(char));
-#else
+#elif defined (__FANTOMENABLE__) && !defined (__DBGENABLE__)
+  char buffer[NX_USB_PACKET_SIZE];
   fantom_init((U8 *)&buffer, NX_USB_PACKET_SIZE * sizeof(char));
+#else // defined (__DBGENABLE__)
+  // Nothing to do, fantom buffer already initialized by dbg__bkpt_init()
 #endif
 
-  dbg_breakpoint_arm();
+  // dbg_breakpoint_arm();
   while(1) {
     nx_display_cursor_set_pos(0, 0);
     nx_display_string("Waiting for Fantom message ...");
