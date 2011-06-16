@@ -21,6 +21,10 @@
 #include "base/lib/fantom/fantom.h"
 #endif
 
+/* Non-Blocking Write Support */
+/* FIXME: This needs to have critical section support in order to work properly */
+#undef NON_BLOCKING_WRITE
+
 /* The USB controller supports up to 4 endpoints. */
 #define N_ENDPOINTS 4
 
@@ -217,20 +221,19 @@ static volatile struct {
   /* Holds the status the bus was in before entering suspend. */
   enum usb_status pre_suspend_status;
 
+  /* The currently selected USB configuration. */
+  U8 current_config;
+
+  /* The USB controller has two hardware input buffers. This remembers
+   * the one currently in use.
+   */
+  U8 current_rx_bank;
+
   /* When the host gives us an address, we must send a null ACK packet
    * back before actually changing addresses. This field stores the
    * address that should be set once the ACK is sent.
    */
   U32 new_device_address;
-
-  /* The currently selected USB configuration. */
-  U8 current_config;
-
-  /* Holds the pending write request since USB is busy */
-  U8 *tx_rqst_data;
-
-  /* size of the pending write request data buffer */
-  U32 tx_rqst_size;
 
   /* Holds the state of the data transmissions on both EP0 and
    * EP2. This only gets used if the transmission needed to be split
@@ -241,7 +244,18 @@ static volatile struct {
   U8 *tx_data[2];
   U32 tx_len[2];
 
-  /* Used to write the data from EP1
+#ifdef NON_BLOCKING_WRITE
+  /* Holds the pending write request since USB is busy */
+  U8 *tx_rqst_data;
+
+  /* size of the pending write request data buffer */
+  U32 tx_rqst_size;
+
+  /* USB Tx Statistics */
+  U32 tx_overrun;
+#endif
+
+  /* Used to read the data from EP1
    */
   U8 *rx_data;
 
@@ -250,6 +264,9 @@ static volatile struct {
 
   /* length of the read packet (0 if none) */
   U32 rx_len;
+
+  /* USB Rx Statistics */
+  U32 rx_overrun;
 
 #if defined (__FANTOMENABLE__) || defined (__DBGENABLE__)
   /* Used to write fantom messages from EP1
@@ -263,11 +280,6 @@ static volatile struct {
   U32 fantom_msg_len;
 
 #endif
-
-  /* The USB controller has two hardware input buffers. This remembers
-   * the one currently in use.
-   */
-  U8 current_rx_bank;
 
 } usb_state;
 
@@ -352,8 +364,10 @@ static void usb_read_data(int endpoint, U8 *buffer, U32 buffersize, U32 *length)
   }
 
   /* must not happen ! */
-  if (*length > 0)
+  if (*length > 0) {
+    usb_state.rx_overrun++;
     return;
+  }
 
   total = (AT91C_UDP_CSR[endpoint] & AT91C_UDP_RXBYTECNT) >> 16;
 
@@ -734,13 +748,14 @@ static void usb_isr(void) {
 	  && usb_state.tx_data[endpoint] != NULL) {
 	usb_write_data(endpoint, usb_state.tx_data[endpoint],
 		      usb_state.tx_len[endpoint]);
+#ifdef NON_BLOCKING_WRITE
       } else if (usb_state.tx_rqst_data != NULL) {
         /* check for any pending write requests for EP2 */
         usb_write_data(2, usb_state.tx_rqst_data, usb_state.tx_rqst_size);
         usb_state.tx_rqst_data = NULL;
         /* usb_state.tx_rqst_size = 0; */ /* Not done to save some code */
-      }
-      else {
+#endif
+      } else {
         /* then it means that we sent all the data and the host has acknowledged it */
         usb_state.status = USB_READY;
       }
@@ -821,9 +836,12 @@ void nx__usb_init(void) {
 
 bool nx_usb_can_write(void) {
 
-  /* return (usb_state.status == USB_READY); */
-
+#ifdef NON_BLOCKING_WRITE
   return (usb_state.tx_rqst_data == NULL);
+#else
+  return (usb_state.status == USB_READY);
+#endif
+
 }
 
 
@@ -835,17 +853,24 @@ void nx_usb_write(U8 *data, U32 length) {
   NX_ASSERT(data != NULL);
   NX_ASSERT(length > 0);
 
-  /* while (usb_state.status != USB_READY); */
-
+#ifdef NON_BLOCKING_WRITE
   /* Asynchronous write request call (overwrites any pending requests) */
   if (usb_state.status == USB_READY) {
     /* start sending the data */
     usb_write_data(2, data, length);
   }
   else {
+    if (usb_state.tx_rqst_data != NULL)
+      usb_state.tx_overrun++;
+
     usb_state.tx_rqst_data = data;
     usb_state.tx_rqst_size = length;
   }
+#else
+  while (usb_state.status != USB_READY);
+  /* start sending the data */
+  usb_write_data(2, data, length);
+#endif
 }
 
 bool nx_usb_data_written(void) {
