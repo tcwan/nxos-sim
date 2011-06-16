@@ -108,7 +108,7 @@ bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms)
 	 * It will break any user data transmission containing such a packet starting byte in its data stream.
 	 */
 	case NXT_GDBMSG_TELEGRAMTYPE:
-		nxos__handleDebug(*msgPtr, (isBTComms ? COMM_BT : COMM_USB), *lenPtr);
+		nxos__handleDebug((isBTComms ? COMM_BT : COMM_USB));
 		/* Returned status ignored, since we don't want it to propagate up to caller */
                 status = TRUE;
 		/* Fall through */
