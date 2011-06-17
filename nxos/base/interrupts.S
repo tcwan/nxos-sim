@@ -112,7 +112,7 @@ _irq_save_stack_frame:
 
         /* Get the IVR value. */
         ldr 	r2, =AT91C_BASE_AIC
-        ldr 	r0, [r2, #AIC_IVR]
+        ldr 	r3, [r2, #AIC_IVR]
 
         /* If we're in Protected mode (usually for JTAG debugging), we
          * need to write back to the IVR register to tell the AIC it
@@ -128,7 +128,9 @@ _irq_dispatch_aic_ivr:
 		/* In target privileged mode (IRQ & FIQ Enabled) */
         /* Dispatch the IRQ to the registered handler. */
         mov 	lr, pc
-        bx 		r0
+        bx 		r3						/* Use R3 to dispatch Interrupt Handler, so that it is not clobbered by
+        								 * default exception handlers
+        								 */
 
 _irq_exit_handler:
 		/* Clean up and exit */
