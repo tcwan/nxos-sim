@@ -17,9 +17,10 @@ interrupts_count: .long 1
 
 irq_nesting_level: .long -1		/* -1: Not in Interrupt; 0: Top Level Interrupt; 1+: Interrupt Nesting Level */
 irq_stack_frame_address: .long 0
-
+irq_spurious_count: .long 0
 	.equ	IRQ_NEST_LVL, (irq_nesting_level - irq_state)
 	.equ	IRQ_STK_FRAME, (irq_stack_frame_address - irq_state)
+	.equ	IRQ_SPURIOUS, (irq_spurious_count - irq_state)
 #endif
 
 .text
@@ -327,11 +328,19 @@ nx__data_abort_handler:
  */
         .global nx__spurious_irq
 nx__spurious_irq:
+#if defined (__DBGENABLE__)
+		/* Spurious Count Housekeeping */
+		ldr		r3, =irq_state
+		ldr		r2, [r3, #IRQ_SPURIOUS]
+		add		r2, r2, #1					/* Increment Spurious Count */
+		str		r2, [r3, #IRQ_SPURIOUS]
+		bx	lr
+#else
         sub r1, lr, #8
         mov r0, #2
         mrs r2, spsr
         b nx__abort
-
+#endif
         .global default_undef_handler
 
  /* Original NxOS code follows
