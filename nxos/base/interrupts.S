@@ -8,12 +8,14 @@
 
 .data
 .align 4
+	.global irq_state
 irq_state:
 interrupts_count: .long 1
 	.equ	IRQ_INTR_CNT, (interrupts_count - irq_state)
 #if defined (__DBGENABLE__)
-irq_nesting_level: .long -1		/* -1: Not in Interrupt; 0: Top Level Interrupt; 1+: Interrupt Nesting Level */
 	.global irq_stack_frame_address
+
+irq_nesting_level: .long -1		/* -1: Not in Interrupt; 0: Top Level Interrupt; 1+: Interrupt Nesting Level */
 irq_stack_frame_address: .long 0
 
 	.equ	IRQ_NEST_LVL, (irq_nesting_level - irq_state)
