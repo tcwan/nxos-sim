@@ -90,8 +90,21 @@ static void twi_isr(void)
    * since they indicate something is very wrong with either this
    * driver, or the coprocessor, or the hardware link between them.
    */
+#if defined (__DBGENABLE__)
+  /* Ignore Overruns and Underruns.
+   * If JTAG debugging is enabled and the processor is halted, it
+   * would skip the AVR communications until it is restarted.
+   * (Technically it is not dependent on the __DBGENABLE__ compile flag).
+   *
+   * Nonetheless, the ARMDEBUG code may also cause some communications to be
+   * missed, so it is safer to ignore these conditions as well when __DBGENABLE__
+   * is defined.
+   */
+  if (status & (AT91C_TWI_NACK)) {
+#else
   if (status & (AT91C_TWI_OVRE | AT91C_TWI_UNRE | AT91C_TWI_NACK)) {
-    *AT91C_TWI_CR = AT91C_TWI_STOP;
+#endif
+	  *AT91C_TWI_CR = AT91C_TWI_STOP;
     *AT91C_TWI_IDR = ~0;
     twi_state.mode = TWI_FAILED;
     NX_FAIL("Lost link to AVR");
