@@ -8,11 +8,16 @@
 
 .data
 .align 4
+irq_state:
 interrupts_count: .long 1
+	.equ	IRQ_INTR_CNT, (interrupts_count - irq_state)
 #if defined (__DBGENABLE__)
 irq_nesting_level: .long -1		/* -1: Not in Interrupt; 0: Top Level Interrupt; 1+: Interrupt Nesting Level */
 	.global irq_stack_frame_address
 irq_stack_frame_address: .long 0
+
+	.equ	IRQ_NEST_LVL, (irq_nesting_level - irq_state)
+	.equ	IRQ_STK_FRAME, (irq_stack_frame_address - irq_state)
 #endif
 
 .text
@@ -96,23 +101,23 @@ _irq_save_stack_frame:
 		stmfd	r0, {r2, r3}			/* completed saving interrupt stack frame (SPSR_irq, PC_irq, LR, R12, R3, R2, R1, R0) */
 
 		/* Interrupt Handler Housekeeping */
-		ldr		r3, =irq_nesting_level
-		ldr		r2, [r3]
+		ldr		r3, =irq_state
+		ldr		r2, [r3, #IRQ_NEST_LVL]
 		adds	r2, r2, #1				/* Raise Nesting Level (0: Top Level Interrupt) */
-		str		r2, [r3]
+		str		r2, [r3, #IRQ_NEST_LVL]
 		movgt	r0, #0					/* Not Top Level Interrupt, clear Interrupted Stack Frame Address */
-		str		r0, [r3, #4]			/* Else Save Top Level Interrupt Stack Frame Address (for Debugger) */
+		str		r0, [r3, #IRQ_STK_FRAME] /* Else Save Top Level Interrupt Stack Frame Address (for Debugger) */
 
         /* Get the IVR value. */
-        ldr 	r2, =AT91C_AIC_IVR
-        ldr 	r0, [r2]
+        ldr 	r2, =AT91C_BASE_AIC
+        ldr 	r0, [r2, #AIC_IVR]
 
         /* If we're in Protected mode (usually for JTAG debugging), we
          * need to write back to the IVR register to tell the AIC it
          * can dispatch other higher priority interrupts again.
          * In normal mode, this has no effect, so we can safely do it.
          */
-        str 	r2, [r2]
+        str 	r2, [r2, #AIC_IVR]
 
 		and		r1, r1, #MODE_MASK		/* Enable IRQ (& FIQ) */
 		msr		cpsr_c, r1				/* switch back to previous privileged mode */
@@ -140,14 +145,14 @@ _irq_exit_handler:
         msr 	cpsr_c, #(MODE_IRQ | IRQ_FIQ_MASK)
 
 		/* In IRQ Mode (IRQ & FIQ Enabled) */
-        ldr 	lr, =AT91C_AIC_EOICR
-        str 	lr, [lr]
+        ldr 	lr, =AT91C_BASE_AIC
+        str 	lr, [lr, #AIC_EOICR]
 
 		/* Interrupt Handler Housekeeping */
-		ldr		r3, =irq_nesting_level
-		ldr		r2, [r3]
+		ldr		r3, =irq_state
+		ldr		r2, [r3, #IRQ_NEST_LVL]
 		sub		r2, r2, #1					/* Decrease nesting level */
-		str		r2, [r3]
+		str		r2, [r3, #IRQ_NEST_LVL]
 
 		ldr		r1, [r0, #(7*4)]			/* Load SPSR to R1 */
 		msr		spsr_csxf, r1				/* Restore SPSR_irq */
@@ -239,15 +244,15 @@ nx__irq_handler:
         movne r0, #0
 
         /* Get the IVR value. */
-        ldr r1, =AT91C_AIC_IVR
-        ldr r2, [r1]
+        ldr r1, =AT91C_BASE_AIC
+        ldr r2, [r1, #AIC_IVR]
 
         /* If we're in Protected mode (usually for JTAG debugging), we
          * need to write back to the IVR register to tell the AIC it
          * can dispatch other higher priority interrupts again.
          * In normal mode, this has no effect, so we can safely do it.
          */
-        str r1, [r1]
+        str r1, [r1, #AIC_IVR]
 
         /* Switch to Supervisor mode if necessary, reenable IRQ and FIQ handling,
          * and stack either 0 (nested IRQ) or the address of the IRQ stack base (for
@@ -279,8 +284,8 @@ nx__irq_handler:
          * handled.
          */
         msr cpsr_c, #(MODE_IRQ | IRQ_FIQ_MASK)
-        ldr lr, =AT91C_AIC_EOICR
-        str lr, [lr]
+        ldr lr, =AT91C_BASE_AIC
+        str lr, [lr, #AIC_EOICR]
 
         /* Restore the SPSR */
         ldmfd sp!, {lr}
@@ -354,18 +359,18 @@ nx_interrupts_disable:
         orr r0, r0, #IRQ_FIQ_MASK
         msr cpsr_c, r0
 
-        ldr r1, =interrupts_count
-        ldr r0, [r1]
+        ldr r1, =irq_state
+        ldr r0, [r1, #IRQ_INTR_CNT]
         add r0, r0, #1
-        str r0, [r1]
+        str r0, [r1, #IRQ_INTR_CNT]
 
         bx lr
 
 nx_interrupts_enable:
-        ldr r0, =interrupts_count
-        ldr r1, [r0]
-        subs r1, r1, #1
-        str r1, [r0]
+        ldr r1, =irq_state
+        ldr r0, [r1, #IRQ_INTR_CNT]
+        subs r0, r0, #1
+        str r0, [r1, #IRQ_INTR_CNT]
 
         bxne lr
 
