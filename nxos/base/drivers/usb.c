@@ -303,6 +303,14 @@ static inline void usb_csr_set_flag(U8 endpoint, U32 flags) {
   while ( (AT91C_UDP_CSR[endpoint] & (flags)) != (flags));
 }
 
+/* Enable EP1 (BULK OUT Channel).
+ * This is required after configuring the receive buffer,
+ * or after waking up from suspend
+ */
+static inline void usb_enable_rxchan(void) {
+  usb_csr_set_flag(1, (AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_OUT));
+}
+
 
 /* Starts sending data to the host. If the data cannot fit into a
  * single USB packet, the data is split and scheduled to be sent in
@@ -564,8 +572,7 @@ static U32 usb_manage_setup_packet(void) {
     		|| ((usb_state.fantom_msg_len == 0) && (usb_state.fantom_msg_size > 0))
 #endif
    	) {
-      AT91C_UDP_CSR[1] = AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_OUT;
-      while (AT91C_UDP_CSR[1] != (AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_OUT));
+      usb_enable_rxchan();
     }
 
     AT91C_UDP_CSR[2] = AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_IN;
@@ -673,6 +680,15 @@ static void usb_isr(void) {
     *AT91C_UDP_ICR = AT91C_UDP_RXRSM;
     isr &= ~AT91C_UDP_RXRSM;
     usb_state.status = usb_state.pre_suspend_status;
+
+    /* Reenable EP1 if there is a receive buffer defined */
+    if (((usb_state.rx_len == 0) && (usb_state.rx_size > 0))
+#if defined (__FANTOMENABLE__) || defined(__DBGENABLE__)
+                || ((usb_state.fantom_msg_len == 0) && (usb_state.fantom_msg_size > 0))
+#endif
+        ) {
+      usb_enable_rxchan();
+    }
   }
 
 
@@ -891,7 +907,7 @@ void nx_usb_read(U8 *data, U32 size)
 
   if (usb_state.status > USB_UNINITIALIZED
       && usb_state.status != USB_SUSPENDED) {
-    AT91C_UDP_CSR[1] |= AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_OUT;
+    usb_enable_rxchan();
   }
 }
 
@@ -915,7 +931,7 @@ void nx_usb_fantom_read(U8 *data, U32 size)
 
   if (usb_state.status > USB_UNINITIALIZED
       && usb_state.status != USB_SUSPENDED) {
-    AT91C_UDP_CSR[1] |= AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_OUT;
+    usb_enable_rxchan();
   }
 }
 
