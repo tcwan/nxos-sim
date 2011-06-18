@@ -303,12 +303,20 @@ static inline void usb_csr_set_flag(U8 endpoint, U32 flags) {
   while ( (AT91C_UDP_CSR[endpoint] & (flags)) != (flags));
 }
 
-/* Enable EP1 (BULK OUT Channel).
+/* Enable EP1 Interrupt (BULK OUT Channel).
  * This is required after configuring the receive buffer,
  * or after waking up from suspend
  */
-static inline void usb_enable_rxchan(void) {
-  usb_csr_set_flag(1, (AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_OUT));
+static inline void usb_enable_rxchan_intr(void) {
+	  *AT91C_UDP_IER = AT91C_UDP_EPINT1;
+}
+
+/* Disable EP1 Interrupt (BULK OUT Channel).
+ * This is required after receiving a buffer
+ * of data from the Host
+ */
+static inline void usb_disable_rxchan_intr(void) {
+	  *AT91C_UDP_IDR = AT91C_UDP_EPINT1;
 }
 
 
@@ -566,13 +574,15 @@ static U32 usb_manage_setup_packet(void) {
 
     /* TODO: Make this a little nicer. Not quite sure how. */
 
+    AT91C_UDP_CSR[1] = AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_OUT;
+    while (AT91C_UDP_CSR[1] != (AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_OUT));
     /* we can only active the EP1 if we have a buffer to get the data */
     if (((usb_state.rx_len == 0) && (usb_state.rx_size > 0))
 #if defined (__FANTOMENABLE__) || defined(__DBGENABLE__)
     		|| ((usb_state.fantom_msg_len == 0) && (usb_state.fantom_msg_size > 0))
 #endif
    	) {
-      usb_enable_rxchan();
+      usb_enable_rxchan_intr();
     }
 
     AT91C_UDP_CSR[2] = AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_IN;
@@ -604,16 +614,6 @@ static void usb_isr(void) {
 
   isr = *AT91C_UDP_ISR;
 
-#if 0
-  /* FIXME: The following code may still not get the SVC mode return address.
-   * Who calls usb_isr (via AIC vector)?
-   */
-  asm ("mov		%0, lr\n"			\
-		  : "=r" (isrReturnAddress)	\
-		  : "" (0) 					\
-		  :  );
-#endif
-
   /* We sent a stall, the host has acknowledged the stall. */
   if (AT91C_UDP_CSR[0] & AT91C_UDP_ISOERROR)
     usb_csr_clear_flag(0, AT91C_UDP_FORCESTALL | AT91C_UDP_ISOERROR);
@@ -629,7 +629,7 @@ static void usb_isr(void) {
     *AT91C_UDP_ICR = ~0;
 
     /* Reset all endpoint FIFOs. */
-    *AT91C_UDP_RSTEP = ~0;
+    *AT91C_UDP_RSTEP = 0x0F;
     *AT91C_UDP_RSTEP = 0;
 
     /* Reset internal state. */
@@ -641,11 +641,12 @@ static void usb_isr(void) {
     AT91C_UDP_CSR[0] = AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_CTRL;
     while (AT91C_UDP_CSR[0] != (AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_CTRL));
 
-    /* Enable interrupt handling for all three endpoints, as well as
+    /* Enable interrupt handling for CTRL and BULK_IN endpoints, as well as
      * suspend/resume.
+     * BULK_OUT interrupt is enabled only when a receive buffer is configured.
      */
-    *AT91C_UDP_IER = (AT91C_UDP_EPINT0 | AT91C_UDP_EPINT1 |
-                      AT91C_UDP_EPINT2 | AT91C_UDP_EPINT3 |
+    *AT91C_UDP_IER = (AT91C_UDP_EPINT0 | /* AT91C_UDP_EPINT1 | */
+                      AT91C_UDP_EPINT2 | /* AT91C_UDP_EPINT3 | */
                       AT91C_UDP_RXSUSP | AT91C_UDP_RXRSM);
 
     /* Enable the function endpoints, setting address 0, and return
@@ -687,7 +688,7 @@ static void usb_isr(void) {
                 || ((usb_state.fantom_msg_len == 0) && (usb_state.fantom_msg_size > 0))
 #endif
         ) {
-      usb_enable_rxchan();
+      usb_enable_rxchan_intr();
     }
   }
 
@@ -715,8 +716,7 @@ static void usb_isr(void) {
 	|| (csr & AT91C_UDP_RX_DATA_BK1)) {
 
       if (endpoint == 1) {
-        AT91C_UDP_CSR[1] &= ~AT91C_UDP_EPEDS;
-        while (AT91C_UDP_CSR[1] & AT91C_UDP_EPEDS);
+    	usb_disable_rxchan_intr();
       }
 
 #if defined (__FANTOMENABLE__) || defined (__DBGENABLE__)
@@ -784,7 +784,7 @@ static void usb_isr(void) {
   /* We clear also the unused bits,
    * just "to be sure" */
   if (isr) {
-    *AT91C_UDP_ICR = 0xFFFFC4F0;
+    *AT91C_UDP_ICR = 0xFFFFC4FF;
   }
 }
 
@@ -907,7 +907,7 @@ void nx_usb_read(U8 *data, U32 size)
 
   if (usb_state.status > USB_UNINITIALIZED
       && usb_state.status != USB_SUSPENDED) {
-    usb_enable_rxchan();
+    usb_enable_rxchan_intr();
   }
 }
 
@@ -931,7 +931,7 @@ void nx_usb_fantom_read(U8 *data, U32 size)
 
   if (usb_state.status > USB_UNINITIALIZED
       && usb_state.status != USB_SUSPENDED) {
-    usb_enable_rxchan();
+    usb_enable_rxchan_intr();
   }
 }
 
