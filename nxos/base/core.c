@@ -24,6 +24,11 @@
 #include "drivers/i2c.h"
 
 #include "base/_core.h"
+
+#if defined(__FANTOMENABLE__) || defined(__DBGENABLE__)
+#include "base/lib/fantom/fantom.h"
+#endif
+
 #ifdef __DBGENABLE__
 #include "armdebug/Debugger/debug_stub.h"
 #ifdef TEST_DBGBKPT
@@ -31,12 +36,6 @@
 #endif
 #endif
 
-#if defined(__FANTOMENABLE__) && !defined(__DBGENABLE__)
-#include "base/lib/fantom/fantom.h"
-
-/* Fantom Message Buffer is needed to filter fantom messages */
-static U8 fantom_msg_buffer[NX_USB_PACKET_SIZE];
-#endif
 
 /* main() is the entry point into the custom payload, not included in
  * the NxOS core.
@@ -110,6 +109,9 @@ void nx_core_register_shutdown_handler(nx_closure_t handler) {
 void nx__kernel_main(void) {
   core_init();
   check_boot_errors();
+#if defined(__FANTOMENABLE__) || defined(__DBGENABLE__)
+  fantom_init();
+#endif
 #ifdef __DBGENABLE__
   dbg__bkpt_init();
 #ifdef TEST_DBGBKPT
@@ -118,9 +120,6 @@ void nx__kernel_main(void) {
 #endif
 #endif
 
-#if defined(__FANTOMENABLE__) && !defined(__DBGENABLE__)
-  fantom_init(fantom_msg_buffer, NX_USB_PACKET_SIZE);
-#endif
 
   main();
   if( NX_BOOT_FROM_ENH_FW )

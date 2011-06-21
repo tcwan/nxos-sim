@@ -50,19 +50,14 @@ static U8 SysCmd_GetInfoResponse[SYSCMD_GETINFORESPONSE_LEN] = { REPLYCMD_MSGTYP
        0x00, 0x00, 0x00, 0x00  /* Available Flash Size: U32 (Little Endian) */
 };
 
+static U8 fantombuf[NX_USB_PACKET_SIZE];
 
-
-void fantom_init(U8 *fantom_msg, U32 size)
+void fantom_init(void)
 {
-        NX_ASSERT(fantom_msg != NULL);
-        NX_ASSERT(size > 0);
-
-#if defined (__FANTOMENABLE__) || defined (__DBGENABLE__)
 	/* Setup for USB */
-	nx_usb_fantom_read(fantom_msg, size);
+	nx_usb_fantom_read(fantombuf, NX_USB_PACKET_SIZE);
 
 	/* TODO: Setup for Bluetooth */
-#endif
 }
 
 /* Filter Fantom related traffic (queries, GDB protocol) */
@@ -95,12 +90,10 @@ bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms)
                     }
 		}
 
-#if defined (__FANTOMENABLE__) || defined (__DBGENABLE__)
 		if (TRUE == status) {
                     /* fantom command processed: reset fantom_message buffer, reenable EP1 */
                     nx_usb_fantom_read(NULL, 0);
 		}
-#endif
 
 		break;
 #ifdef __DBGENABLE__
@@ -108,8 +101,9 @@ bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms)
 	 * It will break any user data transmission containing such a packet starting byte in its data stream.
 	 */
 	case NXT_GDBMSG_TELEGRAMTYPE:
-		nxos__handleDebug((isBTComms ? COMM_BT : COMM_USB));
+		nxos__handleDebug(*msgPtr, (isBTComms ? COMM_BT : COMM_USB), *lenPtr);
 		/* Returned status ignored, since we don't want it to propagate up to caller */
+                nx_usb_fantom_read(NULL, 0);
                 status = TRUE;
 		/* Fall through */
 #endif

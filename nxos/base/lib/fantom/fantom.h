@@ -28,10 +28,8 @@
 
 /** Initialize Fantom library support.
  *
- * @param fantom_msg Receive Fantom message pointer
- * @param size Receive Fantom message max size
  */
-void fantom_init(U8 *fantom_msg, U32 size);
+void fantom_init(void);
 
 /** Filter Fantom related traffic (queries, GDB protocol).
  *
