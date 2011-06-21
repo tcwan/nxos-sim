@@ -730,8 +730,10 @@ static void usb_isr(void) {
       } else {
     	/* returned FALSE: not a fantom message, copy message to rx data buffer */
     	messageLen = MIN(usb_state.fantom_msg_len, usb_state.rx_size);
-    	memcpy(usb_state.rx_data, usb_state.fantom_message, messageLen);
-    	usb_state.rx_len = messageLen;
+    	if (messageLen > 0) {
+    	  memcpy(usb_state.rx_data, usb_state.fantom_message, messageLen);
+    	  usb_state.rx_len = messageLen;
+    	}
       }
 
 #else
