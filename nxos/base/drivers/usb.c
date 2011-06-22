@@ -747,9 +747,11 @@ static void usb_isr(void) {
 
     if (csr & AT91C_UDP_TXCOMP) {
 
+#if 0
+      /* According to ATMEL AT91SAM7Series_Preliminary, pg 501, TXCOMP should be cleared only after TXPKTRDY is set */
       /* so first we will reset this flag */
       usb_csr_clear_flag(endpoint, AT91C_UDP_TXCOMP);
-
+#endif
       if (usb_state.new_device_address > 0) {
 	/* the previous message received was SET_ADDR */
 	/* now that the computer ACK our send_null(), we can
@@ -780,6 +782,9 @@ static void usb_isr(void) {
         /* then it means that we sent all the data and the host has acknowledged it */
         usb_state.status = USB_READY;
       }
+      /* According to ATMEL AT91SAM7Series_Preliminary, pg 501, TXCOMP should be cleared only after TXPKTRDY is set */
+      usb_csr_clear_flag(endpoint, AT91C_UDP_TXCOMP);
+
       return;
     }
 
