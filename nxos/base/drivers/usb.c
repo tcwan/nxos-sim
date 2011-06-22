@@ -302,7 +302,7 @@ static inline void usb_csr_set_flag(U8 endpoint, U32 flags) {
   AT91C_UDP_CSR[endpoint] |= (flags);
   while ( (AT91C_UDP_CSR[endpoint] & (flags)) != (flags));
 }
-
+#if 0
 /* Enable EP1 Interrupt (BULK OUT Channel).
  * This is required after configuring the receive buffer,
  * or after waking up from suspend
@@ -318,7 +318,7 @@ static inline void usb_enable_rxchan_intr(void) {
 static inline void usb_disable_rxchan_intr(void) {
 	  *AT91C_UDP_IDR = AT91C_UDP_EPINT1;
 }
-
+#endif
 
 /* Starts sending data to the host. If the data cannot fit into a
  * single USB packet, the data is split and scheduled to be sent in
@@ -380,7 +380,7 @@ static void usb_read_data(int endpoint, U8 *buffer, U32 buffersize, U32 *length)
   }
 
   /* must not happen ! */
-  if (*length > 0) {
+  if ((*length > 0) || (buffer == NULL) || (buffersize == 0)) {
     usb_state.rx_overrun++;
     return;
   }
@@ -576,6 +576,7 @@ static U32 usb_manage_setup_packet(void) {
 
     AT91C_UDP_CSR[1] = AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_OUT;
     while (AT91C_UDP_CSR[1] != (AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_OUT));
+#if 0
     /* we can only active the EP1 if we have a buffer to get the data */
     if (((usb_state.rx_len == 0) && (usb_state.rx_size > 0))
 #if defined (__FANTOMENABLE__) || defined(__DBGENABLE__)
@@ -584,7 +585,7 @@ static U32 usb_manage_setup_packet(void) {
    	) {
       usb_enable_rxchan_intr();
     }
-
+#endif
     AT91C_UDP_CSR[2] = AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_IN;
     while (AT91C_UDP_CSR[2] != (AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_BULK_IN));
     AT91C_UDP_CSR[3] = 0;
@@ -605,6 +606,7 @@ static U32 usb_manage_setup_packet(void) {
 
 /* The main USB interrupt handler. */
 static void usb_isr(void) {
+  int tx;
   U8 endpoint = 127;
   U32 csr, isr;
 #if defined (__FANTOMENABLE__) || defined(__DBGENABLE__)
@@ -641,11 +643,10 @@ static void usb_isr(void) {
     AT91C_UDP_CSR[0] = AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_CTRL;
     while (AT91C_UDP_CSR[0] != (AT91C_UDP_EPEDS | AT91C_UDP_EPTYPE_CTRL));
 
-    /* Enable interrupt handling for CTRL and BULK_IN endpoints, as well as
+    /* Enable interrupt handling for CTRL, BULK_OUT and BULK_IN endpoints, as well as
      * suspend/resume.
-     * BULK_OUT interrupt is enabled only when a receive buffer is configured.
      */
-    *AT91C_UDP_IER = (AT91C_UDP_EPINT0 | /* AT91C_UDP_EPINT1 | */
+    *AT91C_UDP_IER = (AT91C_UDP_EPINT0 | AT91C_UDP_EPINT1 |
                       AT91C_UDP_EPINT2 | /* AT91C_UDP_EPINT3 | */
                       AT91C_UDP_RXSUSP | AT91C_UDP_RXRSM);
 
@@ -681,7 +682,7 @@ static void usb_isr(void) {
     *AT91C_UDP_ICR = AT91C_UDP_RXRSM;
     isr &= ~AT91C_UDP_RXRSM;
     usb_state.status = usb_state.pre_suspend_status;
-
+#if 0
     /* Reenable EP1 if there is a receive buffer defined */
     if (((usb_state.rx_len == 0) && (usb_state.rx_size > 0))
 #if defined (__FANTOMENABLE__) || defined(__DBGENABLE__)
@@ -690,6 +691,7 @@ static void usb_isr(void) {
         ) {
       usb_enable_rxchan_intr();
     }
+#endif
   }
 
 
@@ -714,11 +716,11 @@ static void usb_isr(void) {
 
     if ((csr & AT91C_UDP_RX_DATA_BK0)
 	|| (csr & AT91C_UDP_RX_DATA_BK1)) {
-
+#if 0
       if (endpoint == 1) {
     	usb_disable_rxchan_intr();
       }
-
+#endif
 #if defined (__FANTOMENABLE__) || defined (__DBGENABLE__)
       usb_read_data(endpoint, usb_state.fantom_message, usb_state.fantom_msg_size, (U32 *)&(usb_state.fantom_msg_len));
       messagePtr = usb_state.fantom_message;
@@ -762,10 +764,11 @@ static void usb_isr(void) {
 
 
       /* and we will send the following data */
-      if (usb_state.tx_len[endpoint] > 0
-	  && usb_state.tx_data[endpoint] != NULL) {
-	usb_write_data(endpoint, usb_state.tx_data[endpoint],
-		      usb_state.tx_len[endpoint]);
+      tx = endpoint / 2;
+      if (usb_state.tx_len[tx] > 0
+	  && usb_state.tx_data[tx] != NULL) {
+	usb_write_data(endpoint, usb_state.tx_data[tx],
+		      usb_state.tx_len[tx]);
 #ifdef NON_BLOCKING_WRITE
       } else if (usb_state.tx_rqst_data != NULL) {
         /* check for any pending write requests for EP2 */
@@ -906,11 +909,12 @@ void nx_usb_read(U8 *data, U32 size)
   usb_state.rx_data = data;
   usb_state.rx_size = size;
   usb_state.rx_len  = 0;
-
+#if 0
   if (usb_state.status > USB_UNINITIALIZED
       && usb_state.status != USB_SUSPENDED) {
     usb_enable_rxchan_intr();
   }
+#endif
 }
 
 
@@ -930,11 +934,12 @@ void nx_usb_fantom_read(U8 *data, U32 size)
   NX_ASSERT_MSG(usb_state.fantom_message != NULL,
 		"Fantom Message Buffer Not Set!");
   usb_state.fantom_msg_len  = 0;
-
+#if 0
   if (usb_state.status > USB_UNINITIALIZED
       && usb_state.status != USB_SUSPENDED) {
     usb_enable_rxchan_intr();
   }
+#endif
 }
 
 
