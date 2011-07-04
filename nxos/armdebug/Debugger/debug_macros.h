@@ -67,7 +67,7 @@
  */
         .macro  _dbg_armDecodeEntry   instrreg, instrmask, codehandler, indexreg
 
-        ldr      \instrmask, =debug_thumbDecodeTable                    /* Temporary register */
+        ldr      \instrmask, =debug_armDecodeTable                    /* Temporary register */
         add      \instrmask, \instrmask, \indexreg, lsl #3
         add      \instrmask, \instrmask, \indexreg, lsl #2              /* 12  byte entries */
         ldm      \instrmask, {\instrreg, \instrmask, \codehandler}
@@ -281,6 +281,34 @@
         str      \contentsreg, [\addressreg, \indexreg, lsl #2]
         .endm
 
+/* _getdbgregister
+ *      Retrieve register contents from debugger stack given immediate index value
+ *
+ *      On entry:
+ *        indexval contains debugger stack index value (0-max index)
+ *      On exit:
+ *        contentsreg: Register Contents for given index
+ */
+        .macro  _getdbgregister  indexval, contentsreg
+        ldr      \contentsreg, =__debugger_stack_bottom__
+        ldr      \contentsreg, [\contentsreg, #(\indexval << 2)]
+        .endm
+
+/* _setdbgregister
+ *      Store register contents to debugger stack given immediate index value
+ *
+ *      On entry:
+ *        indexval contains debugger stack index value (0-max index)
+ *        contentsreg: Register Contents for given index
+ *        addressreg: Scratch register for address pointer
+ *      On exit:
+ *        contentsreg: Register Contents for given index
+ *        addressreg: Destroyed
+ */
+        .macro  _setdbgregister  indexval, contentsreg, addressreg
+        ldr      \addressreg, =__debugger_stack_bottom__
+        str      \contentsreg, [\addressreg, #(\indexval << 2)]
+        .endm
 
 /* _index2bkptindex_addr
  *	Convert Breakpoint index to breakpoing entry address
