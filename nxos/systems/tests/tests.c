@@ -758,7 +758,7 @@ void tests_fantom(void) {
     nx_display_string("Waiting for Fantom message ...");
     nx_display_uint(count);
 
-    dbg__test_arm_bkpt();                 /* Routine to trigger a manual ARM Breakpoint */
+    dbg_breakpoint_arm();                 /* Trigger a manual ARM Breakpoint */
     dbg__test_arm_instrstep();
 
     for (i = 0 ; i < 500 && !nx_usb_data_read(); i++)
