@@ -33,6 +33,7 @@
 
 #include "base/lib/fantom/fantom.h"
 #include "armdebug/Debugger/debug_stub.h"
+#include "armdebug/Debugger/debug_test.h"
 #include "tests/tests.h"
 #include "tests/fs.h"
 
@@ -757,7 +758,7 @@ void tests_fantom(void) {
     nx_display_string("Waiting for Fantom message ...");
     nx_display_uint(count);
 
-
+    dbg__test_arm_instrstep();
 
     for (i = 0 ; i < 500 && !nx_usb_data_read(); i++)
     {
