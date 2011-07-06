@@ -360,7 +360,7 @@ _hasMsg2Copy:
     moveq	r0, r4							  /* If found, set R0 to current message length */
     beq		exit_dbg__getDebugMsg			  /* and return  */
     teq     r0, #MSGBUF_NAKCHAR               /* Look for '-' */
-    beq		exit_dbg__getMsgError			  /* FIXME: We can't handle retransmission, flag message error */
+    beq		exit_dbg__getMsgError			  /* Error from Host, Retransmit previous message */
     teq     r0, #MSGBUF_ACKCHAR               /* Look for '+' */
     addeq   r5, r5, #1                        /* Adjust Buffer Start Pointer (excl '+') */
     subeq	r4, r4, #1						  /* Adjust Message Length */
@@ -398,7 +398,24 @@ _hasMsg2Copy:
     beq     exit_dbg__getDebugMsg               /* Valid length, return */
 
 exit_dbg__getMsgError:
+	/* We must first clear the existing message checksum */
+    ldr     r1, =debug_msgTxBufPtr              /* R5: data structure base pointer */
+    ldr     r1, [r1]                            /* Tx buffer Start Address */
+
+1:	ldrb	r0, [r1], #1
+	teq		r0, #MSGBUF_CHKSUMCHAR
+	bne		1b
+
+	mov		r0, #0								/* ASCIIZ */
+	strb	r0, [r1, #-1]						/* Pointer R1 is now one past the MSGBUF_CHKSUMCHAR */
+
+	bl		dbg__putDebugMsg					/* Retransmit message */
+	mov		r0, #0								/* Flag no message received */
+
+#if 0
     mov     r0, #MSGBUF_MSGERROR
+#endif
+
 exit_dbg__getDebugMsg:
     mov     r1, r5                              /* Return GDB Message Buffer Pointer in R1 */
 	ldmfd	sp!, {r4,r5,pc}
