@@ -305,27 +305,27 @@ nx__irq_handler:
  * prefetch or data abort modes or if a spurious IRQ is received.
  * These handlers just set up the necessary arguments and invoke nx__abort().
  */
+ /* Original NxOS code follows
+  * The NxOS routine is aliased to default_XXX_handler
+  * to share debugger code with other projects
+  */
         .extern nx__abort
-        .global nx__prefetch_abort_handler
+        .global default_prefetch_abort_handler
+default_prefetch_abort_handler:
 nx__prefetch_abort_handler:
         sub r1, lr, #4
         mov r0, #0
         mrs r2, spsr
         b nx__abort
 
-        .global nx__data_abort_handler
+        .global default_data_abort_handler
+default_data_abort_handler:
 nx__data_abort_handler:
         sub r1, lr, #8
         mov r0, #1
         mrs r2, spsr
         b nx__abort
 
-/**********************************************************
- * Warning: The following two handlers might display stupid
- * registers values (e.g. wrong PC), I haven't consulted
- * the documentation about how to extract useful values,
- * displaying an error was enough me.
- */
         .global nx__spurious_irq
 nx__spurious_irq:
 #if defined (__DBGENABLE__)
@@ -336,20 +336,15 @@ nx__spurious_irq:
 		str		r2, [r3, #IRQ_SPURIOUS]
 		bx	lr
 #else
-        sub r1, lr, #8
+        sub r1, lr, #4
         mov r0, #2
         mrs r2, spsr
         b nx__abort
 #endif
         .global default_undef_handler
-
- /* Original NxOS code follows
-  * The NxOS routine is aliased to default_undef_handler
-  * to share debugger code with other projects
-  */
 default_undef_handler:
 nx__default_undef_handler:
-        sub r1, lr, #8
+        sub r1, lr, #4
         mov r0, #3
         mrs r2, spsr
         b nx__abort
