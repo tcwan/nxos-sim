@@ -761,14 +761,14 @@ void tests_fantom(void) {
     dbg_breakpoint_arm();                 /* Trigger a manual ARM Breakpoint */
     dbg__test_arm_instrstep();
 
-    for (i = 0 ; i < 500 && !nx_usb_data_read(); i++)
+    for (i = 0 ; i < 10 && !nx_usb_data_read(); i++)
     {
       nx_systick_wait_ms(200);
     }
-
+    /* 2 second timeout */
     count++;
 
-    if (i >= 500)
+    if (count >= 5)
       break;
 
 #if !defined (__FANTOMENABLE__) && !defined (__DBGENABLE__)
