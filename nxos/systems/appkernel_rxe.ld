@@ -125,7 +125,7 @@ SECTIONS {
     
     /* debugger state */
     __debugger_stack_bottom__ = . ;
-    . += 0x48;	/* 16 user mode registers + SPSR + UNDEF Next Instruction Address */
+    . += 0x48;	/* 16 user mode registers + SPSR + Next Instruction Address */
     __debugger_stack__ = .;
     __debugger_stack_top__ = . ;
     
