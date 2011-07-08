@@ -13,25 +13,29 @@
 
 #include "base/_abort.h"
 
-void nx__abort(U32 data, U32 pc, U32 cpsr) {
+void nx__abort_info(U32 data, U32 pc, U32 cpsr) {
   nx_interrupts_disable();
   nx_display_auto_refresh(FALSE);
   nx_display_clear();
-  if (data == 3) {
-    /* PC might be wrong, see interrupts.S. */
+  if (data == ABORT_ILLEGAL) {
     nx_display_string("Illegal");
-  } else if (data == 2) {
-    /* PC might be wrong, see interrupts.S. */
+  } else if (data == ABORT_SPURIOUS) {
     nx_display_string("Spurious");
   } else if (data) {
     nx_display_string("Data");
   } else {
     nx_display_string("Prefetch");
   }
-  nx_display_string(" abort\nPC: ");
+  nx_display_string(" abort\nPC: 0x");
   nx_display_hex(pc);
-  nx_display_string("\nCPSR: ");
+  nx_display_string("\nCPSR: 0x");
   nx_display_hex(cpsr);
   nx__lcd_sync_refresh();
+  nx_interrupts_enable();
+}
+
+void nx__abort(U32 data, U32 pc, U32 cpsr) {
+  nx__abort_info(data, pc, cpsr);
+  nx_interrupts_disable();
   while(1);
 }

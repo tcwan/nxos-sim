@@ -13,8 +13,23 @@
 #ifndef __NXOS_BASE__ABORT_H__
 #define __NXOS_BASE__ABORT_H__
 
+#define ABORT_PREFETCH	0
+#define ABORT_DATA		1
+#define	ABORT_SPURIOUS	2
+#define	ABORT_ILLEGAL	3
+
 /** @addtogroup coreinternal */
 /*@{*/
+
+/** Display info regarding undef, spurious, data or prefetch abort.
+ *
+ * @param data 3 if the abort is because of an illegal instruction, 2 if the
+ * abort is a spurious irq, 1 if the abort is a data abort, 0 if it is a
+ * prefetch abort.
+ * @param pc The address of the instruction that caused the abort.
+ * @param cpsr The CPU state at the time of abort.
+ */
+void nx__abort_info(U32 data, U32 pc, U32 cpsr);
 
 /** Process a data or prefetch abort.
  *
