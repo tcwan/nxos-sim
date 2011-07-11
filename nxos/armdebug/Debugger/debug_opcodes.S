@@ -698,7 +698,10 @@ _dbg_get_aborted_instr:
     beq     _following_instr_addr_for_arm
 _following_instr_addr_for_thumb:
     add     r6, r6, #2                                  /* Store default following Thumb instruction address to R6 */
+#if 0
+	/* Flag Thumb instruction only within the instruction handler */
     orr     r6, r6, #BKPT_STATE_THUMB_FLAG              /* Set b0 to indicate Thumb instruction */
+#endif
     /* R4: Candidate Instruction Opcode
      * R5[3:0]: CPSR condition codes
      * R6: Default Following Instruction Address (PC+2)
@@ -774,6 +777,7 @@ _eval_thumb_instruction:
     _dbg_thumbDecodeEntry r1, r2, r3, r0  /* instrreg (R1), instrmask (R2), codehandler (R3), indexreg (R0) */
     teq     r1, #0                      /* Check for Null Entry (End of Table marker) */
     moveq   r0, r6                      /* End of Table, no match found, so use Default Following Instruction Address */
+    orreq  	r0, r0, #BKPT_STATE_THUMB_FLAG  /* Set R0[0] to flag Thumb mode */
     beq     _exit_eval_thumb_instruction
 
     and     r7, r4, r2                  /* Use R5 to check masked instruction opcode (from R4) to see if it matches template (in R1) */
@@ -1159,9 +1163,6 @@ _arm_bx_blx_handler:
     _regenum2index  r0, r1                  /* Convert Enum into Index in R1 */
     _getdbgregisterfromindex r1, r0         /* Retrieve Register contents from Index (R1) into R0 */
 	/* Here, the register value would have B0 set to indicate switch to Thumb mode  */
-#if 0
-    bic     r0, #0x01                       /* Clear R0[0] since it is used to indicates Thumb mode */
-#endif
     ldmfd   sp!, {pc}
 
 /* _arm_ldr_pc_handler
@@ -1283,7 +1284,7 @@ _arm_b_bl_blx_get_offset:
 	bne		_exit_arm_b_bl_blx_handler		/* No, it is a B/BL instruction */
 	tst		r4, #ARM_BLX_INSTR_HBIT			/* H bit for Thumb Halfword Address */
 	orrne	r0, r0, #0x02					/* Set Halfword Address R0[1] */
-    orr   	r0, r0, #0x01           		/* Set R0[0] since BLX instr used to switch to Thumb mode */
+    orr   	r0, r0, #BKPT_STATE_THUMB_FLAG  /* Set R0[0] since BLX instr used to switch to Thumb mode */
 #endif
 
 _exit_arm_b_bl_blx_handler:
@@ -1354,7 +1355,7 @@ _thumb_get_regcount:
 	ldr		r0, [r1]						/* Retrieve new PC value */
 #if 0
 	/* PC Value should have B0 set */
-    orr     r0, r0, #0x01           		/* Force R0[0] since it is used to indicates Thumb mode */
+    orr     r0, r0, #BKPT_STATE_THUMB_FLAG	/* Force R0[0] since it is used to indicates Thumb mode */
 #endif
     ldmfd   sp!, {pc}
 
@@ -1395,7 +1396,7 @@ _thumb_calc_bcond_offset:
     add		r0, r6, r0						/* PC+2 + signed offset */
     add		r0, r0, #2						/* PC+4 + signed offset */
 _exit_thumb_bcond_instr:
-    orr     r0, r0, #0x01                   /* Set R0[0] since it is used to indicates Thumb mode */
+    orr     r0, r0, #BKPT_STATE_THUMB_FLAG  /* Set R0[0] since it is used to indicates Thumb mode */
 _exit_thumb_bcond_swi_handler:
     ldmfd   sp!, {pc}
 
@@ -1416,7 +1417,7 @@ _thumb_b_handler:
     asr		r0, r0, #(32-12)		/* Convert into 12-bit signed offset in R0[11:0] */
     add		r0, r6, r0				/* PC+2 + signed offset */
     add		r0, r0, #2				/* PC+4 + signed offset */
-    orr     r0, r0, #0x01           /* Set R0[0] since it is used to indicates Thumb mode */
+    orr     r0, r0, #BKPT_STATE_THUMB_FLAG /* Set R0[0] since it is used to indicates Thumb mode */
     ldmfd   sp!, {pc}
 
 /* _thumb_long_bl_blx_handler
@@ -1475,7 +1476,7 @@ _return_default_thumb_following_instr:
 	 */
 	mov		r0, r6								/* Return default Following/Subsequent Instruction Address  */
 _flag_thumb_instr_addr:
-    orr		r0, r0, #0x01           			/* Set R0[0] since it is used to indicates Thumb mode */
+    orr		r0, r0, #BKPT_STATE_THUMB_FLAG      /* Set R0[0] since it is used to indicates Thumb mode */
 
 _exit_thumb_long_bl_blx_handler:
     ldmfd   sp!, {pc}
