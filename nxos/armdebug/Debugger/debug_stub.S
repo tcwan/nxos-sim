@@ -355,10 +355,14 @@ debug_cmdJumpTable:
  ****************************************************************************/
     .code 32
     .align 4
- 	.global dbg__bkpt_init
 /* dbg__bkpt_init
- * 		GDB set_debug_traps() routine
+ *		GDB set_debug_traps() routine
+ *		On entry:
+ *			None
+ *		On exit:
+ *			r0-r3: destroyed
  */
+ 	.global dbg__bkpt_init
 dbg__bkpt_init:
     push    {lr}
 	bl		_dbg__clear_breakpoints
@@ -383,74 +387,89 @@ dbg__bkpt_init:
  *		Defined by GDB Stub, but not needed for ARMv4T architecture
  */
 _dbg__flush_icache:
-		/* nop */
-		bx	lr
+	/* nop */
+	bx	lr
 
-
-	.global	dbg__thumb_bkpt_handler
-/* dbg__thumb_bkpt_handler
- * 		GDB handle_exception() routine (Thumb Mode)
+/* dbg__abort_exception_handler
+ *		Handle Abort Exceptions
+ *		On entry:
+ *			r0: Abort Type Enum
+ *		On exit:
+ *			routine does not 'exit' in the normal sense
  */
-dbg__thumb_bkpt_handler:
-/* On entry, r0 contains breakpoint index value */
-	/* mov	r4, #BKPT16_AUTO_BKPT Redundant?! */
-	and	r4, r0, #BKPT16_AUTO_BKPT	/* keep AUTO flag value in r4 */
-	bic	r0, r0, #BKPT16_AUTO_BKPT	/* mask out AUTO flag */
-	_dbg_setcurrbkpt_index r0		/* keep current breakpoint index in memory */
-	ldr	r1, =BKPT16_MANUAL_BKPT
-	teq	r0, r1
-	beq	_process_manual_breakpoint_thumb
-	ldr	r1, =__breakpoints_num__
-	cmp	r0, r1					/* Sanity check that index is in range */
-	bhs	dbg__bkpt_offset_outofrange
-/* Valid index value found */
-	teq	r4, #0					/* Check if AUTO flag set */
-	bne	_process_auto_breakpoint
-/* else */
-	_dbg_set_bkpt_type DBG_NORMAL_BKPT_THUMB
-	b	_process_normal_breakpoint
-
-	.global	dbg__arm_bkpt_handler
-/* dbg__arm_bkpt_handler
- * 		GDB handle_exception() routine (ARM Mode)
- */
-dbg__arm_bkpt_handler:
-/* On entry, r0 contains breakpoint index value */
-	/* mov	r4, #BKPT32_AUTO_BKPT Redundant?! */
-	and	r4, r0, #BKPT32_AUTO_BKPT	/* keep AUTO flag value in r4 */
-	bic	r0, r0, #BKPT32_AUTO_BKPT	/* mask out AUTO flag */
-	_dbg_setcurrbkpt_index r0		/* keep current breakpoint index in memory */
-	ldr	r1, =BKPT32_MANUAL_BKPT
-	teq	r0, r1
-	beq	_process_manual_breakpoint_arm
-	ldr	r1, =__breakpoints_num__
-	cmp	r0, r1					/* Sanity check that index is in range */
-	bhs	dbg__bkpt_offset_outofrange
-/* Valid index value found */
-	teq	r4, #0					/* Check if AUTO flag set */
-	bne	_process_auto_breakpoint
-/* else */
-	_dbg_set_bkpt_type DBG_NORMAL_BKPT_ARM
-/*	b	_process_normal_breakpoint */
-
-_process_normal_breakpoint:
-	bl	_dbg__restore_breakpoints	/* includes restoring single step */
-/*	bl	_dbg__restore_singlestep */
-	bl	_dbg__clear_singlestep
-	bl	_dbg__flush_icache
+	.global	dbg__abort_exception_handler
+dbg__abort_exception_handler:
+	_dbg_set_bkpt_type r0			/* Set Breakpoint Type given value in R0 */
 	b	dbg__bkpt_waitCMD
 
+/* dbg__thumb_bkpt_handler
+ *		GDB handle_exception() routine (Thumb Mode)
+ *		On entry:
+ *			r0: Breakpoint index value
+ *		On exit:
+ *			routine does not 'exit' in the normal sense
+ */
+	.global	dbg__thumb_bkpt_handler
+dbg__thumb_bkpt_handler:
+	and		r4, r0, #BKPT16_AUTO_BKPT	/* keep AUTO flag value in r4 */
+	bic		r0, r0, #BKPT16_AUTO_BKPT	/* mask out AUTO flag */
+	_dbg_setcurrbkpt_index r0			/* keep current breakpoint index in memory */
+	ldr		r1, =BKPT16_MANUAL_BKPT
+	teq		r0, r1
+	moveq	r0, #DBG_MANUAL_BKPT_THUMB	/* Manual Thumb Breakpoint, process it */
+	beq		_restore_normal_breakpoints
+
+_process_normal_or_auto_breakpoint_thumb:
+	ldr		r1, =__breakpoints_num__
+	cmp		r0, r1						/* Sanity check that index is in range */
+	bhs		dbg__bkpt_offset_outofrange	/* Exceeded Offset Range */
+
+_check_auto_breakpoint_thumb:
+	teq		r4, #0						/* Check if AUTO flag set */
+	moveq	r0, #DBG_NORMAL_BKPT_THUMB	/* No, it is a normal breakpoint */
+	beq		_restore_normal_breakpoints
+	b		_process_auto_breakpoint
+
+/* dbg__arm_bkpt_handler
+ *		GDB handle_exception() routine (ARM Mode)
+ *		On entry:
+ *			r0: breakpoint index value
+ *		On exit:
+ *			routine does not 'exit' in the normal sense
+ */
+	.global	dbg__arm_bkpt_handler
+dbg__arm_bkpt_handler:
+	/* On entry, r0 contains breakpoint index value */
+	and		r4, r0, #BKPT32_AUTO_BKPT	/* keep AUTO flag value in r4 */
+	bic		r0, r0, #BKPT32_AUTO_BKPT	/* mask out AUTO flag */
+	_dbg_setcurrbkpt_index r0			/* keep current breakpoint index in memory */
+	ldr		r1, =BKPT32_MANUAL_BKPT
+	teq		r0, r1
+	moveq	r0, #DBG_MANUAL_BKPT_ARM	/* Manual ARM Breakpoint, process it */
+	beq		_restore_normal_breakpoints
+
+_process_normal_or_auto_breakpoint_arm:
+	ldr		r1, =__breakpoints_num__
+	cmp		r0, r1						/* Sanity check that index is in range */
+	bhs		dbg__bkpt_offset_outofrange	/* Exceeded Offset Range */
+
+_check_auto_breakpoint_arm:
+	teq		r4, #0						/* Check if AUTO flag set */
+	moveq	r0, #DBG_NORMAL_BKPT_ARM	/* No, it is a normal breakpoint */
+	beq		_restore_normal_breakpoints
+/*	b		_process_auto_breakpoint */
+
 _process_auto_breakpoint:
-/* Load Auto BKPT for Breakpoint index given in r0 */
-	_index2bkptindex_addr	r0, r1	/* Calculate Breakpoint Entry Address */
-	ldm	r1, {r1, r2}				/* r1: Breakpoint Address, r2: Breakpoint Instruction */
-	teq	r1, #0						/* Check that Breakpoint is active */
-	beq	dbg__bkpt_inactive
-	bl	_dbg__activate_one_breakpoint
-	bl	_dbg__restore_singlestep
-	bl	_dbg__clear_singlestep
-	_dbg_set_bkpt_type DBG_AUTO_BKPT
-	b	_dbg__switch2undefmode
+	/* Load Auto BKPT for Breakpoint index given in r0 */
+	_index2bkptindex_addr	r0, r1		/* Calculate Breakpoint Entry Address */
+	ldm		r1, {r1, r2}				/* r1: Breakpoint Address, r2: Breakpoint Instruction */
+	teq		r1, #0						/* Check that Breakpoint is active */
+	beq		dbg__bkpt_inactive
+	bl		_dbg__activate_one_breakpoint
+	bl		_dbg__restore_singlestep
+	bl		_dbg__clear_singlestep
+	_dbg_set_bkpt_type_val DBG_AUTO_BKPT
+/*	b	_dbg__switch2undefmode */
 
 /* _dbg__switch2undefmode
  *      Common internal routine to return execution to user program
@@ -463,11 +482,18 @@ _dbg__switch2undefmode:
     mov     pc, lr                          /* Exit via UNDEF mode */
 
 _process_manual_breakpoint_thumb:
-	_dbg_set_bkpt_type DBG_MANUAL_BKPT_THUMB
-	b	dbg__bkpt_waitCMD
+	mov r0, #DBG_MANUAL_BKPT_THUMB		/* Setup Breakpoint type before executing common routine */
+	b	_restore_normal_breakpoints
 
-_process_manual_breakpoint_arm:
-	_dbg_set_bkpt_type DBG_MANUAL_BKPT_ARM
+_process_normal_breakpoint_thumb:
+	mov r0, #DBG_NORMAL_BKPT_THUMB		/* Setup Breakpoint type before executing common routine */
+	b	_restore_normal_breakpoints
+
+_restore_normal_breakpoints:
+	_dbg_set_bkpt_type r0			/* Set Breakpoint Type given value in R0 */
+	bl	_dbg__restore_breakpoints	/* includes restoring single step */
+	bl	_dbg__clear_singlestep
+	bl	_dbg__flush_icache
 /*	b	dbg__bkpt_waitCMD */
 
 dbg__bkpt_inactive:
@@ -520,7 +546,7 @@ _proc_command:
 
 _dbg_check_gdb_command:
 	teq		r0, #MSGBUF_STARTCHAR
-	movne	r0, #MSG_ERRFORMAT				/* Message Format invalid (not '$') */
+	movne	r1, #MSG_ERRFORMAT				/* Message Format invalid (not '$') */
 	bne		_dbg__cmdError					/* Shouldn't happen */
 	ldrb	r0, [r4], #1					/* Look for command char */
 	bl		_dbg__cmdChar2Index				/* Index in R0 */
@@ -532,7 +558,7 @@ _dbg_unknown_command:
 	b 		dbg__bkpt_waitCMD_cont
 
 #if 0
-	moveq	r0, #MSG_UNKNOWNCMD				/* Out of range, Command character not recognized */
+	moveq	r1, #MSG_UNKNOWNCMD				/* Out of range, Command character not recognized */
 	beq		_dbg__cmdError					/* Send response to GDB server */
 #endif
 
@@ -715,7 +741,20 @@ __dbg__sendDebugMsgExit:
  */
 _dbg__cmd_Status:
 	stmfd	sp!, {lr}
-	_dbg_outputMsgStatusSig 0x0				/* FIXME: Dummy Signal number */
+    _dbg_get_bkpt_type   r0
+_check_data_abort_exception:
+	teq		r0, #DBG_ABORT_DATA
+	moveq	r1, #MSG_SIG_BUS					/* Bus Error */
+	beq		_exit_dmg__cmd_Status
+_check_prefetch_abort_exception:
+	teq		r0, #DBG_ABORT_PREFETCH
+	moveq	r1, #MSG_SIG_ABRT					/* FIMXE: Look for a better Signal number */
+	beq		_exit_dmg__cmd_Status
+_default_breakpoint_exception:
+	mov		r1, #MSG_SIG_DEFAULT				/* Dummy Signal number */
+
+_exit_dmg__cmd_Status:
+	_dbg_outputMsgStatusSig
 	b	__dbg__sendDebugMsgExit
 
 /* _dbg__cmd_Query

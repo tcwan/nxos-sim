@@ -156,14 +156,14 @@ class NXTGDBServer:
         s.setsockopt (socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind (('', self.port))
         s.listen (1)
-        # Open connection to the NXT brick.
-        brick = nxt.locator.find_one_brick (method=nxt.Method(usb=False, bluetooth=False, fantomusb=True, fantombt=False))
-        brick.sock.debug = DEBUG
         print "Waiting for GDB connection on port %s..." % self.port
         while True:
             # Wait for a connection.
             client, addr = s.accept ()
             print "Client from", addr
+            # Open connection to the NXT brick.
+            brick = nxt.locator.find_one_brick ()
+            brick.sock.debug = DEBUG
             # Work loop, wait for a message from client socket or NXT brick.
             while client is not None:
                 data = ''
@@ -180,7 +180,10 @@ class NXTGDBServer:
                         #   print "CTRL-C Received!"
                         #   data = STATUS_QUERY
                         if DEBUG:
-                            print "[GDB->NXT] %s" % data
+                            if data[0] == CTRLC:
+                                print "[GDB->NXT] <CTRL-C>"
+                            else:
+                                print "[GDB->NXT] %s" % data
                         segments = self.segment (data)
                         data = ''
                         for seg in segments:
@@ -209,6 +212,7 @@ class NXTGDBServer:
                     if client:
                         client.send (data)
                     data = ''
+            brick.sock.close()
             print "Connection closed, waiting for GDB connection on port %s..." % self.port
 
 if __name__ == '__main__':
