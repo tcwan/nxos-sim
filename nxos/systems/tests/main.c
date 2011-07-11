@@ -26,7 +26,9 @@ void main(void) {
   nx_systick_install_scheduler(security_hook);
 
   //tests_all();
-  tests_fantom();
+
+  // tests_fantom();
+  tests_gdbdebug();
 
   //tests_usb();
   //tests_bt();

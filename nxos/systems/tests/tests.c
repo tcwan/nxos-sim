@@ -731,79 +731,6 @@ void tests_bt(void) {
   goodbye();
 }
 
-
-void tests_fantom(void) {
-  U16 i;
-  U32 count = 0;
-
-
-  hello();
-
-  // Enable EP1
-#if !defined (__FANTOMENABLE__) && !defined (__DBGENABLE__)
-  U32 lng = 0;
-  U8 *messagePtr;
-  char buffer[NX_USB_PACKET_SIZE];
-  nx_usb_read((U8 *)&buffer, NX_USB_PACKET_SIZE * sizeof(char));
-#elif defined (__FANTOMENABLE__) && !defined (__DBGENABLE__)
-  char buffer[NX_USB_PACKET_SIZE];
-  fantom_init((U8 *)&buffer, NX_USB_PACKET_SIZE * sizeof(char));
-#else // defined (__DBGENABLE__)
-  // Nothing to do, fantom buffer already initialized by dbg__bkpt_init()
-#endif
-
-  // dbg_breakpoint_arm();
-  while(1) {
-    nx_display_cursor_set_pos(0, 0);
-    nx_display_string("Waiting for Fantom message ...");
-    nx_display_uint(count);
-
-    dbg_breakpoint_arm();                 /* Trigger a manual ARM Breakpoint */
-    dbg__test_arm_instrstep();
-
-    for (i = 0 ; i < 10 && !nx_usb_data_read(); i++)
-    {
-      nx_systick_wait_ms(200);
-    }
-    /* 2 second timeout */
-    count++;
-
-    if (count >= 5)
-      break;
-
-#if !defined (__FANTOMENABLE__) && !defined (__DBGENABLE__)
-
-    nx_display_clear();
-
-    lng = nx_usb_data_read();
-     nx_display_cursor_set_pos(0, 0);
-     nx_display_string("Received Fantom message ...");
-     nx_display_uint(lng);
-
-    messagePtr = (U8 *)buffer;
-    if (fantom_filter_packet(&messagePtr, (U32 *)&lng, FALSE)) {
-      /* message was a fantom packet, so send any reply and clear it from our read buffers */
-      if (lng > 0) {
-        nx_usb_write(messagePtr, lng);
-        nx_display_cursor_set_pos(0, 4);
-        nx_display_string("Sent Fantom message ...");
-        nx_display_uint(lng);
-      }
-    }
-    // Reenable EP1
-    nx_usb_read((U8 *)&buffer, NX_USB_PACKET_SIZE * sizeof(char));
-
-    count++;
-
-    nx_systick_wait_ms(1000);
-
-    nx_display_clear();
-#endif
-  }
-
-  goodbye();
-}
-
 void tests_usb(void) {
   U16 i;
   U32 lng = 0;
@@ -1307,6 +1234,108 @@ void tests_defrag(void) {
   //fs_test_defrag_for_file();
   fs_test_defrag_best_overall();
   goodbye();
+}
+
+void tests_fantom(void) {
+
+
+#if !defined (__FANTOMENABLE__) && !defined (__DBGENABLE__)
+	U32 i, count = 0;
+	U32 lng = 0;
+	U8 *messagePtr;
+	char buffer[NX_USB_PACKET_SIZE];
+
+  hello();
+
+  while(1) {
+	nx_usb_read((U8 *)&buffer, NX_USB_PACKET_SIZE * sizeof(char));
+
+    nx_display_clear();
+
+    for (i = 0 ; i < 10 && !nx_usb_data_read(); i++)
+    {
+      nx_systick_wait_ms(200);
+    }
+    count++;
+
+    if (count >= 500)
+      break;
+
+    lng = nx_usb_data_read();
+    nx_display_cursor_set_pos(0, 0);
+	nx_display_string("Received Fantom message ...");
+	nx_display_uint(lng);
+
+    messagePtr = (U8 *)buffer;
+    if (fantom_filter_packet(&messagePtr, (U32 *)&lng, FALSE)) {
+      /* message was a fantom packet, so send any reply and clear it from our read buffers */
+      if (lng > 0) {
+        nx_usb_write(messagePtr, lng);
+        nx_display_cursor_set_pos(0, 4);
+        nx_display_string("Sent Fantom message ...");
+        nx_display_uint(lng);
+      }
+    }
+    nx_usb_read((U8 *)&buffer, NX_USB_PACKET_SIZE * sizeof(char));
+
+  }
+
+  goodbye();
+
+#else
+
+  U32 count = 0;
+
+#if defined (__FANTOMENABLE__) && !defined (__DBGENABLE__)
+  char buffer[NX_USB_PACKET_SIZE];
+  fantom_init((U8 *)&buffer, NX_USB_PACKET_SIZE * sizeof(char));
+#else // defined (__DBGENABLE__)
+  // Nothing to do, fantom buffer already initialized by dbg__bkpt_init()
+#endif
+
+  hello();
+
+  while(1) {
+
+    nx_display_cursor_set_pos(0, 0);
+    nx_display_string("Waiting for\nFantom Msg...\n");
+    nx_display_uint(count);
+    nx_display_string(" sec");
+
+    nx_systick_wait_ms(1000);
+    count++;
+
+    if (count >= 30)
+      break;
+
+	}
+
+  goodbye();
+
+#endif
+}
+
+void tests_gdbdebug(void) {
+  U32 count = 0;
+
+  hello();
+
+  while(1) {
+	nx_display_cursor_set_pos(0, 0);
+	nx_display_string("Waiting for\nDebugger ...");
+	nx_display_uint(count);
+
+	dbg_breakpoint_arm();                 /* Trigger a manual ARM Breakpoint */
+	dbg__test_thumb_instrstep();
+	nx_systick_wait_ms(1000);
+	count++;
+
+	if (count >= 5)
+	  break;
+  }
+
+  goodbye();
+
 }
 
 void tests_all(void) {
