@@ -176,6 +176,10 @@ void nx_display_hex(U32 val) {
       *ptr = hex[val & 0xF];
       val >>= 4;
     }
+    while (ptr != buf) {
+    	ptr--;
+    	*ptr = hex[0];
+    }
   }
 
   buf[8] = '\0';

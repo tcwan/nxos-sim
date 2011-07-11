@@ -26,7 +26,7 @@ void nx__abort_info(U32 data, U32 pc, U32 cpsr) {
   } else {
     nx_display_string("Prefetch");
   }
-  nx_display_string(" abort\nPC: 0x");
+  nx_display_string(" abort\n  PC: 0x");
   nx_display_hex(pc);
   nx_display_string("\nCPSR: 0x");
   nx_display_hex(cpsr);
