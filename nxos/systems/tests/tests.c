@@ -1326,6 +1326,7 @@ void tests_gdbdebug(void) {
 	nx_display_uint(count);
 
 	dbg_breakpoint_arm();                 /* Trigger a manual ARM Breakpoint */
+	dbg__test_arm_instrstep();
 	dbg__test_thumb_instrstep();
 	nx_systick_wait_ms(1000);
 	count++;
