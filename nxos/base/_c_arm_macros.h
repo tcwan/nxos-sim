@@ -12,8 +12,8 @@
  * the terms of the GNU Public License (GPL) version 2.
  */
 
-#ifndef __NXOS_BASE_C_ARM_MACROS__
-#define __NXOS_BASE_C_ARM_MACROS__
+#ifndef __C_ARM_MACROS__
+#define __C_ARM_MACROS__
 
 #ifdef __ASSEMBLY__
 
@@ -146,4 +146,4 @@ ENUM_VAL(POLL)             /**< Driver Poll Routine. */
 ENUM_END(nx_driver_default_cmd)
 
 
-#endif /* __NXOS_BASE_C_ARM_MACROS__ */
+#endif /* __C_ARM_MACROS__ */
