@@ -56,4 +56,5 @@
 \thumb_routine:
 	.endm
 
+#endif
 #endif  /* __NXOS_BASE_INTERWORK_H__ */
