@@ -160,7 +160,12 @@ static void avr_pack_to_avr(void) {
 
 /* Small helper to convert two bytes into an U16. */
 static inline U16 unpack_word(U8 *word) {
-  return *((U16*)word);
+#if 0
+	/* This code is not byte alignment safe! */
+	return *((U16*)word);
+#endif
+	/* Assume Little Endian Format */
+	return (((*(word+1) & 0xFF) << 8) | (*(word) & 0xFF));
 }
 
 /* Deserialize the AVR data structure in raw_from_avr into the
