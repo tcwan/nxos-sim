@@ -71,7 +71,7 @@ static void systick_sched(void) {
 
 /* High priority handler, called 1000 times a second */
 static void systick_isr(void) {
-  U32 status;
+  volatile U32 status __attribute__ ((unused));
   /* The PIT's value register must be read to acknowledge the
    * interrupt.
    */

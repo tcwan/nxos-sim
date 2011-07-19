@@ -54,7 +54,7 @@ static inline void fire_callback(nx_rs485_error_t status, bool reset) {
 }
 
 static void nx_rs485_isr(void) {
-  const U32 csr = *AT91C_US0_CSR;
+  volatile const U32 csr = *AT91C_US0_CSR;
 
   /* Successful transfer completion first, then error cases. */
   if ((rs485_state.status == RS485_RECEIVING && (csr & AT91C_US_ENDRX)) ||

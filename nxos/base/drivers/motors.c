@@ -85,8 +85,8 @@ static volatile struct {
  */
 static void motors_isr(void) {
   int i;
-  U32 changes;
-  U32 pins;
+  volatile U32 changes;
+  volatile U32 pins;
   U32 time;
 
   /* Acknowledge the interrupt and grab the state of the pins. */

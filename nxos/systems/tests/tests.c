@@ -608,11 +608,13 @@ static int tests_command(char *buffer) {
 void tests_bt(void) {
   U16 i;
   U16 lng = 0;
-  int port_handle = -1;
+  int port_handle __attribute__ ((unused));
   int connection_handle = -1;
   int bleh = -1;
 
   char buffer[BT_PACKET_SIZE];
+
+  port_handle = -1;
 
   for (i = 0 ; i < BT_PACKET_SIZE ; i++)
     buffer[i] = 0;

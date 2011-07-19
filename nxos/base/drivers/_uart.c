@@ -48,7 +48,7 @@ static volatile struct {
 };
 
 static void uart_isr(void) {
-  U32 status = *AT91C_US1_CSR;
+  volatile U32 status = *AT91C_US1_CSR;
 
   /* If we receive a break condition from the Bluecore, send up a NULL
    * packet and reset the controller status.

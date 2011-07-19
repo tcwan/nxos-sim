@@ -403,8 +403,8 @@ static void i2c_set_bus_state(U32 sensor, U32 next_state) {
 static void i2c_isr(void) {
   volatile struct i2c_port *p;
   volatile struct i2c_txn_info *t;
-  U32 dummy;
-  U32 lines = *AT91C_PIOA_PDSR;
+  volatile U32 dummy __attribute__ ((unused));
+  volatile U32 lines = *AT91C_PIOA_PDSR;
   U32 codr = 0;
   U32 sodr = 0;
   short sensor;
