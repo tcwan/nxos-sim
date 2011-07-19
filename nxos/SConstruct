@@ -227,9 +227,9 @@ myasflags = ['-Wall', '-Werror', '-Os'];
 if str(env['NXOS_LIBGCC']).find('interwork') != -1:
     mycflags.append('-mthumb-interwork')
     myasflags.append('-Wa,-mcpu=arm7tdmi,-mfpu=softfpa,-mthumb-interwork')
-elif str(env['NXOS_LIBGCC']).find('thumb') != -1:
-    mycflags.append('-mthumb')
-    myasflags.append('-Wa,-mcpu=arm7tdmi,-mfpu=softfpa,-mthumb')
+#elif str(env['NXOS_LIBGCC']).find('thumb') != -1:
+#    mycflags.append('-mthumb')
+#    myasflags.append('-Wa,-mcpu=arm7tdmi,-mfpu=softfpa,-mthumb')
 else:
     myasflags.append('-Wa,-mcpu=arm7tdmi,-mfpu=softfpa')
 mycflags.append('-g')
