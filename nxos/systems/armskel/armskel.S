@@ -40,6 +40,8 @@ content: .asciz "Hello!"
 main:
 	push	{lr}
 	bl		nx_proginit
+
+	mov		r7, #3
 loop:
 	ldr		r0, =title
 	bl		nx_progtitle
@@ -55,7 +57,9 @@ loop:
 	mov		r0, #SYSTICK_1000MS
 	bl		nx_systick_wait_ms
 
-	/*	b		loop */
+/*	subs	r7, r7, #1
+	bne		loop
+*/
 
 exit_main:
 	bl		nx_progshutdown
