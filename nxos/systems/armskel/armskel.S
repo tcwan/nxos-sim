@@ -48,6 +48,7 @@ loop:
 
 	dbg__bkpt_arm
 
+break:
 	mov		r0, #SYSTICK_1000MS
 	bl		nx_systick_wait_ms
 
