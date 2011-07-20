@@ -254,6 +254,11 @@ debug_OkResponse:
 debug_ThreadIDResponse:
 	.byte	'+','$','Q','C','0',0			/* 0: Any thread */
 
+debug_FirstThreadInfoResponse:
+	.byte	'+','$','m','0',0				/* 0: One default thread */
+debug_SubsequentThreadInfoResponse:
+	.byte	'+','$','l',0					/* End of Thread List */
+
 /* The CmdIndexTable and CmdJumpTable must be kept in sync */
 debug_cmdIndexTable:
 	.byte	'g','G','p','P','m','M','D','c','s','k','z','Z','?','q','Q',0
@@ -693,11 +698,11 @@ __dbg__procCmdReturnOutputLengthError:
  */
 __dbg__procBreakpointAddrError:
     mov r1, #MSG_UNKNOWNBRKPT
-    b   __dbg__procErrorMsg
+/*    b   __dbg__procErrorMsg */
 
 
 __dbg__procErrorMsg:
-    __dbg_outputErrMsg
+    _dbg_outputMsgStatusErr
     /* b       __dbg__sendDebugMsgExit */
 
 __dbg__sendDebugMsgExit:
@@ -743,14 +748,30 @@ _dbg__cmd_Query:
 	_dbg_setstate	DBG_CONFIGURED			/* We have exchanged query messages with the GDB server */
 	ldmfd	sp!, {r0, r1}					/* Restore parameters needed for subsequent processing */
 	bl      __dbg__cmdParamLen
+	cmp		r1, #CMD_QUERY_MINPARAMLEN
+	beq		_dbg__cmd_Query_default
+
+	ldrb	r2, [r0]						/* Get First Query Param Char */
+_dbg__cmd_Query_check_C:
+	teq		r2, #CMD_QUERY_CURRTID_CHAR		/* Handle Current Thread ID Query */
+	bne		_dbg__cmd_Query_check_fThreadInfo
 	cmp		r1, #CMD_QUERY_CURRTID_PARAMLEN
 	bne		_dbg__cmd_Query_default
-
-_dbg__cmd_Query_check:
-	ldrb	r2, [r0]						/* Get First Query Param Char */
-	teq		r2, #CMD_QUERY_CURRTID_CHAR		/* Handle Current Thread ID Query */
-	bne		_dbg__cmd_Query_default
 	_dbg_outputMsgCurrTID
+	b	__dbg__sendDebugMsgExit
+_dbg__cmd_Query_check_fThreadInfo:
+	teq		r2, #CMD_QUERY_FTINFO_CHAR		/* Handle fThreadInfo Query */
+	bne		_dbg__cmd_Query_check_sThreadInfo
+	cmp		r1, #CMD_QUERY_FTINFO_PARAMLEN
+	bne		_dbg__cmd_Query_default
+	_dbg_outputMsgFirstThreadInfo
+	b	__dbg__sendDebugMsgExit
+_dbg__cmd_Query_check_sThreadInfo:
+	teq		r2, #CMD_QUERY_STINFO_CHAR		/* Handle sThreadInfo ID Query */
+	bne		_dbg__cmd_Query_default
+	cmp		r1, #CMD_QUERY_STINFO_PARAMLEN
+	bne		_dbg__cmd_Query_default
+	_dbg_outputMsgSubsequentThreadInfo
 	b	__dbg__sendDebugMsgExit
 
 _dbg__cmd_Query_default:
@@ -765,7 +786,7 @@ _dbg__cmd_Query_default:
  *			r0: parameter buffer pointer (contents after '$' and '<cmdchar>')
  *              x
  *      On exit:
- *          r0, r1, r2, r3: destroyed
+ *          r0, r1, r2, r3, r4: destroyed
  *
  */
 _dbg__cmd_GetOneReg:
@@ -778,9 +799,9 @@ _dbg__cmd_GetOneReg:
     bl      ascii2hex_varlen_be             /* convert ASCII reg enum to Hex (in R0), R1 has address of next buffer char */
 
 _dbg__proc_getRegister:
-	mov		r3, r0							/* Keep register index safe */
+	mov		r4, r0							/* Keep register index safe */
 	_dbg_outputMsgValidResponse				/* R0: address of output message buffer data pointer (after response prefix) */
-	mov		r1, r3							/* Move register index value to R1 */
+	mov		r1, r4							/* Move register index value to R1 */
 	bl		_dbg_outputOneRegValue			/* update output buffer */
 	_asciiz r0, r1
 	bl		dbg__putDebugMsg				/* Send response to the GDB server */
@@ -991,7 +1012,7 @@ _dbg__nop:
  *          r0: parameter buffer pointer (contents after '$' and '<cmdchar>')
  *              AA..AA,LLLL
  *      On exit:
- *          r0, r1, r2, r3, r4: destroyed
+ *          r0, r1, r2, r3, r4, r5: destroyed
  */
 _dbg__cmd_ReadMem:
     stmfd   sp!, {lr}
@@ -1002,7 +1023,7 @@ _dbg__cmd_ReadMem:
     bl      ascii2word_be                   /* convert ASCII address location to Hex (in R0), R1 has address of next buffer char */
 #endif
     bl      ascii2hex_varlen_be             /* convert ASCII address to Hex (in R0), R1 has address of next buffer char */
-    mov     r3, r0                          /* Keep Address location in R3 */
+    mov     r5, r0                          /* Keep Address location in R5 */
     _check_msgseparator r1
     bne     __dbg__procCmdParamError        /* Can't find ',' */
     mov     r0, r1                          /* move buffer pointer to R0 for subsequent processing */
@@ -1013,7 +1034,7 @@ _dbg__cmd_ReadMem:
     /* FIXME: Should validate the address? */
 
     _dbg_outputMsgValidResponse             /* R0: address of output message buffer data pointer (after response prefix) */
-1:  ldrb    r1, [r3], #1
+1:  ldrb    r1, [r5], #1
     bl      byte2ascii                       /* update output buffer */
     subs    r4, r4, #1
     bne     1b
