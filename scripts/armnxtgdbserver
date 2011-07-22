@@ -1,0 +1,15 @@
+#!/bin/sh
+GDBSERVER=../nxos/armdebug/Host/nxt-gdb-server.py
+PYTHON=python
+DARWIN=`uname`
+# Debugging Info
+# echo "dirname:" `dirname $0`
+# echo "basename:" `basename $0`
+cd `dirname $0`
+if [ $DARWIN == "Darwin" ]; then
+	echo "Running on Mac OSX Platform!"
+	arch -i386 $PYTHON $GDBSERVER
+else
+	echo "Running on Default Platform!"
+	$PYTHON $GDBSERVER
+fi
