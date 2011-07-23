@@ -189,5 +189,8 @@ Debugging support is provided via a GDB stub implemented in the
 firmware. Communications is over USB, there is no need for any
 additional hardware (JTAG) debugging equipment. The only caveat is that
 Interrupt code cannot be stepped through safely, since the debugger uses
-Undefined Instructions to trigger itself. (Note: stepping and setting
-breakpoints is not working yet in BETA 1).
+Undefined Instructions to trigger itself, and uses the NxOS USB drivers to
+communicate with the PC Host. 
+
+(Note: stepping and setting breakpoints is now working since BETA 3, and
+has rudimentary support for Eclipse Indigo CDT-based remote debugging).
