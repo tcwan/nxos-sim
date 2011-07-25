@@ -34,6 +34,8 @@ class InvalidHeader(Error):
 class BrickNotFound(Error):
     """NXT was not found"""
 
+class UploadCorruption(Error):
+    """Data was currupted during upload"""
 
 class Firmware(object):
     HEADER_DEF = '<5LB'
@@ -126,6 +128,9 @@ def upload_and_boot(firmware):
 
         if firmware.samba:
             s.write_buffer(firmware.writeaddr, firmware.firmware)
+            ret = s.read_buffer(firmware.writeaddr, len(firmware.firmware))
+            if firmware.firmware != ret:
+                raise UploadCorruption()
         else:
             f = nxt.flash.FlashController(s)
             f.flash(firmware.firmware)
@@ -199,6 +204,7 @@ def main():
 
     print 'Uploading and booting...'
     upload_and_boot(f)
+    print 'Done.'
 
     return 0
 
