@@ -106,7 +106,8 @@ def appkernel_tool(env):
         # ... Build the ELF kernel...
         variant_kernel_elf = env.Command(
             kvariant + '.elf',
-            [env['NXOS_BASEPLATE'], env['NXOS_DEBUG'], app_kernel, env['NXOS_LIBGCC']],
+#            [env['NXOS_BASEPLATE'], env['NXOS_DEBUG'], app_kernel, env['NXOS_LIBGCC']],
+            [app_kernel, env['NXOS_LIBNXOS'], env['NXOS_LIBDEBUG'], env['NXOS_LIBGCC']],
             '$LINK -o $TARGET -T %s -Os --gc-sections --no-check-sections '
             '$SOURCES' % app_kernel_lds)
         env.Depends(variant_kernel_elf, app_kernel_lds)
@@ -135,7 +136,7 @@ def appkernel_tool(env):
             for s in sources:
                 app_kernel.append(env.Object(s.split('.')[0], s))
 
-        # Build the SAM-BA and ROM kernel variants.
+        # Build the SAM-BA, ROM and RXE kernel variants.
         AppKernelVariant(env, kernel_name, 'samba', app_kernel,
                          env.File('#systems/appkernel_samba.ld'))
         AppKernelVariant(env, kernel_name, 'rom', app_kernel,
@@ -210,9 +211,10 @@ if not env.GetOption('clean'):
                                           'CheckDoxygen': CheckDoxygen})
     conf.env['CROSS_COMPILE_HOST'] = env['gccprefix']
     if not (conf.CheckTool('CC', 'gcc') and conf.CheckTool('AR') and
+            conf.CheckTool('RANLIB', 'ranlib') and
             conf.CheckTool('OBJCOPY') and conf.CheckTool('LINK', 'ld') and
             conf.CheckLibGcc(conf.env['CC'])):
-        print "Missing or incomplete arm-elf toolchain, cannot continue!"
+        print "Missing or incomplete arm cross-compile toolchain, cannot continue!"
         Exit(1)
     conf.CheckDoxygen()
     env = conf.Finish()
@@ -269,4 +271,12 @@ else:
     appkernels = env['appkernels']
 systems_to_build = ['systems/%s/SConscript' % x for x in appkernels]
 numProcs = os.sysconf('SC_NPROCESSORS_ONLN')
+
+env.Append(NXOS_LIBNXOS='#libnxos.a')
+env.Append(NXOS_LIBDEBUG='#libdebug.a')
 SConscript(['base/SConscript', 'armdebug/SConscript'] + systems_to_build, 'numProcs env CheckTool')
+env.Command('$NXOS_LIBNXOS', [env['NXOS_BASEPLATE']],
+            '$AR -r $TARGET $SOURCES; $RANLIB $TARGET')
+env.Command('$NXOS_LIBDEBUG', [env['NXOS_DEBUG']],
+            '$AR -r $TARGET $SOURCES; $RANLIB $TARGET')
+
