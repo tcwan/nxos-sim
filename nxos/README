@@ -52,6 +52,8 @@ to communicate with the brick via USB.
 
 On Linux platforms, the following packages are needed:
   * Python >= 2.4 (not 3.x)
+  * scons
+  * Python Imaging Library (PIL)
   * libusb
   * python-pyusb
   * PyBluez (if you want to upload/boot from the enhanced fw using bluetooth)
