@@ -22,6 +22,7 @@
 
 	.extern	nx_systick_wait_ms
 	.equ	SYSTICK_1000MS, 1000
+	.equ	LOOPCNT, 3
 
 .data
 .align 4
@@ -41,7 +42,7 @@ main:
 	push	{lr}
 	bl		nx_proginit
 
-	mov		r7, #3
+	mov		r7, #LOOPCNT
 loop:
 	ldr		r0, =title
 	bl		nx_progtitle
