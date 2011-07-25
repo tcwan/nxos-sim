@@ -1,0 +1,10 @@
+NxOS - an open source alternative operating system for the Lego Mindstorms NXT
+==============================================================================
+Directory Structure:
+- nxos: NxOS Project Main Directory (see nxos/README for more details)
+- nxt_python: NXT_Python code, obsoleted by NXT-Python (http://code.google.com/p/nxt-python/)
+- pynxt: Firmware Downloading code, unmaintained
+- remote_gdb_reference: Various GDB Stub reference source code materials
+- scripts: Miscellaneous cross-compiler toolchain utilities
+- usb_console: Low Level USB Console, unmaintained
+
