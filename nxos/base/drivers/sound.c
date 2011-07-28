@@ -97,7 +97,7 @@ void nx_sound_freq_async(U32 freq, U32 ms) {
   /* Due to a bug in the sound driver, too short a beep will crash
    * it. So, we check.
    */
-  NX_ASSERT_MSG(ms >= 100, "Due to driver bug\nms must be\n<= 100 ms");
+  NX_ASSERT_MSG(ms >= 100, "Due to driver bug\nms must be\n>= 100 ms");
 
   /* Set the master clock divider to output the correct frequency.
    *
