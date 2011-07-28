@@ -2,8 +2,10 @@
  *  @brief Tribot Test Program
  *  Test Tribot
  *
+ * The following behaviors have been implemented
+ * - Line following (Light Sensor: WIP)
+ * - Object Detection (Touch)
  *
- * [Optionally, more stuff about the component in general.]
  * This file must be processed using cpp before assembly.
  */
 
@@ -97,6 +99,18 @@ break:
 	nop		/* Prevent GDB from stepping inside nx_systick_wait_ms due to breakpoint */
 	mov		r0, #SYSTICK_1000MS
 	bl		nx_systick_wait_ms
+
+	/* Line Follower Algorithm:
+	 * 1. Collect Samples
+	 * 2. Find Min-Max (range)
+	 * 3. Determine if we're:
+	 *     -- inside line
+	 *     -- on edge
+	 *     -- outside line
+	 * 4. If Inside Line, move straight ahead
+	 * 5. If On Edge, rotate slowly
+	 * 6. If Outside Line, rotate quickly
+	 */
 loop:
 	mov		r0, #TOUCH_PORT
 	bl		nx_sensors_analog_get
