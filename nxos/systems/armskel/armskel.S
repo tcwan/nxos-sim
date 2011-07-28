@@ -50,6 +50,7 @@ loop:
 	dbg__bkpt_arm
 
 break:
+	nop		/* Prevent GDB from stepping inside nx_systick_wait_ms due to breakpoint */
 	mov		r0, #SYSTICK_1000MS
 	bl		nx_systick_wait_ms
 
