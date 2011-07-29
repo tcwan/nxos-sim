@@ -20,6 +20,9 @@
 #include "base/interwork.h"
 #include "armdebug/Debugger/debug_stub.h"
 
+/* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
+#define ENABLE_BREAKPOINTS
+
 	.extern	nx_systick_wait_ms
 	.equ	SYSTICK_1000MS, 1000
 	.equ	LOOPCNT, 3
@@ -47,7 +50,9 @@ loop:
 	ldr		r0, =title
 	bl		nx_progtitle
 
+#ifdef ENABLE_BREAKPOINTS
 	dbg__bkpt_arm
+#endif
 
 break:
 	nop		/* Prevent GDB from stepping inside nx_systick_wait_ms due to breakpoint */
