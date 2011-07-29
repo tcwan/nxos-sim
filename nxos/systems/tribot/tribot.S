@@ -26,10 +26,20 @@
 	.equ	SYSTICK_1000MS, 1000
 	.equ	SYSTICK_50MS, 50
 	.equ	TOUCH_THRESH, 256
-	.equ	TOUCH_PORT, 0
-	.equ	SOUND_PORT, 1
-	.equ	LIGHT_PORT, 2
-	.equ	ULSND_PORT, 3
+
+	/* Sensor Port Assignments */
+	.equ	TOUCH_PORT, 0		/* Sensor 1 */
+	.equ	SOUND_PORT, 1		/* Sensor 2 */
+	.equ	LIGHT_PORT, 2		/* Sensor 3 */
+	.equ	ULSND_PORT, 3		/* Sensor 4 */
+	.equ	DIGI0, 0
+	.equ	DIGI1, 1
+
+	/* Actuator Port Assignments */
+	.equ	PINCER_PORT, 0		/* Motor A */
+	.equ	RWHEEL_PORT, 1		/* Motor B */
+	.equ	LWHEEL_PORT, 2		/* Motor C */
+
 
 .data
 .align 4
@@ -42,6 +52,8 @@ released: .asciz "Touch Released!"
 .text
 .align 	4
 
+
+/* Actuator Primitives */
 plip:
 	push	{lr}
 	ldr		r0, =3000
@@ -70,6 +82,19 @@ touch_lost:
 	bl		nx_progcontent
 	pop		{pc}
 
+light_led_enable:
+	push	{lr}
+	mov		r0, #LIGHT_PORT
+	mov		r1, #DIGI0
+	bl		nx_sensors_analog_digi_set
+	pop		{pc}
+
+light_led_disable:
+	push	{lr}
+	mov		r0, #LIGHT_PORT
+	mov		r1, #DIGI0
+	bl		nx_sensors_analog_digi_clear
+	pop		{pc}
 
 /* main
  *    Main Program
@@ -79,16 +104,15 @@ touch_lost:
 main:
 	push	{lr}
 
+	/* Configure Sensors */
 	mov		r0, #LIGHT_PORT
-	bl		nx_sensors_analog_enable	/* Turn off the Light Sensor LED by 'enabling' it !!??? */
+	bl		nx_sensors_analog_enable
+	mov		r0, #TOUCH_PORT
+	bl		nx_sensors_analog_enable
 
 	bl		nx_proginit
 
 	mov		r7, #FALSE
-
-	mov		r0, #TOUCH_PORT
-	bl		nx_sensors_analog_enable
-
 
 	ldr		r0, =title
 	bl		nx_progtitle
@@ -111,6 +135,15 @@ break:
 	 * 5. If On Edge, rotate slowly
 	 * 6. If Outside Line, rotate quickly
 	 */
+	bl		light_led_enable
+
+loop:
+	mov		r0, #LIGHT_PORT
+	bl		nx_sensors_analog_get
+	dbg__bkpt_arm
+	b		loop
+
+#if 0
 loop:
 	mov		r0, #TOUCH_PORT
 	bl		nx_sensors_analog_get
@@ -122,6 +155,7 @@ touch:
 	teq		r7, #FALSE				/* We can't teq #TRUE due to constant value exceeding 8 bits */
 	bne		exit_touch
 	mov		r7, #TRUE
+	bl		light_led_enable
 	bl		touch_detected
 	b		exit_touch
 
@@ -129,6 +163,7 @@ no_touch:
 	teq		r7, #FALSE
 	beq		exit_touch
 	mov		r7, #FALSE
+	bl		light_led_disable
 	bl		touch_lost
 
 exit_touch:
@@ -136,6 +171,7 @@ exit_touch:
 	bl		nx_systick_wait_ms
 	b		loop
 
+#endif
 
 exit_main:
 	bl		nx_progshutdown
