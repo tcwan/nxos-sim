@@ -29,6 +29,7 @@
 	.extern	nx_systick_wait_ms
 	.equ	SYSTICK_1000MS, 1000
 	.equ	SYSTICK_50MS,   50
+	.equ	SYSTICK_3MS,    3
 	.equ	SYSTICK_1MS,    1
 
 	/* Sensor Port Assignments */
@@ -379,8 +380,8 @@ get_light_readings:
 	asr		r0, r0, #10			/* R0: [(raw light value+1) x 100] / 1024 */
 	strb	r0, [r5, r6]
 
-	mov		r0, #SYSTICK_1MS
-	bl		nx_systick_wait_ms	/* Delay 1 ms before next reading */
+	mov		r0, #SYSTICK_3MS
+	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
 
 	cmp		r6, #0
 /*	bhi		get_light_readings	*/		/* Skip new Min-Max calculation until we have enough samples */
