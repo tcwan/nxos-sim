@@ -1,4 +1,4 @@
-/* Copyright (C) 2007-2010 the NxOS developers
+/* Copyright (C) 2007-2011 the NxOS developers
  *
  * See AUTHORS for a full list of the developers.
  *

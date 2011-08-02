@@ -1,4 +1,4 @@
-/** @file armskel.h
+/** @file scaffolding.h
  *  @brief ARM Program Scaffolding Includes
  *   This header defines the various program
  *   init and shutdown support routines common
