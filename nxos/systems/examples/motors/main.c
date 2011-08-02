@@ -69,7 +69,7 @@ void main() {
   nx_display_clear();
   nx_display_cursor_set_pos(0, 0);
   nx_display_string("Rotate Full Fwd,");
-  nx_display_string("Stop with Coasting");
+  nx_display_string("Stop by Coasting");
   nx_motors_rotate(MOTOR_PORT, 100);
   wait();
 
@@ -87,7 +87,7 @@ void main() {
       nx_motors_rotate(MOTOR_PORT, speed);
       nx_display_clear();
       nx_display_cursor_set_pos(0, 0);
-      nx_display_string("Motor Speed: ");
+      nx_display_string("Motor Speed:");
       nx_display_int(speed);
       wait();
   }
@@ -102,6 +102,9 @@ void main() {
    * can cause it to overshoot the target angle because of its own
    * inertia. Let's rotate 90 degrees, with a braking finish.
    */
+  nx_display_clear();
+  nx_display_cursor_set_pos(0, 0);
+  nx_display_string("Rotate Full Fwd,thru Angle");
   nx_motors_rotate_angle(MOTOR_PORT, 100, 90, TRUE);
 
   wait();
@@ -112,6 +115,9 @@ void main() {
    * elapsed. Let's rotate in reverse, for 1 second, with a braking
    * finish.
    */
+  nx_display_clear();
+  nx_display_cursor_set_pos(0, 0);
+  nx_display_string("Rotate Full Rev,with Timed Stop");
   nx_motors_rotate_time(MOTOR_PORT, -100, 1000, TRUE);
 
   wait();
@@ -124,7 +130,7 @@ void main() {
    */
   nx_display_clear();
   nx_display_cursor_set_pos(0, 0);
-  nx_display_string("Tach Count: ");
+  nx_display_string("Motor TachCount: ");
   nx_display_uint(nx_motors_get_tach_count(MOTOR_PORT));
 
   wait();
