@@ -119,6 +119,15 @@ U32 nx_sensors_analog_get(U32 sensor) {
   return nx__avr_get_sensor_value(sensor);
 }
 
+U8 nx_sensors_analog_get_normalized(U32 sensor) {
+  U32 raw_reading;
+  U8  norm_reading;
+  raw_reading = nx_sensors_analog_get(sensor);  /* range: 0-1023 (10 bits) */
+  norm_reading = ((raw_reading+1)*100) / 1024;  /* range: 0-100 % */
+
+  return norm_reading;
+}
+
 void nx_sensors_analog_digi_set(U32 sensor, nx_sensors_data_pin pin) {
   NX_ASSERT(sensor < NXT_N_SENSORS);
   NX_ASSERT(sensors_mode[sensor] == ANALOG);

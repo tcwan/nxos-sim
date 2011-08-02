@@ -46,11 +46,20 @@ void nx_sensors_analog_enable(U32 sensor);
  *
  * @param sensor The sensor port.
  * @return An U32. The meaning of the value depends on the kind of
- * sensor connected.
+ * sensor connected, in the range 0-1023.
  *
  * @note The sensor port must be enabled in analog mode.
  */
 U32 nx_sensors_analog_get(U32 sensor);
+
+/** Get a normalized analog reading in percentage from @a sensor.
+ *
+ * @param sensor The sensor port.
+ * @return An U8. The A/D value is converted to the range 0-100 %.
+ *
+ * @note The sensor port must be enabled in analog mode.
+ */
+U8 nx_sensors_analog_get_normalized(U32 sensor);
 
 /** Set the DIGI pin @a pin of @a sensor.
  *
