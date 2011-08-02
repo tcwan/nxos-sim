@@ -1,11 +1,12 @@
-/** @file tribot.h
- *  @brief Tribot Program Includes
- *   [What does this component do?]
+/** @file armskel.h
+ *  @brief ARM Program Scaffolding Includes
+ *   This header defines the various program
+ *   init and shutdown support routines common
+ *   to all NxOS applications
  *
- * [Optionally, more stuff about the component in general.]
  */
 
-/* Copyright (C) 2007-2010 the NxOS developers
+/* Copyright (C) 2007-2011 the NxOS developers
  *
  * See AUTHORS for a full list of the developers.
  *
@@ -13,8 +14,8 @@
  * the terms of the GNU Public License (GPL) version 2.
  */
 
-#ifndef __TRIBOT_H__  /* __${include_guard_symbol}__ */
-#define __TRIBOT_H__  /* __${include_guard_symbol}__ */
+#ifndef __SCAFFOLDING_H__
+#define __SCAFFOLDING_H__
 
 
 #include "base/_c_arm_macros.h"
@@ -34,4 +35,4 @@ FUNCDEF void nx_progcontent(char *string);     /* Display Content string on LCD 
 
 #endif
 
-#endif /* __${include_guard_symbol}__ */
+#endif /* __SCAFFOLDING_H__ */
