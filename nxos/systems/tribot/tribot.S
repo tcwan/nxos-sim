@@ -24,6 +24,10 @@
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
 #undef ENABLE_BREAKPOINTS
+/* To disable Motor Debugging, change the following to #undef DEBUG_MOTOR */
+#undef DEBUG_MOTOR
+/* To disable Min-Max Debugging, change the following to #undef DEBUG_MIN_MAX */
+#undef DEBUG_MIN_MAX
 
 	.equ	MAX_ITERATIONS, 0x0FFFF
 	.extern	nx_systick_wait_ms
@@ -65,10 +69,10 @@
 	.equ	TOUCH_THRESH, 256
 
 	/* Motor Control Constants */
-	/* FIXME: Motor speeds != 100 causes the motors not to run, but give out a high pitched whine */
-	.equ	FWD_SPEED, 100
-	.equ	FASTROT_SPEED, 100
-	.equ	SLOWROT_SPEED, 100
+	/* NOTE: Motor speeds < 70 causes the motors not to run */
+	.equ	FWD_SPEED, 90
+	.equ	FASTROT_SPEED, 80
+	.equ	SLOWROT_SPEED, 70
 
 
 
@@ -96,6 +100,12 @@ white:	 .asciz "White!  "
 black:	 .asciz "Black!  "
 edge:	 .asciz "Edge!   "
 unknown: .asciz "Unknown!"
+
+
+#ifdef DEBUG_MIN_MAX
+minstring: .asciz "min: "
+maxstring: .asciz "max: "
+#endif
 
 readings: .space  n, 0x0
 min:      .byte   0
@@ -315,7 +325,7 @@ break:
 	mov		r0, #SYSTICK_1000MS
 	bl		nx_systick_wait_ms
 
-#if 0
+#ifdef DEBUG_MOTOR
 	/* Left and Right Wheel Motor Debugging Code */
 	mov		r0, #LWHEEL_PORT
 	mov		r1, #FWD_SPEED
@@ -365,26 +375,13 @@ loop:
 get_light_readings:
 	sub		r6, r6, #1	/* Convert to Index */
 	mov		r0, #LIGHT_PORT
-	bl		nx_sensors_analog_get
-	/* Scale raw readings (0-1023) to percentage (0-100%)
-	 * by using the following formula:
-	 * Light Intensity (%) = [(Raw Light Value+1) * 100] / 1024
-	 * This causes Raw Light Value to become (1,1024)
-	 * which allows us to generate an intensity value from 0 to 100%.
-	 * Note that the multiplication by 100 must be performed first
-	 * before the division operation, since we're working with integer values.
-	 */
-	add		r0, r0, #1			/* R0: raw light value + 1 */
-	mov		r1, #100
-	mul		r0, r1, r0			/* R0: (raw light value+1) x 100 */
-	asr		r0, r0, #10			/* R0: [(raw light value+1) x 100] / 1024 */
+	bl		nx_sensors_analog_get_normalized	/* returned value in range 0-100% */
 	strb	r0, [r5, r6]
 
 	mov		r0, #SYSTICK_3MS
 	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
 
 	cmp		r6, #0
-/*	bhi		get_light_readings	*/		/* Skip new Min-Max calculation until we have enough samples */
 	bhi		check_light_readings		/* Skip new Min-Max calculation until we have enough samples */
 
 calc_min_max:
@@ -399,6 +396,32 @@ check_light_readings:
 	ldr		r2, =min
 	ldrb	r0, [r2]			/* min */
 	ldrb	r1, [r2, #1]		/* max */
+
+#ifdef DEBUG_MIN_MAX
+	mov		r9, r0				/* keep min in R9 */
+	mov		r10, r1				/* keep max in R10 */
+
+	mov		r0, #0
+	mov		r1, #2
+	bl 		nx_display_cursor_set_pos
+	ldr		r0, =minstring
+	bl		nx_display_string
+
+	mov		r0, r9
+	bl		nx_display_int
+
+	mov		r0, #0
+	mov		r1, #3
+	bl 		nx_display_cursor_set_pos
+	ldr		r0, =maxstring
+	bl		nx_display_string
+
+	mov		r0, r10
+	bl		nx_display_int
+
+
+	b		loop
+#endif
 
 	/* Line Determination:
 	 * The checks must be ordered from lower range to higher range */
