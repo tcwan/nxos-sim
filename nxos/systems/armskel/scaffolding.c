@@ -21,7 +21,7 @@
 #include "base/display.h"
 #include "base/lib/alerts/alerts.h"
 
-#include "armskel.h"
+#include "scaffolding.h"
 
 static bool audible = TRUE;
 

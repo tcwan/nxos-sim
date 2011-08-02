@@ -16,7 +16,7 @@
  */
 
 #define __ASSEMBLY__
-#include "armskel.h"
+#include "scaffolding.h"
 #include "base/interwork.h"
 #include "armdebug/Debugger/debug_stub.h"
 
