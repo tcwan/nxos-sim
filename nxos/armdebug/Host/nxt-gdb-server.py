@@ -221,6 +221,8 @@ class NXTGDBServer:
                     data = ''
             self.brick.sock.close()
             print "Connection closed."
+            if self.nowait:
+                break
 
 if __name__ == '__main__':
     # Read options from command line.
