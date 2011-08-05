@@ -37,6 +37,13 @@
 #define MOTORS_DIR (MOTOR_A_DIR | MOTOR_B_DIR | MOTOR_C_DIR)
 #define MOTORS_ALL (MOTORS_TACH | MOTORS_DIR)
 
+/* Motor Output Mode: Either Float (False), or Break (True).
+ * In FLOAT mode the output is not connected to the battery at all during the PWM off cycles,
+ * in BREAK mode it is connected to 0V.
+ * Set MOTOR_ROTATE_BREAK to TRUE for Break mode.
+ */
+#define MOTOR_ROTATE_BREAK TRUE
+
 /* The pin mapping for the motor tacho inputs. */
 static const struct {
   U32 tach;
@@ -179,7 +186,7 @@ void nx_motors_rotate(U8 motor, S8 speed) {
    * mode and fire up the motor.
    */
   motors_state[motor].mode = MOTOR_ON_CONTINUOUS;
-  nx__avr_set_motor(motor, speed, FALSE);
+  nx__avr_set_motor(motor, speed, MOTOR_ROTATE_BREAK);
 }
 
 void nx_motors_rotate_angle(U8 motor, S8 speed, U32 angle, bool brake) {
@@ -215,7 +222,7 @@ void nx_motors_rotate_angle(U8 motor, S8 speed, U32 angle, bool brake) {
    */
   motors_state[motor].brake = brake;
   motors_state[motor].mode = MOTOR_ON_ANGLE;
-  nx__avr_set_motor(motor, speed, FALSE);
+  nx__avr_set_motor(motor, speed, MOTOR_ROTATE_BREAK);
 }
 
 void nx_motors_rotate_time(U8 motor, S8 speed, U32 ms, bool brake) {
@@ -245,7 +252,7 @@ void nx_motors_rotate_time(U8 motor, S8 speed, U32 ms, bool brake) {
    */
   motors_state[motor].brake = brake;
   motors_state[motor].mode = MOTOR_ON_TIME;
-  nx__avr_set_motor(motor, speed, FALSE);
+  nx__avr_set_motor(motor, speed, MOTOR_ROTATE_BREAK);
 }
 
 U32 nx_motors_get_tach_count(U8 motor) {
