@@ -52,7 +52,13 @@ static volatile struct {
 
   /* The speed and braking configuration of the motor ports. */
   S8 motor_speed[NXT_N_MOTORS];
-  U8 motor_brake;
+  U8 motor_brake;   /* Note: motor_brake is actually a misnomer. The actual definition is Output mode,
+                     * which is defined as a Boolean Bitmap, having BREAK (True='1') and FLOAT (False='0').
+                     * In FLOAT mode the output is not connected to the battery at all during the PWM off cycles,
+                     * in BREAK mode it is connected to 0V. However, the effect is to Brake the motor for Speed=0.
+                     * Note2: The documentation in the LEGO Mindstorms NXT Hardware Developer Kit is probably
+                     * Incorrect. The BREAK/FLOAT values defined there are reversed.
+                     */
 
   /* TODO: enable controlling of input power. Currently the input
    * stuff is ignored.
@@ -107,7 +113,7 @@ static U8 raw_from_avr[(2 * NXT_N_SENSORS) + /* Sensor A/D value. */
 static U8 raw_to_avr[1 + /* Power mode    */
                      1 + /* PWM frequency */
                      4 + /* output % for the 4 (?!)  motors */
-                     1 + /* Output modes (brakes) */
+                     1 + /* Output modes (break or float) */
                      1 + /* Input modes (sensor power) */
                      1]; /* Checksum */
 
