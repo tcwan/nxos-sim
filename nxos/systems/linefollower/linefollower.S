@@ -66,10 +66,9 @@
 	.equ	BLACK_MAX, 70
 
 	/* Motor Control Constants */
-	/* NOTE: Motor speeds < 70 causes the motors not to run */
-	.equ	FWD_SPEED, 90
-	.equ	FASTROT_SPEED, 80
-	.equ	SLOWROT_SPEED, 70
+	.equ	FWD_SPEED, 70
+	.equ	FASTROT_SPEED, 50
+	.equ	SLOWROT_SPEED, 20
 
 
 
