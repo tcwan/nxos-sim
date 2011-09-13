@@ -86,9 +86,10 @@ The target should be the ARM EABI target (arm-none-eabi), ELF targets
 are not compliant with the ARM AAPCS standard.
 
 It is advisable to obtain the ARM cross-compilation toolchain as a
-precompiled package. For Windows, http://www.yagarto.de/ has suitable
-ARM Cross-Toolchain. For Mac OSX, local MacPorts Port files have been 
-created to build the required components (FIXME: Give path to Portfiles).
+precompiled package. For Windows and MacOSX, http://www.yagarto.de/ 
+has suitable ARM Cross-Toolchains. For Mac OSX, MacPorts now support 
+EABI targets with arm-none-eabi-gcc 4.6.1. Most Linux distributions 
+come with prebuilt ARM cross-compilation toolchains as well.
 
 If you really want to build the ARM cross-compilation toolchain from
 source, you can find in the scripts/ directory an automatic
