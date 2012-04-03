@@ -1,6 +1,6 @@
-/** @file tribot.S
- *  @brief Tribot Test Program
- *  Test Tribot
+/** @file grasper.S
+ *  @brief Tribot Grasper Test Program
+ *  Test Basic Tribot Functionality
  *
  * The following behaviors have been implemented
  * - Line following (Light Sensor: WIP)
@@ -92,7 +92,7 @@ ENUM_END(robot_state_t)
 .data
 .align 4
 
-title:	 .asciz "Tribot ARM Prog"
+title:	 .asciz "Grasper ARM Prog"
 pressed:  .asciz "Touch Pressed! "
 released: .asciz "Touch Released!"
 white:	 .asciz "White!  "
@@ -106,10 +106,58 @@ minstring: .asciz "min: "
 maxstring: .asciz "max: "
 #endif
 
+/* Light Sensor Variables */
 readings: .space  n, 0x0
 min:      .byte   0
 max:      .byte   0
 robot_state: .byte	0
+
+/* Touch Sensor Variables */
+touchval: .byte   0
+grasper_closed: .byte	0
+
+/*
+ * Behavior State Variables
+ */
+
+/* Bitmasks for Suppression */
+#define suppress_portA 0x80;
+#define suppress_portB 0x40;
+#define suppress_portC 0x20;
+#define suppress_tone  0x10;
+
+/* Inhibition Values */
+#define MOTOR_INHIBITED 0x80;
+#define TONE_INHIBITED 0x00;
+
+follow_line_suppression:  .byte 0
+follow_line_portA:        .byte #MOTOR_INHIBITED
+follow_line_portB:        .byte #MOTOR_INHIBITED
+follow_line_portC:        .byte #MOTOR_INHIBITED
+
+grasp_object_suppression: .byte 0
+grasp_object_portA:       .byte #MOTOR_INHIBITED
+grasp_object_portB:       .byte #MOTOR_INHIBITED
+grasp_object_portC:       .byte #MOTOR_INHIBITED
+
+play_tone_suppression:    .byte 0
+play_tone_portA:          .byte #MOTOR_INHIBITED
+play_tone_portB:          .byte #MOTOR_INHIBITED
+play_tone_portC:          .byte #MOTOR_INHIBITED
+
+tone_freq:    .word #TONE_INHIBITED
+tone_dur:     .word #TONE_INHIBITED
+
+/* New Actuator Settings */
+arbiter_portA:           .byte #MOTOR_INHIBITED
+arbiter_portB:           .byte #MOTOR_INHIBITED
+arbiter_portC:           .byte #MOTOR_INHIBITED
+
+/* Current Actuator Settings */
+actuator_portA:          .byte #MOTOR_INHIBITED
+actuator_portB:          .byte #MOTOR_INHIBITED
+actuator_portC:          .byte #MOTOR_INHIBITED
+
 
 .code 32
 .text
@@ -201,7 +249,7 @@ light_led_disable:
 	bl		nx_sensors_analog_digi_clear
 	pop		{pc}
 
-black_detected:
+forward_motion:
 	push	{lr}
 /*	bl		plip */
 	ldr		r0, =black
@@ -223,7 +271,7 @@ black_detected:
 1:
 	pop		{pc}
 
-white_detected:
+fast_cwrotate_motion:
 	push	{lr}
 /*	bl		plop */
 	ldr		r0, =white
@@ -245,7 +293,7 @@ white_detected:
 1:
 	pop		{pc}
 
-edge_detected:
+slow_cwrotate_motion:
 	push	{lr}
 /*	bl		plap */
 	ldr		r0, =edge
@@ -267,7 +315,7 @@ edge_detected:
 1:
 	pop		{pc}
 
-unknown_detected:
+stop_motion:
 	push	{lr}
 	ldr		r0, =unknown
 	bl		nx_progcontent
@@ -288,6 +336,124 @@ unknown_detected:
 1:
 	pop		{pc}
 
+/* get_light_readings
+ *    Light Sensor Input Routine
+ *    Collect n readings, and obtain min and max values
+ */
+get_light_readings:
+	push	{r5, r6, lr}
+	ldr		r5, =readings
+	mov		r6, #n		/* Number of readings to collect */
+
+light_loop:
+
+	sub		r6, r6, #1	/* Convert to Index */
+	mov		r0, #LIGHT_PORT
+	bl		nx_sensors_analog_get_normalized	/* returned value in range 0-100% */
+	strb	r0, [r5, r6]
+
+	mov		r0, #SYSTICK_3MS
+	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
+
+	cmp		r6, #0
+	bhi		light_loop		/* Perform Min-Max calculation when we have enough samples */
+
+calc_min_max:
+	bl		min_max
+	pop		{r5, r6, pc}
+
+/* get_touch_status
+ *    Retrieve Touch Sensor value
+ */
+ get_touch_status:
+ 	push	{lr}
+	mov		r0, #TOUCH_PORT
+	bl		nx_sensors_analog_get
+	ldr		r1, =touchval
+	strb	r0, [r1]		/* Store Touch Value */
+ 	pop		{pc}
+
+/* Grasp Object Behavior
+ *    TBD: ALGORITHM
+ */
+
+bbr_grasp_object:
+	push	{lr}
+	cmp		r0, #TOUCH_THRESH
+	bgt		no_touch
+
+touch:
+	teq		r7, #FALSE				/* We can't teq #TRUE due to constant value exceeding 8 bits */
+	bne		exit_touch
+	mov		r7, #TRUE
+	bl		light_led_disable
+	bl		touch_detected
+	b		exit_touch
+
+no_touch:
+	teq		r7, #FALSE
+	beq		exit_touch
+	mov		r7, #FALSE
+	bl		light_led_enable
+	bl		touch_lost
+
+exit_touch:
+	mov		r0, #SYSTICK_50MS
+	bl		nx_systick_wait_ms
+
+	pop		{pc}
+
+
+/* Line Follower Behavior
+ *
+ */
+bbr_line_follower:
+	/* Line Follower Algorithm:
+	 * 1. Determine if we're:
+	 *     -- inside line
+	 *     -- on edge
+	 *     -- outside line
+	 * 2. If Inside Line, move straight ahead
+	 * 3. If On Edge, rotate slowly
+	 * 4. If Outside Line, rotate quickly
+	 */
+	push	{lr}
+
+	/* Get Light Sensor min and max values */
+	ldr		r2, =min
+	ldrb	r0, [r2]			/* min */
+	ldrb	r1, [r2, #1]		/* max */
+
+	/* Line Determination:
+	 * The checks must be ordered from lower range to higher range
+	 * so the sequence is opposite of that given in the algorithm pseudocode
+	 */
+check_white:
+	cmp		r0, #WHITE_MIN
+	blo		found_unknown
+	cmp		r1, #WHITE_MAX
+	bhi		check_edge
+	bl		fast_cwrotate_motion
+	b		exit_bbr_line_follower
+check_edge:
+	cmp		r0, #EDGE_MIN
+	blo		found_unknown
+	cmp		r1, #EDGE_MAX
+	bhi		check_black
+	bl		slow_cwrotate_motion
+	b		exit_bbr_line_follower
+check_black:
+	cmp		r0, #BLACK_MIN
+	blo		found_unknown
+	cmp		r1, #BLACK_MAX
+	bhi		found_unknown
+	bl		forward_motion
+	b		exit_bbr_line_follower
+
+found_unknown:
+	bl		stop_motion
+exit_bbr_line_follower:
+	pop		{pc}
 
 /* main
  *    Main Program
@@ -308,8 +474,7 @@ main:
 
 	bl		nx_proginit
 
-	ldr		r5, =readings
-	mov		r7, #FALSE
+	mov		r7, #FALSE		// ????
 	ldr		r8, =MAX_ITERATIONS
 
 	ldr		r0, =title
@@ -324,164 +489,33 @@ break:
 	mov		r0, #SYSTICK_1000MS
 	bl		nx_systick_wait_ms
 
-#ifdef DEBUG_MOTOR
-	/* Left and Right Wheel Motor Debugging Code */
-	mov		r0, #LWHEEL_PORT
-	mov		r1, #FWD_SPEED
-	bl		nx_motors_rotate
-
-	mov		r0, #SYSTICK_1000MS
-	bl		nx_systick_wait_ms
-
-	mov		r0, #LWHEEL_PORT
-	mov		r1, #FALSE		/* Don't brake */
-	bl		nx_motors_stop
-
-	mov		r0, #RWHEEL_PORT
-	mov		r1, #FWD_SPEED
-	bl		nx_motors_rotate
-
-	mov		r0, #SYSTICK_1000MS
-	bl		nx_systick_wait_ms
-
-	mov		r0, #RWHEEL_PORT
-	mov		r1, #FALSE		/* Don't brake */
-	bl		nx_motors_stop
-#endif
-	/* Line Follower Algorithm:
-	 * 1. Collect Samples
-	 * 2. Find Min-Max (range)
-	 * 3. Determine if we're:
-	 *     -- inside line
-	 *     -- on edge
-	 *     -- outside line
-	 * 4. If Inside Line, move straight ahead
-	 * 5. If On Edge, rotate slowly
-	 * 6. If Outside Line, rotate quickly
-	 */
 	bl		light_led_enable
-	mov		r6, #n		/* Number of readings to collect */
 
-loop:
-#if 0
-	mov		r0, #SYSTICK_1000MS
-	bl		nx_systick_wait_ms
-#endif
-
+main_loop:
 	subs	r8, r8, #1
 	beq		exit_main
 
-get_light_readings:
-	sub		r6, r6, #1	/* Convert to Index */
-	mov		r0, #LIGHT_PORT
-	bl		nx_sensors_analog_get_normalized	/* returned value in range 0-100% */
-	strb	r0, [r5, r6]
+	/* Perform Sensor Readings */
+	bl		get_light_readings
+	bl		get_touch_status
 
-	mov		r0, #SYSTICK_3MS
-	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
+	/* Evaluate Behaviors */
+	bl		bbr_line_follower
+	bl		bbr_grasp_object
+	bl		bbr_play_tone
 
-	cmp		r6, #0
-	bhi		check_light_readings		/* Skip new Min-Max calculation until we have enough samples */
+	/* Arbiter */
+main_arbitration:
+	bl		grasper_arbiter
 
-calc_min_max:
-	bl		min_max
-	mov		r6, #n				/* Reset Number of readings to collect */
-
-#ifdef ENABLE_BREAKPOINTS
-	dbg__bkpt_arm
-#endif
-
-check_light_readings:
-	ldr		r2, =min
-	ldrb	r0, [r2]			/* min */
-	ldrb	r1, [r2, #1]		/* max */
-
-#ifdef DEBUG_MIN_MAX
-	mov		r9, r0				/* keep min in R9 */
-	mov		r10, r1				/* keep max in R10 */
-
-	mov		r0, #0
-	mov		r1, #2
-	bl 		nx_display_cursor_set_pos
-	ldr		r0, =minstring
-	bl		nx_display_string
-
-	mov		r0, r9
-	bl		nx_display_int
-
-	mov		r0, #0
-	mov		r1, #3
-	bl 		nx_display_cursor_set_pos
-	ldr		r0, =maxstring
-	bl		nx_display_string
-
-	mov		r0, r10
-	bl		nx_display_int
-
-
-	b		loop
-#endif
-
-	/* Line Determination:
-	 * The checks must be ordered from lower range to higher range */
-check_white:
-	cmp		r0, #WHITE_MIN
-	blo		found_unknown
-	cmp		r1, #WHITE_MAX
-	bhi		check_edge
-	bl		white_detected
-	b		loop
-check_edge:
-	cmp		r0, #EDGE_MIN
-	blo		found_unknown
-	cmp		r1, #EDGE_MAX
-	bhi		check_black
-	bl		edge_detected
-	b		loop
-check_black:
-	cmp		r0, #BLACK_MIN
-	blo		found_unknown
-	cmp		r1, #BLACK_MAX
-	bhi		found_unknown
-	bl		black_detected
-	b		loop
-
-found_unknown:
-	bl		unknown_detected
-	b		loop
-
-/* Bumper Code */
-#if 0
-loop:
-	mov		r0, #TOUCH_PORT
-	bl		nx_sensors_analog_get
-	cmp		r0, #TOUCH_THRESH
-	bgt		no_touch
-
-touch:
-	teq		r7, #FALSE				/* We can't teq #TRUE due to constant value exceeding 8 bits */
-	bne		exit_touch
-	mov		r7, #TRUE
-	bl		light_led_enable
-	bl		touch_detected
-	b		exit_touch
-
-no_touch:
-	teq		r7, #FALSE
-	beq		exit_touch
-	mov		r7, #FALSE
-	bl		light_led_disable
-	bl		touch_lost
-
-exit_touch:
-	mov		r0, #SYSTICK_50MS
-	bl		nx_systick_wait_ms
-	b		loop
-
-#endif
+	/* Actuators */
+main_actuator:
+	bl		grasper_actuation
+	b		main_loop				/* continue event loop execution */
 
 exit_main:
-	bl		unknown_detected		/* Stop motors */
+	bl		stop_motion				/* Stop motors */
+	bl		light_led_disable
 	bl		nx_progshutdown
 	pop		{pc}
 
