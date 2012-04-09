@@ -4,3 +4,5 @@ The examples use the Behavior-Based Robotics Paradigm in its implementation.
 Currently, the following functions are available:
 - Line Following
 - Object Grasping (with Line Following)
+
+Build using appkernels=tribot/<projectname>

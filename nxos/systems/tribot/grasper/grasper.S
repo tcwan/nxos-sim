@@ -68,11 +68,17 @@
 	/* Touch Sensor Raw Readings: Pressed: 183; Released: 1023 */
 	.equ	TOUCH_THRESH, 256
 
-	/* Motor Control Constants */
+	/* Wheel Control Constants */
 	.equ	FWD_SPEED, 60
 	.equ	FASTROT_SPEED, 50
 	.equ	SLOWROT_SPEED, 30
 
+	/* Pincer Control Constants
+	 *    Open and Close Speeds are directional (signed)
+	 */
+	.equ	OPEN_SPEED, 10
+	.equ	CLOSE_SPEED, -10
+	.equ	TACHO_THRESH, 3
 
 
 /** @name Robot State Enums
@@ -95,6 +101,8 @@ ENUM_END(robot_state_t)
 title:	 .asciz "Grasper ARM Prog"
 pressed:  .asciz "Touch Pressed! "
 released: .asciz "Touch Released!"
+opened:  .asciz "Pincer Opened!"
+closed:  .asciz "Pincer Closed!"
 white:	 .asciz "White!  "
 black:	 .asciz "Black!  "
 edge:	 .asciz "Edge!   "
@@ -114,49 +122,54 @@ robot_state: .byte	0
 
 /* Touch Sensor Variables */
 touchval: .byte   0
-grasper_closed: .byte	0
+touched:  .byte   0
+
+/* Pincer Variables */
+pincer_position: .word 0
+pincer_oldpos:   .word 0
+pincer_closed: .byte	0
 
 /*
  * Behavior State Variables
  */
 
 /* Bitmasks for Suppression */
-#define suppress_portA 0x80;
-#define suppress_portB 0x40;
-#define suppress_portC 0x20;
-#define suppress_tone  0x10;
+#define suppress_portA 0x80
+#define suppress_portB 0x40
+#define suppress_portC 0x20
+#define suppress_tone  0x10
 
 /* Inhibition Values */
-#define MOTOR_INHIBITED 0x80;
-#define TONE_INHIBITED 0x00;
+#define MOTOR_INHIBITED 0x80
+#define TONE_INHIBITED 0x00
 
 follow_line_suppression:  .byte 0
-follow_line_portA:        .byte #MOTOR_INHIBITED
-follow_line_portB:        .byte #MOTOR_INHIBITED
-follow_line_portC:        .byte #MOTOR_INHIBITED
+follow_line_portA:        .byte MOTOR_INHIBITED
+follow_line_portB:        .byte MOTOR_INHIBITED
+follow_line_portC:        .byte MOTOR_INHIBITED
 
 grasp_object_suppression: .byte 0
-grasp_object_portA:       .byte #MOTOR_INHIBITED
-grasp_object_portB:       .byte #MOTOR_INHIBITED
-grasp_object_portC:       .byte #MOTOR_INHIBITED
+grasp_object_portA:       .byte MOTOR_INHIBITED
+grasp_object_portB:       .byte MOTOR_INHIBITED
+grasp_object_portC:       .byte MOTOR_INHIBITED
 
 play_tone_suppression:    .byte 0
-play_tone_portA:          .byte #MOTOR_INHIBITED
-play_tone_portB:          .byte #MOTOR_INHIBITED
-play_tone_portC:          .byte #MOTOR_INHIBITED
+play_tone_portA:          .byte MOTOR_INHIBITED
+play_tone_portB:          .byte MOTOR_INHIBITED
+play_tone_portC:          .byte MOTOR_INHIBITED
 
-tone_freq:    .word #TONE_INHIBITED
-tone_dur:     .word #TONE_INHIBITED
+tone_freq:    .word TONE_INHIBITED
+tone_dur:     .word TONE_INHIBITED
 
 /* New Actuator Settings */
-arbiter_portA:           .byte #MOTOR_INHIBITED
-arbiter_portB:           .byte #MOTOR_INHIBITED
-arbiter_portC:           .byte #MOTOR_INHIBITED
+arbiter_portA:           .byte MOTOR_INHIBITED
+arbiter_portB:           .byte MOTOR_INHIBITED
+arbiter_portC:           .byte MOTOR_INHIBITED
 
 /* Current Actuator Settings */
-actuator_portA:          .byte #MOTOR_INHIBITED
-actuator_portB:          .byte #MOTOR_INHIBITED
-actuator_portC:          .byte #MOTOR_INHIBITED
+actuator_portA:          .byte MOTOR_INHIBITED
+actuator_portB:          .byte MOTOR_INHIBITED
+actuator_portC:          .byte MOTOR_INHIBITED
 
 
 .code 32
@@ -339,6 +352,9 @@ stop_motion:
 /* get_light_readings
  *    Light Sensor Input Routine
  *    Collect n readings, and obtain min and max values
+ *    Note: This routine blocks until all samples have been collected
+ *		R5: Address Pointer to Light Sensor Readings Array
+ *		R6: Index of Light Sensor Readings
  */
 get_light_readings:
 	push	{r5, r6, lr}
@@ -363,15 +379,141 @@ calc_min_max:
 	pop		{r5, r6, pc}
 
 /* get_touch_status
- *    Retrieve Touch Sensor value
+ *    Retrieve Touch Sensor value and store in variable touchval,
+ *    Update Touch Status Boolean touched, possibly perform debouncing
+ *      This routine converts raw A/D input value to an 8-bit Boolean
+ *      TRUE (0xFF)/FALSE (0x00) flag.
+ *      In addition, it updates the LCD display;
+ *          and disables the Light Sensor LED output when active,
+ *          and reenables the Light Sensor LED output when not active.
+ *
+ *		R4: Address Pointer to Touch variables
  */
  get_touch_status:
- 	push	{lr}
+ 	push	{r4, lr}
 	mov		r0, #TOUCH_PORT
 	bl		nx_sensors_analog_get
-	ldr		r1, =touchval
-	strb	r0, [r1]		/* Store Touch Value */
- 	pop		{pc}
+	ldr		r4, =touchval
+	strb	r0, [r4]		/* Store Touch Value */
+
+	cmp		r0, #TOUCH_THRESH
+	ldrb	r0, [r4, #1]			/* Retrieve Touch Status to R0, Note: Does not modify flags */
+	bgt		no_touch
+
+touch:
+	teq		r0, #FALSE				/* We can't teq #TRUE due to constant value exceeding 8 bits */
+	bne		exit_get_touch_status
+	mov		r0, #TRUE
+	strb	r0, [r4, #1]			/* Update Touch Status (non-zero value, truncated to 8 bits) */
+	bl		light_led_disable
+	bl		touch_detected
+	b		exit_get_touch_status
+
+no_touch:
+	teq		r0, #FALSE
+	beq		exit_get_touch_status
+	mov		r0, #FALSE
+	strb	r0, [r4, #1]			/* Update Touch Status (zero value, truncated to 8 bits) */
+	bl		light_led_enable
+	bl		touch_lost
+
+exit_get_touch_status:
+	mov		r0, #SYSTICK_3MS
+	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
+ 	pop		{r4, pc}
+
+/* get_pincer_status
+ *    Retrieve Pincer Motor Tachometer value and store in variable pincer_position.
+ *		R4: Address Pointer to Pincer variables
+ */
+ get_pincer_status:
+ 	push	{r4, lr}
+ 	mov		r0, #PINCER_PORT	/* Specify pincer Motor Port */
+ 	bl		nx_motors_get_tach_count
+	ldr		r4, =pincer_position
+	str		r0, [r4]			/* Store 32-bit tachometer count */
+
+exit_get_pincer_status:
+	pop		{r4, pc}
+
+
+/* pincer_open
+ *    Open Pincers to maximum aperature.
+ *      Keep motor engaged until tachometer shows no progress
+ *      Note: This is best done using lower speed to the Motor (within Threshold value)
+ *		R4: Address Pointer to Pincer variables
+ */
+pincer_open:
+ 	push	{r4, lr}
+	ldr		r4, =pincer_position
+
+pincer_start_opening:
+ 	mov		r0, #PINCER_PORT
+ 	mov		r1, #OPEN_SPEED
+ 	bl		nx_motors_rotate
+pincer_keep_opening:
+	mov		r0, #SYSTICK_1MS
+	bl		nx_systick_wait_ms	/* Wait 1 ms before checking Tachometer */
+	bl		get_pincer_status
+
+	ldr		r0, [r4]			/* Current Pincer Position */
+	ldr		r1, [r4, #4]		/* Old Pincer Position */
+	subs	r2, r0, r1			/* Current - Old Positions */
+	rsblt	r2, r0, r1			/* Absolute difference in R2 */
+	str		r0, [r4, #4]		/* Store Current Pincer Position as Old Pincer Position */
+	cmp		r2, #TACHO_THRESH	/* Is it within margin of error? */
+	bhi		pincer_keep_opening
+
+pincer_stop_opening:
+ 	mov		r0, #PINCER_PORT
+ 	mov		r1, #TRUE			/* We want braking */
+	bl		nx_motors_stop
+
+ 	mov		r0, #FALSE
+ 	strb	r0, [r4, #8]		/* Update pincer_closed */
+
+	ldr		r0, =opened
+	bl		nx_progcontent
+	pop		{r4, pc}
+
+/* pincer_close
+ *    Close Pincers to minimum aperature (gripping object).
+ *      Keep motor engaged until tachometer shows no progress (within Threshold value)
+ *      Note: This is best done using lower speed to the Motor
+ *		R4: Address Pointer to Pincer variables
+ */
+pincer_close:
+ 	push	{r4, lr}
+	ldr		r4, =pincer_position
+
+pincer_start_closing:
+ 	mov		r0, #PINCER_PORT
+ 	mov		r1, #CLOSE_SPEED
+ 	bl		nx_motors_rotate
+pincer_keep_closing:
+	mov		r0, #SYSTICK_1MS
+	bl		nx_systick_wait_ms	/* Wait 1 ms before checking Tachometer */
+	bl		get_pincer_status
+
+	ldr		r0, [r4]			/* Current Pincer Position */
+	ldr		r1, [r4, #4]		/* Old Pincer Position */
+	subs	r2, r0, r1			/* Current - Old Positions */
+	rsblt	r2, r0, r1			/* Absolute difference in R2 */
+	str		r0, [r4, #4]		/* Store Current Pincer Position as Old Pincer Position */
+	cmp		r2, #TACHO_THRESH	/* Is it within margin of error? */
+	bhi		pincer_keep_closing
+
+pincer_stop_closing:
+ 	mov		r0, #PINCER_PORT
+ 	mov		r1, #TRUE			/* We want braking */
+	bl		nx_motors_stop
+
+ 	mov		r0, #TRUE
+ 	strb	r0, [r4, #8]		/* Update pincer_closed */
+
+	ldr		r0, =closed
+	bl		nx_progcontent
+	pop		{r4, pc}
 
 /* Grasp Object Behavior
  *    TBD: ALGORITHM
@@ -379,27 +521,6 @@ calc_min_max:
 
 bbr_grasp_object:
 	push	{lr}
-	cmp		r0, #TOUCH_THRESH
-	bgt		no_touch
-
-touch:
-	teq		r7, #FALSE				/* We can't teq #TRUE due to constant value exceeding 8 bits */
-	bne		exit_touch
-	mov		r7, #TRUE
-	bl		light_led_disable
-	bl		touch_detected
-	b		exit_touch
-
-no_touch:
-	teq		r7, #FALSE
-	beq		exit_touch
-	mov		r7, #FALSE
-	bl		light_led_enable
-	bl		touch_lost
-
-exit_touch:
-	mov		r0, #SYSTICK_50MS
-	bl		nx_systick_wait_ms
 
 	pop		{pc}
 
@@ -455,17 +576,12 @@ found_unknown:
 exit_bbr_line_follower:
 	pop		{pc}
 
-/* main
- *    Main Program
- *		R5: Address Pointer to Light Sensor Readings Array
- *		R6: Index of Light Sensor Readings
- *		R7: Touched (boolean)
- *		R8: Iteration Counter (termination)
+/* init_robot
+ *    Robot Specific Initialization tasks
+ *    Note: Modifies register contents
  */
-	.global	main
-main:
+init_robot:
 	push	{lr}
-
 	/* Configure Sensors */
 	mov		r0, #LIGHT_PORT
 	bl		nx_sensors_analog_enable
@@ -474,11 +590,29 @@ main:
 
 	bl		nx_proginit
 
-	mov		r7, #FALSE		// ????
-	ldr		r8, =MAX_ITERATIONS
+	mov		r0, #FALSE
+	ldr		r1, =touched
+	strb	r0, [r1]		/* touched boolean */
+	ldr		r1, =pincer_closed
+	strb	r0, [r1]	/* pincer_closed boolean */
+
+	bl		get_pincer_status
+	ldr		r4, =pincer_oldpos
+	str		r0, [r4]			/* Initialize Old Position = Current position */
 
 	ldr		r0, =title
 	bl		nx_progtitle
+	pop		{pc}
+
+/* main
+ *    Main Program
+ *		R7: Touched (boolean)
+ *		R8: Iteration Counter (termination)
+ */
+	.global	main
+main:
+	push	{lr}
+	bl		init_robot
 
 #ifdef ENABLE_BREAKPOINTS
 	dbg__bkpt_arm
@@ -489,7 +623,9 @@ break:
 	mov		r0, #SYSTICK_1000MS
 	bl		nx_systick_wait_ms
 
+	bl		pincer_open
 	bl		light_led_enable
+	ldr		r8, =MAX_ITERATIONS	/* Execution Lifetime Iteration Limiter */
 
 main_loop:
 	subs	r8, r8, #1
