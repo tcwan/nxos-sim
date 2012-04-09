@@ -48,7 +48,7 @@
 	/* Actuator Port Assignments */
 	.extern nx_motors_rotate
 	.extern nx_motors_stop
-	.equ	PINCER_PORT, 0		/* Motor A */
+	.equ	CLAW_PORT, 0		/* Motor A */
 	.equ	RWHEEL_PORT, 1		/* Motor B */
 	.equ	LWHEEL_PORT, 2		/* Motor C */
 

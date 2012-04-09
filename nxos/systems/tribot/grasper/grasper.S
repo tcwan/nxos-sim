@@ -47,7 +47,7 @@
 	/* Actuator Port Assignments */
 	.extern nx_motors_rotate
 	.extern nx_motors_stop
-	.equ	PINCER_PORT, 0		/* Motor A */
+	.equ	CLAW_PORT, 0		/* Motor A */
 	.equ	RWHEEL_PORT, 1		/* Motor B */
 	.equ	LWHEEL_PORT, 2		/* Motor C */
 
@@ -73,7 +73,7 @@
 	.equ	FASTROT_SPEED, 50
 	.equ	SLOWROT_SPEED, 30
 
-	/* Pincer Control Constants
+	/* Claw Control Constants
 	 *    Open and Close Speeds are directional (signed)
 	 */
 	.equ	OPEN_SPEED, 10
@@ -101,8 +101,8 @@ ENUM_END(robot_state_t)
 title:	 .asciz "Grasper ARM Prog"
 pressed:  .asciz "Touch Pressed! "
 released: .asciz "Touch Released!"
-opened:  .asciz "Pincer Opened!"
-closed:  .asciz "Pincer Closed!"
+opened:  .asciz "Claw Opened!"
+closed:  .asciz "Claw Closed!"
 white:	 .asciz "White!  "
 black:	 .asciz "Black!  "
 edge:	 .asciz "Edge!   "
@@ -124,10 +124,10 @@ robot_state: .byte	0
 touchval: .byte   0
 touched:  .byte   0
 
-/* Pincer Variables */
-pincer_position: .word 0
-pincer_oldpos:   .word 0
-pincer_closed: .byte	0
+/* Claw Variables */
+claw_position: .word 0
+claw_oldpos:   .word 0
+claw_closed: .byte	0
 
 /*
  * Behavior State Variables
@@ -422,94 +422,94 @@ exit_get_touch_status:
 	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
  	pop		{r4, pc}
 
-/* get_pincer_status
- *    Retrieve Pincer Motor Tachometer value and store in variable pincer_position.
- *		R4: Address Pointer to Pincer variables
+/* get_claw_status
+ *    Retrieve Claw Motor Tachometer value and store in variable claw_position.
+ *		R4: Address Pointer to Claw variables
  */
- get_pincer_status:
+ get_claw_status:
  	push	{r4, lr}
- 	mov		r0, #PINCER_PORT	/* Specify pincer Motor Port */
+ 	mov		r0, #CLAW_PORT	/* Specify Claw Motor Port */
  	bl		nx_motors_get_tach_count
-	ldr		r4, =pincer_position
+	ldr		r4, =claw_position
 	str		r0, [r4]			/* Store 32-bit tachometer count */
 
-exit_get_pincer_status:
+exit_get_claw_status:
 	pop		{r4, pc}
 
 
-/* pincer_open
- *    Open Pincers to maximum aperature.
+/* claw_open
+ *    Open Claws to maximum aperature.
  *      Keep motor engaged until tachometer shows no progress
  *      Note: This is best done using lower speed to the Motor (within Threshold value)
- *		R4: Address Pointer to Pincer variables
+ *		R4: Address Pointer to Claw variables
  */
-pincer_open:
+claw_open:
  	push	{r4, lr}
-	ldr		r4, =pincer_position
+	ldr		r4, =claw_position
 
-pincer_start_opening:
- 	mov		r0, #PINCER_PORT
+claw_start_opening:
+ 	mov		r0, #CLAW_PORT
  	mov		r1, #OPEN_SPEED
  	bl		nx_motors_rotate
-pincer_keep_opening:
+claw_keep_opening:
 	mov		r0, #SYSTICK_1MS
 	bl		nx_systick_wait_ms	/* Wait 1 ms before checking Tachometer */
-	bl		get_pincer_status
+	bl		get_claw_status
 
-	ldr		r0, [r4]			/* Current Pincer Position */
-	ldr		r1, [r4, #4]		/* Old Pincer Position */
+	ldr		r0, [r4]			/* Current Claw Position */
+	ldr		r1, [r4, #4]		/* Old Claw Position */
 	subs	r2, r0, r1			/* Current - Old Positions */
 	rsblt	r2, r0, r1			/* Absolute difference in R2 */
-	str		r0, [r4, #4]		/* Store Current Pincer Position as Old Pincer Position */
+	str		r0, [r4, #4]		/* Store Current Claw Position as Old Claw Position */
 	cmp		r2, #TACHO_THRESH	/* Is it within margin of error? */
-	bhi		pincer_keep_opening
+	bhi		claw_keep_opening
 
-pincer_stop_opening:
- 	mov		r0, #PINCER_PORT
+claw_stop_opening:
+ 	mov		r0, #CLAW_PORT
  	mov		r1, #TRUE			/* We want braking */
 	bl		nx_motors_stop
 
  	mov		r0, #FALSE
- 	strb	r0, [r4, #8]		/* Update pincer_closed */
+ 	strb	r0, [r4, #8]		/* Update claw_closed */
 
 	ldr		r0, =opened
 	bl		nx_progcontent
 	pop		{r4, pc}
 
-/* pincer_close
- *    Close Pincers to minimum aperature (gripping object).
+/* claw_close
+ *    Close Claws to minimum aperature (gripping object).
  *      Keep motor engaged until tachometer shows no progress (within Threshold value)
  *      Note: This is best done using lower speed to the Motor
- *		R4: Address Pointer to Pincer variables
+ *		R4: Address Pointer to Claw variables
  */
-pincer_close:
+claw_close:
  	push	{r4, lr}
-	ldr		r4, =pincer_position
+	ldr		r4, =claw_position
 
-pincer_start_closing:
- 	mov		r0, #PINCER_PORT
+claw_start_closing:
+ 	mov		r0, #CLAW_PORT
  	mov		r1, #CLOSE_SPEED
  	bl		nx_motors_rotate
-pincer_keep_closing:
+claw_keep_closing:
 	mov		r0, #SYSTICK_1MS
 	bl		nx_systick_wait_ms	/* Wait 1 ms before checking Tachometer */
-	bl		get_pincer_status
+	bl		get_claw_status
 
-	ldr		r0, [r4]			/* Current Pincer Position */
-	ldr		r1, [r4, #4]		/* Old Pincer Position */
+	ldr		r0, [r4]			/* Current Claw Position */
+	ldr		r1, [r4, #4]		/* Old Claw Position */
 	subs	r2, r0, r1			/* Current - Old Positions */
 	rsblt	r2, r0, r1			/* Absolute difference in R2 */
-	str		r0, [r4, #4]		/* Store Current Pincer Position as Old Pincer Position */
+	str		r0, [r4, #4]		/* Store Current Claw Position as Old Claw Position */
 	cmp		r2, #TACHO_THRESH	/* Is it within margin of error? */
-	bhi		pincer_keep_closing
+	bhi		claw_keep_closing
 
-pincer_stop_closing:
- 	mov		r0, #PINCER_PORT
+claw_stop_closing:
+ 	mov		r0, #CLAW_PORT
  	mov		r1, #TRUE			/* We want braking */
 	bl		nx_motors_stop
 
  	mov		r0, #TRUE
- 	strb	r0, [r4, #8]		/* Update pincer_closed */
+ 	strb	r0, [r4, #8]		/* Update claw_closed */
 
 	ldr		r0, =closed
 	bl		nx_progcontent
@@ -593,11 +593,11 @@ init_robot:
 	mov		r0, #FALSE
 	ldr		r1, =touched
 	strb	r0, [r1]		/* touched boolean */
-	ldr		r1, =pincer_closed
-	strb	r0, [r1]	/* pincer_closed boolean */
+	ldr		r1, =claw_closed
+	strb	r0, [r1]	/* claw_closed boolean */
 
-	bl		get_pincer_status
-	ldr		r4, =pincer_oldpos
+	bl		get_claw_status
+	ldr		r4, =claw_oldpos
 	str		r0, [r4]			/* Initialize Old Position = Current position */
 
 	ldr		r0, =title
@@ -623,7 +623,7 @@ break:
 	mov		r0, #SYSTICK_1000MS
 	bl		nx_systick_wait_ms
 
-	bl		pincer_open
+	bl		claw_open
 	bl		light_led_enable
 	ldr		r8, =MAX_ITERATIONS	/* Execution Lifetime Iteration Limiter */
 
