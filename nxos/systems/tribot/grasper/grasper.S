@@ -142,6 +142,8 @@ claw_closed: .byte	0
 /* Inhibition Values */
 #define MOTOR_INHIBITED 0x80
 #define TONE_INHIBITED 0x00
+#define TONE_ENABLED_FREQ 2500		/* Hz */
+#define TONE_ENABLED_DUR   500		/* ms */
 
 follow_line_suppression:  .byte 0
 follow_line_portA:        .byte MOTOR_INHIBITED
@@ -233,6 +235,7 @@ plap:
 	mov		r1, #100
 	bl		nx_sound_freq
 	pop		{pc}
+
 
 touch_detected:
 	push	{lr}
@@ -576,6 +579,68 @@ found_unknown:
 exit_bbr_line_follower:
 	pop		{pc}
 
+/* Play Tone Behavior
+ *
+ */
+bbr_play_tone:
+	/* Play Tone Algorithm:
+	 *    Determine if Touch Sensor is Activated
+	 *    and Claw is Closed
+	 *    If True, enable Tone Playback
+	 *    Else, keep silent.
+	 */
+	push	{lr}
+	ldr		r2, =tone_freq	/* Pointer to Tone Variables */
+
+	ldr		r1, =touched
+	ldrb	r0, [r1]		/* retrieve Touched status */
+	cmp		r0, #FALSE
+	beq		keep_silent
+	ldr		r1, =claw_closed
+	ldrb	r0, [r1]		/* retrieve Claw Status */
+	cmp		r0, #FALSE
+	beq		keep_silent
+
+enable_tone:
+	ldr		r0, =TONE_ENABLED_FREQ
+	str		r0, [r2]			/* Frequency */
+	mov		r0, #TONE_ENABLED_DUR
+	str		r0, [r2, #4]		/* Duration */
+	b		exit_bbr_play_tone
+keep_silent:
+	mov		r0, #TONE_INHIBITED
+	str		r0, [r2]			/* Frequency */
+	str		r0, [r2, #4]		/* Duration */
+
+exit_bbr_play_tone:
+	pop		{pc}
+
+/* Grasper Arbiter
+ *
+ */
+
+grasper_arbiter:
+	push	{lr}
+exit_grasper_arbiter:
+	pop		{pc}
+
+/* Grasper Actuator
+ *
+ */
+grasper_actuation:
+	push	{lr}
+
+	/* Speaker Actuation */
+	ldr		r2, =tone_freq
+	ldr		r0, [r2]			/* Frequency */
+	ldr		r1, [r2, #4]		/* Duration */
+	cmp		r0, #TONE_INHIBITED
+	blne	nx_sound_freq		/* Play Tone if Not TONE_INHIBITED */
+
+exit_grasper_actuation:
+	pop		{pc}
+
+
 /* init_robot
  *    Robot Specific Initialization tasks
  *    Note: Modifies register contents
@@ -599,6 +664,11 @@ init_robot:
 	bl		get_claw_status
 	ldr		r4, =claw_oldpos
 	str		r0, [r4]			/* Initialize Old Position = Current position */
+
+	ldr		r2, =tone_freq		/* Pointer to Tone Variables */
+	mov		r0, #TONE_INHIBITED
+	str		r0, [r2]			/* Frequency */
+	str		r0, [r2, #4]		/* Duration */
 
 	ldr		r0, =title
 	bl		nx_progtitle
