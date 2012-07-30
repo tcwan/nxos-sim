@@ -38,3 +38,7 @@ commit.msg
 
 # The option-cache
 scons.options
+
+# Eclipse settings
+.settings/
+.cproject
