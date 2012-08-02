@@ -19,12 +19,12 @@ The optimized version is not 1-1 equivalent, since access to the sensors
 are disabled (otherwise it'll still be 6000 loops/min). This just shows
 the raw execution speed of NxOS compiled programs.
 
-Memory used is 26196 bytes (code + data + stack/heap)
-using gcc optimized for size (-Os) instead of speed.
-This includes the overhead of the armdebug remote stub support,
-which comes up to 6172 bytes code, 400 bytes data and 544 bytes stack.
-Hence, the net memory footprint is 19080 bytes which is comparable
-to LeJOS OSEK in terms of size.
+Memory used is 26196 bytes (code + data + stack/heap) using gcc optimized 
+for size (-Os) instead of speed.
+This includes the overhead of the armdebug remote stub support, which comes 
+up to 6172 bytes code, 400 bytes data, 544 bytes heap and 648 bytes stack.
+Hence, the net memory footprint is 18432 bytes which is comparable to
+LeJOS OSEK in terms of size.
 
 The output from arm-none-eabi-objdump is:
 section             size      addr
