@@ -6,9 +6,6 @@
  * the terms of the GNU Public License (GPL) version 2.
  */
 
-.code 32
-.text
-.align 0
 
 #include "asm_decls.h"
 
@@ -27,6 +24,20 @@
 #define PMC_PLLR 0xFFFFFC2C /* PLL Register */
 #define PMC_MCKR 0xFFFFFC30 /* Master Clock Register */
 
+/*---------------------------------------------------------
+ *  Various debugger stacks.
+ */
+.section .stack.supervisor, "aw", %nobits
+        .space 0x400; /* 1 Kbyte supervisor stack. */
+
+#ifdef __DBGENABLE__
+.section .stack.abort, "aw", %nobits
+        .space 0x200; /* 512 byte abort mode stack. */
+.section .stack.debugger, "aw", %nobits
+        .space 0x48; /* 16 user mode registers + SPSR + UNDEF Next Instruction Address */
+.section .breakpoints, "aw", %nobits
+        .space 0x40; /* Single Stepping Breakpoint + 7 Breakpoints */
+#endif
 
 /**********************************************************
  * Memory copy and setting macros. These refer to functions
@@ -46,6 +57,9 @@
         bl mem_init_func
         .endm
 
+.code 32
+.text
+.align 0
         .global nx_start
         .extern nx__kernel_main
 

@@ -111,28 +111,29 @@ SECTIONS {
    * time to provide a clean environment for the kernel.
    */
   .stack  : ALIGN(8) {
-    /* supervisor stack */
-    __supervisor_stack_bottom__ = . ;
-    . += 0x400; /* 1k supervisor stack. */
-    __supervisor_stack__ = .;
-    __supervisor_stack_top__ = . ;
+		/* supervisor stack */
+		__supervisor_stack_bottom__ = . ;
+		KEEP(*(.stack.supervisor))
+		__supervisor_stack__ = .;
+		__supervisor_stack_top__ = . ;
+		
+		/* abort stack */
+		__abort_stack_bottom__ = . ;
+		KEEP(*(.stack.abort))
+		__abort_stack__ = . ;
+		__abort_stack_top__ = . ;
 
-    /* abort stack */
-    __abort_stack_bottom__ = . ;
-    . += 0x200; /* 512b abort stack. */
-    __abort_stack__ = .;
-    __abort_stack_top__ = .;
-    
-    /* debugger state */
-    __debugger_stack_bottom__ = . ;
-    . += 0x48;	/* 16 user mode registers + SPSR + Next Instruction Address */
-    __debugger_stack__ = .;
-    __debugger_stack_top__ = . ;
-    
-    /* breakpoints */
-    __breakpoints_start__ = . ;
-    . += 0x40;	/* Single Stepping Breakpoint + 7 Breakpoints */
-    __breakpoints_end__ = . ;
+		/* debugger state */
+		__debugger_stack_bottom__ = . ;
+		KEEP(*(.stack.debugger))
+		__debugger_stack__ = . ;
+		__debugger_stack_top__ = . ;
+
+		/* breakpoints */
+		__breakpoints_start__ = . ;
+		KEEP(*(.breakpoints))
+		__breakpoints_end__ = . ;
+
   } > ram
 
   /* Discard anything not mapped at this point. */
