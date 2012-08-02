@@ -1,0 +1,39 @@
+The speedtest code is modified from the version by Steve Hassenplug 
+http://www.teamhassenplug.org/NXT/NXTSoftwareSpeedTest.html
+
+The results for the speed test are:
+- 6000 loops/min for the unoptimized version
+- approx. 5407K loops/min for the optimized version
+
+The results puts the unoptimized version in the ballpark of the 
+NI Labview toolkit, and ahead of LeJOS OSEK and NXC.
+However, it is slower than the commercial C-based offerings 
+(RobotC and RoboLab).
+
+It should be noted that due to the way that NxOS handles communications 
+between the ARM and AVR chips, access to the sensor data is synchronized
+to the 1 ms read intervals used for the ARM <-> AVR communications,
+hence the low loop/min count for the unoptimized version.
+
+The optimized version is not 1-1 equivalent, since access to the sensors
+are disabled (otherwise it'll still be 6000 loops/min). This just shows
+the raw execution speed of NxOS compiled programs.
+
+Memory used is 26196 bytes (code + data + stack/heap)
+using gcc optimized for size (-Os) instead of speed.
+This includes the overhead of the armdebug remote stub support,
+which comes up to 6172 bytes code, 400 bytes data and 544 bytes stack.
+Hence, the net memory footprint is 19080 bytes which is comparable
+to LeJOS OSEK in terms of size.
+
+The output from arm-none-eabi-objdump is:
+section             size      addr
+.rxe_header           16   2097056
+.rxe_init             80   2097072
+.vectors              56   2097152
+.data                500   2097216
+.text              22032   2097728
+.bss                1840   2119760
+.stack              1672   2121600
+[debug info suppressed]
+
