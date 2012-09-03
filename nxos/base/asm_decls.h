@@ -29,9 +29,25 @@
  *
  * IRQ and FIQ Bitmasks should be <tt>orr</tt>'d or <tt>bic</tt>'d with a CPSR or SPSR.
  */
+/**
+ *
+ * IRQ and FIQ Bitmask.
+ */
 #define IRQ_FIQ_MASK 0xC0
+/**
+ *
+ * IRQ Bitmask.
+ */
 #define IRQ_MASK 0x80
+/**
+ *
+ * FIQ Bitmask.
+ */
 #define FIQ_MASK 0x40
+/**
+ *
+ * Complete CPU Mode Bitmask.
+ */
 #define MODE_MASK 0x1F
 
 /** @name Processor modes

@@ -28,7 +28,9 @@
  */
 /*@{*/
 
-/* Buffer size for UART messages. */
+/**
+ * Buffer size for UART messages.
+ */
 #define UART_BUFSIZE 128
 
 /** Prototype for the UART read callback.

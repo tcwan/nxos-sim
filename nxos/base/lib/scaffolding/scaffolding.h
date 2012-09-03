@@ -28,9 +28,30 @@
   .extern       nx_progcontent                 /* Display Content string on LCD Screen */
 #else
 
+/**
+ * Common Startup/Shutdown Routines for NxOS programs
+ */
+
+/**
+ * Initialize NxOS subsystems
+ */
 FUNCDEF void nx_proginit(void);                /* Program Initialization Routine */
+
+/**
+ * Shut down NxOS subsystems
+ */
 FUNCDEF void nx_progshutdown(void);            /* Program Shutdown Routine */
+
+/**
+ * Display Title string on LCD
+ *    @param string: Null-terminated string
+ */
 FUNCDEF void nx_progtitle(char *string);       /* Display Title string on LCD Screen */
+
+/**
+ * Display Content string on LCD
+ *    @param string: Null-terminated string
+ */
 FUNCDEF void nx_progcontent(char *string);     /* Display Content string on LCD Screen */
 
 #endif

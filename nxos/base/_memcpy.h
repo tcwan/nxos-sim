@@ -15,6 +15,15 @@
 
 #include "base/types.h"
 
+/** Native implementation of memory copy routine.
+ * Note: The buffers should not overlap in memory
+ *
+ * @param dest The destination buffer start address.
+ * @param src  The source buffer start address.
+ * @param n    Number of bytes to copy
+ *
+ * @return Pointer to destination buffer.
+ */
 void *_memcpy(void *dest, const void *src, size_t n);
 
 #endif /* __NXOS_BASE__MEMCPY_H__ */

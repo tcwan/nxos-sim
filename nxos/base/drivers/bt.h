@@ -89,14 +89,16 @@ bt_state_t nx_bt_get_state(void);
 
 
 /**
- * @param[in] name Max 16 car. !
+ * @param[in] name Max 16 char. !
  */
 void nx_bt_set_friendly_name(char *name);
 bool nx_bt_get_discoverable(void);
 void nx_bt_set_discoverable(bool d);
 
 /**
+ * @param max_devices
  * @param timeout unit: 1.28s ; min : 0x01 (1.28s) ; max: 0x30 (61.44s)
+ * @param bt_remote_class
  */
 void nx_bt_begin_inquiry(U8 max_devices,
 			 U8 timeout,
@@ -164,6 +166,9 @@ void nx_bt_send_pin(char *code);
  * @return port handle or -1 if failure
  */
 int nx_bt_open_port(void);
+/**
+ * @return True if close successful, False otherwise
+ */
 bool nx_bt_close_port(int handle);
 
 /**

@@ -13,9 +13,21 @@
 #ifndef __NXOS_BASE__ABORT_H__
 #define __NXOS_BASE__ABORT_H__
 
+/**
+ * Abort Condition: Prefetch Abort
+ */
 #define ABORT_PREFETCH	0
+/**
+ * Abort Condition: Data Access Abort
+ */
 #define ABORT_DATA		1
+/**
+ * Abort Condition: Spurious IRQ
+ */
 #define	ABORT_SPURIOUS	2
+/**
+ * Abort Condition: Illegal Instruction Abort
+ */
 #define	ABORT_ILLEGAL	3
 
 /** @addtogroup coreinternal */

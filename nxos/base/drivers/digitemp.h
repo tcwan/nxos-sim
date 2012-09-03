@@ -91,11 +91,11 @@ bool digitemp_detect(U32 sensor);
 /** Set the mode of the digital temperature sensor on port @a sensor.
  *
  * @param sensor The sensor port number.
- * @param mode The mode of the sensor.
+ * @param m The mode of the sensor.
  *
  * @return True if the mode was set, false otherwise.
  */
-bool digitemp_set_mode(U32 sensor, digitemp_mode);
+bool digitemp_set_mode(U32 sensor, digitemp_mode m);
 
 /** Read the temperature raw.
  *
