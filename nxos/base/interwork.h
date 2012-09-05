@@ -31,6 +31,7 @@
 	.macro arm_interwork arm_routine
 	.align 4
 	.arm
+	.type \arm_routine, %function   @ Needed by new binutils (>2.21)
 	.global \arm_routine
 \arm_routine:
 	.endm
@@ -52,6 +53,7 @@
 	.macro thumb_interwork thumb_routine
 	.align 2
 	.thumb_func
+	.type \thumb_routine, %function   @ Needed by new binutils (>2.21)
 	.global \thumb_routine
 \thumb_routine:
 	.endm
