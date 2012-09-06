@@ -14,15 +14,25 @@
 #define __NXOS_BASE_INTERWORK_H__
 
 #ifdef __ASSEMBLY__
-/** Macro to call Interworked ARM Routine
+/** Macro to call Interworked ARM Routine Directly
  *
- *      arm_icall       <target_arm_routine>
+ *      arm_dcall       <target_arm_routine>
  *
  */
-	.macro arm_icall arm_routine
+	.macro arm_dcall arm_routine
 	BL     \arm_routine        @ Linker will generate veneer automatically
 	.endm
-	
+
+/** Macro to call Interworked ARM Routine via Register (Indirect)
+ *
+ *      arm_rcall       <register>
+ *
+ */
+	.macro arm_rcall register
+	MOV    LR, PC
+	BX     \register           @ register setup before indirect call
+	.endm
+
 /** Macro to declare Interworking ARM Routine
  *
  *      arm_interwork   <arm_routine_name>
@@ -36,13 +46,26 @@
 \arm_routine:
 	.endm
 	
-/** Macro to call Interworked Thumb Routine
+/** Macro to call Interworked Thumb Routine Directly
  *
- *      thumb_icall     <target_thumb_routine>
+ *      thumb_dcall     <target_thumb_routine>
  *
  */
-	.macro thumb_icall thumb_routine
+	.macro thumb_dcall thumb_routine
 	BL     \thumb_routine      @ Linker will generate veneer automatically
+	.endm
+
+/** Macro to call Interworked Thumb Routine via Register (Indirect)
+ *
+ *      thumb_rcall       <register>
+ *
+ */
+	.macro thumb_rcall register
+	B	   0f
+9:
+	BX     \register
+0:
+	BL     9b                  @ register setup before indirect call
 	.endm
 	
 /** Macro to declare Interworking Thumb Routine
