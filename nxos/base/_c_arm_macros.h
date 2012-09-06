@@ -137,6 +137,7 @@ driver ## _ ## cmd ## :
 
 #endif
 
+/** Enums to define Device Driver Module states */
 ENUM_BEGIN
 ENUM_VAL(INIT)             /**< Driver Init Routine. */
 ENUM_VAL(SHUTDOWN)         /**< Driver Shutdown Routine. */

@@ -42,7 +42,7 @@
 typedef struct gui_text_menu {
   char *title;       /**< Menu title. */
   char **entries;    /**< Menu entries, NULL terminated array. */
-  U8 default_entry;  /** Number of the default entry. */
+  U8 default_entry;  /**< Number of the default entry. */
   char *active_mark; /**< A string replacing '. ' for the
                       * currently active entry. */
 } gui_text_menu_t;

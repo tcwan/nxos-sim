@@ -36,6 +36,7 @@ typedef enum {
   RS485_BR_115200 = 115200 /**< 115200 baud */
 } nx_rs485_baudrate_t;
 
+/** RS485 State enums */
 typedef enum {
   RS485_SUCCESS = 0, /**< Operation succeded */
   RS485_TIMEOUT, /**< Time exceeded */
