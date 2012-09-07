@@ -23,13 +23,15 @@
 #include "armdebug/Debugger/debug_stub.h"
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
-#undef ENABLE_BREAKPOINTS
+#define ENABLE_BREAKPOINTS
 /* To disable Motor Debugging, change the following to #undef DEBUG_MOTOR */
 #undef DEBUG_MOTOR
 /* To disable Min-Max Debugging, change the following to #undef DEBUG_MIN_MAX */
 #undef DEBUG_MIN_MAX
 
 	.equ	MAX_ITERATIONS, 0x0FFFF
+
+	/* Timer Constants */
 	.extern	nx_systick_wait_ms
 	.equ	SYSTICK_1000MS, 1000
 	.equ	SYSTICK_50MS,   50
@@ -98,7 +100,7 @@ ENUM_END(robot_state_t)
 .data
 .align 4
 
-title:	 .asciz "Grasper ARM Prog"
+title:	 .asciz "Grasper Prog"
 pressed:  .asciz "Touch Pressed! "
 released: .asciz "Touch Released!"
 opened:  .asciz "Claw Opened!"
@@ -653,7 +655,6 @@ init_robot:
 	mov		r0, #TOUCH_PORT
 	bl		nx_sensors_analog_enable
 
-	bl		nx_proginit
 
 	mov		r0, #FALSE
 	ldr		r1, =touched
@@ -670,8 +671,6 @@ init_robot:
 	str		r0, [r2]			/* Frequency */
 	str		r0, [r2, #4]		/* Duration */
 
-	ldr		r0, =title
-	bl		nx_progtitle
 	pop		{pc}
 
 /* main
@@ -682,7 +681,10 @@ init_robot:
 	.global	main
 main:
 	push	{lr}
-	bl		init_robot
+	bl		nx_proginit
+
+	ldr		r0, =title
+	bl		nx_progtitle
 
 #ifdef ENABLE_BREAKPOINTS
 	dbg__bkpt_arm
@@ -693,6 +695,7 @@ break:
 	mov		r0, #SYSTICK_1000MS
 	bl		nx_systick_wait_ms
 
+	bl		init_robot
 	bl		claw_open
 	bl		light_led_enable
 	ldr		r8, =MAX_ITERATIONS	/* Execution Lifetime Iteration Limiter */
@@ -702,21 +705,21 @@ main_loop:
 	beq		exit_main
 
 	/* Perform Sensor Readings */
-	bl		get_light_readings
-	bl		get_touch_status
+//	bl		get_light_readings
+//	bl		get_touch_status
 
 	/* Evaluate Behaviors */
-	bl		bbr_line_follower
-	bl		bbr_grasp_object
-	bl		bbr_play_tone
+//	bl		bbr_line_follower
+//	bl		bbr_grasp_object
+//	bl		bbr_play_tone
 
 	/* Arbiter */
 main_arbitration:
-	bl		grasper_arbiter
+//	bl		grasper_arbiter
 
 	/* Actuators */
 main_actuator:
-	bl		grasper_actuation
+//	bl		grasper_actuation
 	b		main_loop				/* continue event loop execution */
 
 exit_main:
