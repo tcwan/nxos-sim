@@ -31,6 +31,8 @@
 #else
 	.equ	MAX_ITERATIONS, 0x0FFFF
 #endif
+
+	/* Timer Constants */
 	.extern	nx_systick_wait_ms
 	.equ	SYSTICK_1000MS, 1000
 	.equ	SYSTICK_50MS,   50
@@ -89,7 +91,7 @@ ENUM_END(robot_state_t)
 .data
 .align 4
 
-title:	 .asciz "Tribot ARM Prog"
+title:	 .asciz "Linefollower Prog"
 white:	 .asciz "White!  "
 black:	 .asciz "Black!  "
 edge:	 .asciz "Edge!   "
@@ -287,18 +289,7 @@ unknown_detected:
 	.global	main
 main:
 	push	{lr}
-
-	/* Configure Sensors */
-	mov		r0, #LIGHT_PORT
-	bl		nx_sensors_analog_enable
-	mov		r0, #TOUCH_PORT
-	bl		nx_sensors_analog_enable
-
 	bl		nx_proginit
-
-	ldr		r5, =readings
-	mov		r7, #FALSE
-	ldr		r8, =MAX_ITERATIONS
 
 	ldr		r0, =title
 	bl		nx_progtitle
@@ -311,6 +302,16 @@ break:
 	nop		/* Prevent GDB from stepping inside nx_systick_wait_ms due to breakpoint */
 	mov		r0, #SYSTICK_1000MS
 	bl		nx_systick_wait_ms
+
+	/* Configure Sensors */
+	mov		r0, #LIGHT_PORT
+	bl		nx_sensors_analog_enable
+	mov		r0, #TOUCH_PORT
+	bl		nx_sensors_analog_enable
+
+	ldr		r5, =readings
+	mov		r7, #FALSE
+	ldr		r8, =MAX_ITERATIONS
 
 #ifdef DEBUG_MOTOR
 	/* Left and Right Wheel Motor Debugging Code */
