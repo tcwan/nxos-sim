@@ -9,7 +9,7 @@
  * This file must be processed using cpp before assembly.
  */
 
-/* Copyright (C) 2007-2011 the NxOS developers
+/* Copyright (C) 2007-2012 the NxOS developers
  *
  * See AUTHORS for a full list of the developers.
  *
@@ -21,6 +21,7 @@
 #include "base/interwork.h"
 #include "base/lib/scaffolding/scaffolding.h"
 #include "armdebug/Debugger/debug_stub.h"
+#include "systems/tribot/include/tribot.h"
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
 #define ENABLE_BREAKPOINTS
@@ -31,30 +32,6 @@
 
 	.equ	MAX_ITERATIONS, 0x0FFFF
 
-	/* Timer Constants */
-	.extern	nx_systick_wait_ms
-	.equ	SYSTICK_1000MS, 1000
-	.equ	SYSTICK_50MS,   50
-	.equ	SYSTICK_3MS,    3
-	.equ	SYSTICK_1MS,    1
-
-	/* Sensor Port Assignments */
-	.equ	TOUCH_PORT, 0		/* Sensor 1 */
-	.equ	SOUND_PORT, 1		/* Sensor 2 */
-	.equ	LIGHT_PORT, 2		/* Sensor 3 */
-	.equ	ULSND_PORT, 3		/* Sensor 4 */
-	.equ	DIGI0, 0
-	.equ	DIGI1, 1
-
-	/* Actuator Port Assignments */
-	.extern nx_motors_rotate
-	.extern nx_motors_stop
-	.equ	CLAW_PORT, 0		/* Motor A */
-	.equ	RWHEEL_PORT, 1		/* Motor B */
-	.equ	LWHEEL_PORT, 2		/* Motor C */
-
-	/* Min-Max constant */
-    .equ n,5    /* Number of items in array */
 
 	/* Light Sensor Color Detection Intensity (0-100) ranges */
 	/* Light Sensor Raw Readings: White: 470-520; Edge: 540-580; Black: 680-700 */
@@ -82,25 +59,10 @@
 	.equ	CLOSE_SPEED, -10
 	.equ	TACHO_THRESH, 3
 
-
-/** @name Robot State Enums
- *
- * Robot State.
- * The enums must be consecutive, starting from 0
- */
-/*@{*/
-ENUM_BEGIN
-ENUM_VALASSIGN(ROBOT_STOP, 0)   /**< Initial State. */
-ENUM_VAL(ROBOT_FWD)             /**< Robot Moving Forward. */
-ENUM_VAL(ROBOT_CW)        		/**< Robot Rotating Clockwise */
-ENUM_VAL(ROBOT_CCW)        		/**< Robot Rotating Counter-Clockwise */
-ENUM_END(robot_state_t)
-/*@}*/
-
 .data
 .align 4
 
-title:	 .asciz "Grasper Prog"
+title:	 .asciz "Grasper Bot"
 pressed:  .asciz "Touch Pressed! "
 released: .asciz "Touch Released!"
 opened:  .asciz "Claw Opened!"
@@ -135,46 +97,20 @@ claw_closed: .byte	0
  * Behavior State Variables
  */
 
-/* Bitmasks for Suppression */
-#define suppress_portA 0x80
-#define suppress_portB 0x40
-#define suppress_portC 0x20
-#define suppress_tone  0x10
 
-/* Inhibition Values */
+/* Signal Inhibition Values */
 #define MOTOR_INHIBITED 0x80
 #define TONE_INHIBITED 0x00
 #define TONE_ENABLED_FREQ 2500		/* Hz */
 #define TONE_ENABLED_DUR   500		/* ms */
-
-follow_line_suppression:  .byte 0
-follow_line_portA:        .byte MOTOR_INHIBITED
-follow_line_portB:        .byte MOTOR_INHIBITED
-follow_line_portC:        .byte MOTOR_INHIBITED
-
-grasp_object_suppression: .byte 0
-grasp_object_portA:       .byte MOTOR_INHIBITED
-grasp_object_portB:       .byte MOTOR_INHIBITED
-grasp_object_portC:       .byte MOTOR_INHIBITED
-
-play_tone_suppression:    .byte 0
-play_tone_portA:          .byte MOTOR_INHIBITED
-play_tone_portB:          .byte MOTOR_INHIBITED
-play_tone_portC:          .byte MOTOR_INHIBITED
-
-tone_freq:    .word TONE_INHIBITED
-tone_dur:     .word TONE_INHIBITED
-
-/* New Actuator Settings */
-arbiter_portA:           .byte MOTOR_INHIBITED
-arbiter_portB:           .byte MOTOR_INHIBITED
-arbiter_portC:           .byte MOTOR_INHIBITED
 
 /* Current Actuator Settings */
 actuator_portA:          .byte MOTOR_INHIBITED
 actuator_portB:          .byte MOTOR_INHIBITED
 actuator_portC:          .byte MOTOR_INHIBITED
 
+actuator_tone_freq:      .word TONE_INHIBITED
+actuator_tone_dur:       .word TONE_INHIBITED
 
 .code 32
 .text
@@ -592,7 +528,7 @@ bbr_play_tone:
 	 *    Else, keep silent.
 	 */
 	push	{lr}
-	ldr		r2, =tone_freq	/* Pointer to Tone Variables */
+	ldr		r2, =actuator_tone_freq	/* Pointer to Tone Variables */
 
 	ldr		r1, =touched
 	ldrb	r0, [r1]		/* retrieve Touched status */
@@ -643,9 +579,11 @@ exit_grasper_actuation:
 	pop		{pc}
 
 
-/* init_robot
+/** init_robot
  *    Robot Specific Initialization tasks
- *    Note: Modifies register contents
+ *    Customize this routine for your needs
+ *
+ *    Note: Modifies various register contents on exit
  */
 init_robot:
 	push	{lr}
@@ -671,9 +609,24 @@ init_robot:
 	str		r0, [r2]			/* Frequency */
 	str		r0, [r2, #4]		/* Duration */
 
+	bl		claw_open
+	bl		light_led_enable
+	ldr		r8, =MAX_ITERATIONS	/* Execution Lifetime Iteration Limiter */
+
 	pop		{pc}
 
-/* main
+/** shutdown_robot
+ *    Robot Specific Shutdown tasks
+ *    Customize this routine for your needs
+ *
+ */
+shutdown_robot:
+	push	{lr}
+	bl		stop_motion				/* Stop motors */
+	bl		light_led_disable
+	pop		{pc}
+
+/** main
  *    Main Program
  *		R7: Touched (boolean)
  *		R8: Iteration Counter (termination)
@@ -688,21 +641,21 @@ main:
 
 #ifdef ENABLE_BREAKPOINTS
 	dbg__bkpt_arm
+#else
+	mov		r0, #SYSTICK_1000MS
+	bl		nx_systick_wait_ms
 #endif
 
 break:
-	nop		/* Prevent GDB from stepping inside nx_systick_wait_ms due to breakpoint */
-	mov		r0, #SYSTICK_1000MS
-	bl		nx_systick_wait_ms
+	nop		/* Provide GDB with a safe instruction to breakpoint at */
+
+/********************* Begin Customization Here *********************/
 
 	bl		init_robot
-	bl		claw_open
-	bl		light_led_enable
-	ldr		r8, =MAX_ITERATIONS	/* Execution Lifetime Iteration Limiter */
 
 main_loop:
 	subs	r8, r8, #1
-	beq		exit_main
+	beq		robot_stop
 
 	/* Perform Sensor Readings */
 //	bl		get_light_readings
@@ -722,9 +675,11 @@ main_actuator:
 //	bl		grasper_actuation
 	b		main_loop				/* continue event loop execution */
 
+robot_stop:
+	bl		shutdown_robot				/* Stop motors */
+
+/********************** End Customization Here **********************/
 exit_main:
-	bl		stop_motion				/* Stop motors */
-	bl		light_led_disable
 	bl		nx_progshutdown
 	pop		{pc}
 

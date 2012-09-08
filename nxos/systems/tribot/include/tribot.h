@@ -39,7 +39,7 @@
 	.equ	LWHEEL_PORT, 2		/* Motor C */
 
 	/* Min-Max constant */
-    .equ	n, 5				/* Number of items in array */
+    .equ	n, 5		/* Number of items in array */
 
 /** @name Robot State Enums
  *
@@ -50,8 +50,8 @@
 ENUM_BEGIN
 ENUM_VALASSIGN(ROBOT_STOP, 0)   /**< Initial State. */
 ENUM_VAL(ROBOT_FWD)             /**< Robot Moving Forward. */
-ENUM_VAL(ROBOT_CW)        		/**< Robot Rotating Clockwise */
-ENUM_VAL(ROBOT_CCW)        		/**< Robot Rotating Counter-Clockwise */
+ENUM_VAL(ROBOT_CW)        	/**< Robot Rotating Clockwise */
+ENUM_VAL(ROBOT_CCW)        	/**< Robot Rotating Counter-Clockwise */
 ENUM_END(robot_state_t)
 /*@}*/
 
