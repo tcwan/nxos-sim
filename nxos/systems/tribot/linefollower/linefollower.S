@@ -1,10 +1,14 @@
 /** @file linefollower.S
  *  @brief Tribot Line Follower Program
+ *  Test Basic Tribot Functionality
+ *
+ * The following behaviors have been implemented
+ * - Line following (Light Sensor)
  *
  * This file must be processed using cpp before assembly.
  */
 
-/* Copyright (C) 2007-2011 the NxOS developers
+/* Copyright (C) 2007-2012 the NxOS developers
  *
  * See AUTHORS for a full list of the developers.
  *
@@ -16,6 +20,7 @@
 #include "base/interwork.h"
 #include "base/lib/scaffolding/scaffolding.h"
 #include "armdebug/Debugger/debug_stub.h"
+#include "systems/tribot/include/tribot.h"
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
 #undef ENABLE_BREAKPOINTS
@@ -32,30 +37,6 @@
 	.equ	MAX_ITERATIONS, 0x0FFFF
 #endif
 
-	/* Timer Constants */
-	.extern	nx_systick_wait_ms
-	.equ	SYSTICK_1000MS, 1000
-	.equ	SYSTICK_50MS,   50
-	.equ	SYSTICK_3MS,    3
-	.equ	SYSTICK_1MS,    1
-
-	/* Sensor Port Assignments */
-	.equ	TOUCH_PORT, 0		/* Sensor 1 */
-	.equ	SOUND_PORT, 1		/* Sensor 2 */
-	.equ	LIGHT_PORT, 2		/* Sensor 3 */
-	.equ	ULSND_PORT, 3		/* Sensor 4 */
-	.equ	DIGI0, 0
-	.equ	DIGI1, 1
-
-	/* Actuator Port Assignments */
-	.extern nx_motors_rotate
-	.extern nx_motors_stop
-	.equ	CLAW_PORT, 0		/* Motor A */
-	.equ	RWHEEL_PORT, 1		/* Motor B */
-	.equ	LWHEEL_PORT, 2		/* Motor C */
-
-	/* Min-Max constant */
-    .equ n,5    /* Number of items in array */
 
 	/* Light Sensor Color Detection Intensity (0-100) ranges */
 	/* Light Sensor Raw Readings: White: 470-520; Edge: 540-580; Black: 680-700 */
@@ -74,24 +55,10 @@
 
 
 
-/** @name Robot State Enums
- *
- * Robot State.
- * The enums must be consecutive, starting from 0
- */
-/*@{*/
-ENUM_BEGIN
-ENUM_VALASSIGN(ROBOT_STOP, 0)   /**< Initial State. */
-ENUM_VAL(ROBOT_FWD)             /**< Robot Moving Forward. */
-ENUM_VAL(ROBOT_CW)        		/**< Robot Rotating Clockwise */
-ENUM_VAL(ROBOT_CCW)        		/**< Robot Rotating Counter-Clockwise */
-ENUM_END(robot_state_t)
-/*@}*/
-
 .data
 .align 4
 
-title:	 .asciz "Linefollower Prog"
+title:	 .asciz "Linefollower Bot"
 white:	 .asciz "White!  "
 black:	 .asciz "Black!  "
 edge:	 .asciz "Edge!   "
@@ -279,8 +246,36 @@ unknown_detected:
 1:
 	pop		{pc}
 
+/** init_robot
+ *    Robot Specific Initialization tasks
+ *    Customize this routine for your needs
+ *
+ *    Note: Modifies various register contents on exit
+ */
+init_robot:
+	push	{lr}
+	/* Configure Sensors */
+	mov		r0, #LIGHT_PORT
+	bl		nx_sensors_analog_enable
+	mov		r0, #TOUCH_PORT
+	bl		nx_sensors_analog_enable
 
-/* main
+	ldr		r5, =readings
+	mov		r7, #FALSE
+	ldr		r8, =MAX_ITERATIONS
+	pop		{pc}
+
+/** shutdown_robot
+ *    Robot Specific Shutdown tasks
+ *    Customize this routine for your needs
+ *
+ */
+shutdown_robot:
+	push	{lr}
+	bl		unknown_detected		/* Stop motors */
+	pop		{pc}
+
+/** main
  *    Main Program
  *		R5: Address Pointer to Light Sensor Readings Array
  *		R6: Index of Light Sensor Readings
@@ -296,22 +291,17 @@ main:
 
 #ifdef ENABLE_BREAKPOINTS
 	dbg__bkpt_arm
+#else
+	mov		r0, #SYSTICK_1000MS
+	bl		nx_systick_wait_ms
 #endif
 
 break:
-	nop		/* Prevent GDB from stepping inside nx_systick_wait_ms due to breakpoint */
-	mov		r0, #SYSTICK_1000MS
-	bl		nx_systick_wait_ms
+	nop		/* Provide GDB with a safe instruction to breakpoint at */
 
-	/* Configure Sensors */
-	mov		r0, #LIGHT_PORT
-	bl		nx_sensors_analog_enable
-	mov		r0, #TOUCH_PORT
-	bl		nx_sensors_analog_enable
+/********************* Begin Customization Here *********************/
 
-	ldr		r5, =readings
-	mov		r7, #FALSE
-	ldr		r8, =MAX_ITERATIONS
+	bl		init_robot
 
 #ifdef DEBUG_MOTOR
 	/* Left and Right Wheel Motor Debugging Code */
@@ -337,6 +327,7 @@ break:
 	mov		r1, #FALSE		/* Don't brake */
 	bl		nx_motors_stop
 #endif
+
 	/* Line Follower Algorithm:
 	 * 1. Collect Samples
 	 * 2. Find Min-Max (range)
@@ -351,14 +342,14 @@ break:
 	bl		light_led_enable
 	mov		r6, #n		/* Number of readings to collect */
 
-loop:
+main_loop:
 #if 0
 	mov		r0, #SYSTICK_1000MS
 	bl		nx_systick_wait_ms
 #endif
 
 	subs	r8, r8, #1
-	beq		exit_main
+	beq		robot_stop
 
 get_light_readings:
 	sub		r6, r6, #1	/* Convert to Index */
@@ -408,7 +399,7 @@ check_light_readings:
 	bl		nx_display_int
 
 
-	b		loop
+	b		main_loop
 #else
 	/* Line Determination:
 	 * The checks must be ordered from lower range to higher range */
@@ -418,29 +409,32 @@ check_white:
 	cmp		r1, #WHITE_MAX
 	bhi		check_edge
 	bl		white_detected
-	b		loop
+	b		main_loop
 check_edge:
 	cmp		r0, #EDGE_MIN
 	blo		found_unknown
 	cmp		r1, #EDGE_MAX
 	bhi		check_black
 	bl		edge_detected
-	b		loop
+	b		main_loop
 check_black:
 	cmp		r0, #BLACK_MIN
 	blo		found_unknown
 	cmp		r1, #BLACK_MAX
 	bhi		found_unknown
 	bl		black_detected
-	b		loop
+	b		main_loop
 
 found_unknown:
 	bl		unknown_detected
-	b		loop
+	b		main_loop
 #endif
 
+robot_stop:
+	bl		shutdown_robot
+
+/********************** End Customization Here **********************/
 exit_main:
-	bl		unknown_detected		/* Stop motors */
 	bl		nx_progshutdown
 	pop		{pc}
 
