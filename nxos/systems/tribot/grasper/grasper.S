@@ -569,7 +569,7 @@ grasper_actuation:
 	push	{lr}
 
 	/* Speaker Actuation */
-	ldr		r2, =tone_freq
+	ldr		r2, =actuator_tone_freq
 	ldr		r0, [r2]			/* Frequency */
 	ldr		r1, [r2, #4]		/* Duration */
 	cmp		r0, #TONE_INHIBITED
@@ -604,7 +604,7 @@ init_robot:
 	ldr		r4, =claw_oldpos
 	str		r0, [r4]			/* Initialize Old Position = Current position */
 
-	ldr		r2, =tone_freq		/* Pointer to Tone Variables */
+	ldr		r2, =actuator_tone_freq		/* Pointer to Tone Variables */
 	mov		r0, #TONE_INHIBITED
 	str		r0, [r2]			/* Frequency */
 	str		r0, [r2, #4]		/* Duration */
