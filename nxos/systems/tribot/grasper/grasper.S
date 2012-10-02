@@ -25,8 +25,8 @@
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
 #define ENABLE_BREAKPOINTS
-/* To disable Motor Debugging, change the following to #undef DEBUG_MOTOR */
-#undef DEBUG_MOTOR
+/* To disable Claw Debugging, change the following to #undef DEBUG_CLAW */
+#undef DEBUG_CLAW
 /* To disable Min-Max Debugging, change the following to #undef DEBUG_MIN_MAX */
 #undef DEBUG_MIN_MAX
 
@@ -48,6 +48,7 @@
 	.equ	TOUCH_THRESH, 256
 
 	/* Wheel Control Constants */
+	.equ	STOP_SPEED, 0
 	.equ	FWD_SPEED, 60
 	.equ	FASTROT_SPEED, 50
 	.equ	SLOWROT_SPEED, 30
@@ -381,20 +382,20 @@ exit_get_claw_status:
 	pop		{r4, pc}
 
 
-/* claw_open
+/* claw_open_immediate
  *    Open Claws to maximum aperature.
  *      Keep motor engaged until tachometer shows no progress
  *      Note: This is best done using lower speed to the Motor (within Threshold value)
  *		R4: Address Pointer to Claw variables
  */
-claw_open:
+claw_open_immediate:
  	push	{r4, lr}
 	ldr		r4, =claw_position
 
 claw_start_opening:
  	mov		r0, #CLAW_PORT
  	mov		r1, #OPEN_SPEED
- 	bl		nx_motors_rotate
+ 	bl		nx_motors_rotate	/* !!!!! */
 claw_keep_opening:
 	mov		r0, #SYSTICK_100MS
 	bl		nx_systick_wait_ms	/* Wait 100 ms before checking Tachometer */
@@ -420,20 +421,21 @@ claw_stop_opening:
 	bl		nx_progcontent2
 	pop		{r4, pc}
 
-/* claw_close
+/* claw_close_immediate
  *    Close Claws to minimum aperature (gripping object).
  *      Keep motor engaged until tachometer shows no progress (within Threshold value)
  *      Note: This is best done using lower speed to the Motor
  *		R4: Address Pointer to Claw variables
  */
-claw_close:
+claw_close_immediate:
  	push	{r4, lr}
 	ldr		r4, =claw_position
 
 claw_start_closing:
  	mov		r0, #CLAW_PORT
  	mov		r1, #CLOSE_SPEED
- 	bl		nx_motors_rotate
+ 	bl		nx_motors_rotate	/* !!!!! */
+
 claw_keep_closing:
 	mov		r0, #SYSTICK_100MS
 	bl		nx_systick_wait_ms	/* Wait 100 ms before checking Tachometer */
@@ -459,18 +461,17 @@ claw_stop_closing:
 	bl		nx_progcontent2
 	pop		{r4, pc}
 
-/* Grasp Object Behavior
- *    TBD: ALGORITHM
+/* Claw Close (BBR)
+ *    TBD
  */
-
-bbr_grasp_object:
-	push	{lr}
-
-	pop		{pc}
-
+claw_close:
+	push		{r4, pc}
+	pop		{r4, pc}
 
 /* Line Follower Behavior
  *
+ * Returns:
+ *    Activated : boolean
  */
 bbr_line_follower:
 	/* Line Follower Algorithm:
@@ -481,6 +482,8 @@ bbr_line_follower:
 	 * 2. If Inside Line, move straight ahead
 	 * 3. If On Edge, rotate slowly
 	 * 4. If Outside Line, rotate quickly
+	 *
+	 * Always Activate Behavior
 	 */
 	push	{lr}
 
@@ -518,28 +521,65 @@ check_black:
 found_unknown:
 	bl		stop_motion
 exit_bbr_line_follower:
+	mov		r0, #TRUE					/* Always activated */
+	pop		{pc}
+
+/* Grasp Object Behavior
+ *
+ * Returns:
+ *    Activated : boolean
+ */
+bbr_grasp_object:
+	/* Grasp Object Algorithm:
+	 *    Determine if Touch Sensor is Activated
+	 *	  If Touched
+	 *       If Claw is Open
+	 *		    Close Claw
+	 *    Else
+	 *       Deactivate Behavior
+	 */
+	push	{lr}
+
+	ldr		r1, =touched
+	ldrb	r0, [r1]
+	teq		r0, #FALSE				/* Touched Activated returns 255, not equal to #TRUE */
+	beq		exit_bbr_grasp_object	/* R0 contains FALSE already if this matches */
+
+enable_grasp_object:
+	ldr		r1, =claw_closed
+	ldrb	r0, [r1]				/* retrieve Claw Status */
+	teq		r0, #FALSE
+	bleq	claw_close				/* Claw is open, close it */
+	mov		r0, #TRUE				/* Activate Behavior */
+
+exit_bbr_grasp_object:
 	pop		{pc}
 
 /* Play Tone Behavior
  *
+ * Returns:
+ *    Activated : boolean
  */
 bbr_play_tone:
 	/* Play Tone Algorithm:
 	 *    Determine if Touch Sensor is Activated
 	 *    and Claw is Closed
-	 *    If True, enable Tone Playback
-	 *    Else, keep silent.
+	 *    If True, enable Tone Playback, Stop Motors, Activate Behavior
+	 *    Else, keep silent, Deactivate Behavior.
 	 */
 	push	{lr}
 	ldr		r2, =actuator_tone_freq	/* Pointer to Tone Variables */
 
+	/* Check Touch Status */
 	ldr		r1, =touched
 	ldrb	r0, [r1]		/* retrieve Touched status */
-	cmp		r0, #FALSE
+	teq		r0, #FALSE
 	beq		keep_silent
+
+	/* Check Claw Status */
 	ldr		r1, =claw_closed
 	ldrb	r0, [r1]		/* retrieve Claw Status */
-	cmp		r0, #FALSE
+	teq		r0, #FALSE
 	beq		keep_silent
 
 enable_tone:
@@ -547,21 +587,54 @@ enable_tone:
 	str		r0, [r2]			/* Frequency */
 	mov		r0, #TONE_ENABLED_DUR
 	str		r0, [r2, #4]		/* Duration */
+
+	mov		r0, #STOP_SPEED		/* Stop Motors */
+	ldr		r2, =actuator_portA
+	str		r0, [r2, #RWHEEL_PORT]		/* Store into Actuator variable using Indexed Offset addressing */
+	str		r0, [r2, #LWHEEL_PORT]		/* Store into Actuator variable using Indexed Offset addressing */
+
+	mov		r0, #TRUE			/* Activate Behavior */
 	b		exit_bbr_play_tone
+
 keep_silent:
 	mov		r0, #TONE_INHIBITED
 	str		r0, [r2]			/* Frequency */
 	str		r0, [r2, #4]		/* Duration */
+	mov		r0, #FALSE			/* Deactivate Behavior */
 
 exit_bbr_play_tone:
 	pop		{pc}
 
 /* Grasper Arbiter
+ *	 The Arbiter implemented here is a strict priority arbiter
+ *   with lazy evaluation. i.e., behaviors are evaluated from highest
+ *   priority to lowest priority. As soon as the evaluated behavior
+ *   is active, it will ignore all lower priority behaviors and
+ *   proceed to actuation. Otherwise, if the evaluated behavior is
+ *   not active, the behavior with the next highest priority will be
+ *   evaluated.
  *
+ *   The lowest priority behavior will always be active as long as
+ *   all other behaviors are not activated.
+ *
+ *   This is accomplished using a if-then-elseif-else control structure.
+ *   All defined behaviors will be accessed via direct subroutine calls.
  */
 
 grasper_arbiter:
 	push	{lr}
+	/* Evaluate Behaviors */
+eval_play_tone:
+	bl		bbr_play_tone
+	teq		r0, #FALSE
+	bne		exit_grasper_arbiter		/* Activated, skip other behaviors */
+eval_grasp_object:
+	bl		bbr_grasp_object
+	teq		r0, #FALSE
+	bne		exit_grasper_arbiter		/* Activated, skip other behaviors */
+eval_line_follower:
+	bl		bbr_line_follower
+
 exit_grasper_arbiter:
 	pop		{pc}
 
@@ -569,7 +642,7 @@ exit_grasper_arbiter:
  *
  */
 grasper_actuation:
-	push	{lr}
+	push	{r4, r5, lr}
 
 	/* Speaker Actuation */
 	ldr		r2, =actuator_tone_freq
@@ -578,8 +651,34 @@ grasper_actuation:
 	cmp		r0, #TONE_INHIBITED
 	blne	nx_sound_freq		/* Play Tone if Not TONE_INHIBITED */
 
+	/* Motor Actuation
+	 *     We assume that the Motor Speed value is always valid (i.e., not Inhibited)
+	 */
+	ldr		r4, =actuator_portA		/* Base Address */
+	mov		r5, #LWHEEL_PORT		/* Use Port Index as loop counter */
+
+actuate_motor_loop:
+	mov		r0, r5					/* Copy to Param 1 register */
+	ldrb	r1, [r4, r5]			/* Param 2: Motor Speed, retrieved from Actuator Base Address + (Port Index) */
+	teq		r1, #STOP_SPEED
+	beq		actuate_motor_stop
+
+actuate_motor_rotate:
+ 	bl		nx_motors_rotate
+	b		actuate_motor_cont		/* Check next loop */
+
+actuate_motor_stop:
+	mov		r1, #FALSE				/* Don't Brake for Wheels */
+	cmp		r5, #CLAW_PORT
+	moveq	r1, #TRUE				/* Brake for Claw Actuator */
+	bl		nx_motors_stop
+
+actuate_motor_cont:
+	subs	r5, r5, #1				/* Decrement Port Index */
+	bpl		actuate_motor_loop		/* Exit when Index is negative */
+
 exit_grasper_actuation:
-	pop		{pc}
+	pop		{r4, r5, pc}
 
 
 /** init_robot
@@ -612,7 +711,7 @@ init_robot:
 	str		r0, [r2]			/* Frequency */
 	str		r0, [r2, #4]		/* Duration */
 
-	bl		claw_open
+	bl		claw_open_immediate
 	bl		light_led_enable
 	ldr		r8, =MAX_ITERATIONS	/* Execution Lifetime Iteration Limiter */
 
@@ -664,38 +763,31 @@ main_loop:
 	bl		get_light_readings
 	bl		get_touch_status
 
-#if 1
+// The following cannot be used with claw_open_immediate and claw_close_immediate in order to work with the arbiter scheme
+	bl		get_claw_status
+
+#ifdef DEBUG_CLAW
 	// Debug Grasping Function
 	ldr		r4, =touched
 	ldrb	r0, [r4]
-	teq		r0, #FALSE			/* Touched Activated returns 255, not equal to #TRUE */
-	blne	claw_close
-	bleq	claw_open
-#endif
-
-	/* Evaluate Behaviors */
-//	bl		bbr_line_follower
-//	bl		bbr_grasp_object
-//	bl		bbr_play_tone
-
-	/* Arbiter */
-main_arbitration:
-//	bl		grasper_arbiter
-
-	/* Actuators */
-main_actuator:
-//	bl		grasper_actuation
-
-#if 1
-	// For Debugging
+	teq		r0, #FALSE				/* Touched Activated returns 255, not equal to #TRUE */
+	blne	claw_close_immediate
+	bleq	claw_open_immediate
 	mov		r0, #SYSTICK_500MS
 	bl		nx_systick_wait_ms
 #endif
 
+
+main_arbitration:
+	bl		grasper_arbiter			/* Arbiter */
+
+main_actuator:
+//	bl		grasper_actuation		/* Actuators */
+
 	b		main_loop				/* continue event loop execution */
 
 robot_stop:
-	bl		shutdown_robot				/* Stop motors */
+	bl		shutdown_robot			/* Stop motors */
 
 /********************** End Customization Here **********************/
 exit_main:
