@@ -19,6 +19,8 @@
 	/* Timer Constants */
 	.extern	nx_systick_wait_ms
 	.equ	SYSTICK_1000MS, 1000
+	.equ	SYSTICK_500MS,  500
+	.equ	SYSTICK_100MS,  100
 	.equ	SYSTICK_50MS,   50
 	.equ	SYSTICK_3MS,    3
 	.equ	SYSTICK_1MS,    1

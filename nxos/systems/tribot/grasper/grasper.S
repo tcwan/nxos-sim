@@ -54,10 +54,13 @@
 
 	/* Claw Control Constants
 	 *    Open and Close Speeds are directional (signed)
+	 * WARNING: Be conservative with the Open and Close Speeds, since we
+	 *    run the motors until it hits the limiters and the Tachometer stops changing.
+	 *    Using too high a speed may pop the claw assembly!
 	 */
 	.equ	OPEN_SPEED, 10
 	.equ	CLOSE_SPEED, -10
-	.equ	TACHO_THRESH, 3
+	.equ	TACHO_THRESH, 1						/* Need value of 1 for reliability of detecting limits */
 
 .data
 .align 4
@@ -393,8 +396,8 @@ claw_start_opening:
  	mov		r1, #OPEN_SPEED
  	bl		nx_motors_rotate
 claw_keep_opening:
-	mov		r0, #SYSTICK_1MS
-	bl		nx_systick_wait_ms	/* Wait 1 ms before checking Tachometer */
+	mov		r0, #SYSTICK_100MS
+	bl		nx_systick_wait_ms	/* Wait 100 ms before checking Tachometer */
 	bl		get_claw_status
 
 	ldr		r0, [r4]			/* Current Claw Position */
@@ -414,7 +417,7 @@ claw_stop_opening:
  	strb	r0, [r4, #8]		/* Update claw_closed */
 
 	ldr		r0, =opened
-	bl		nx_progcontent
+	bl		nx_progcontent2
 	pop		{r4, pc}
 
 /* claw_close
@@ -432,8 +435,8 @@ claw_start_closing:
  	mov		r1, #CLOSE_SPEED
  	bl		nx_motors_rotate
 claw_keep_closing:
-	mov		r0, #SYSTICK_1MS
-	bl		nx_systick_wait_ms	/* Wait 1 ms before checking Tachometer */
+	mov		r0, #SYSTICK_100MS
+	bl		nx_systick_wait_ms	/* Wait 100 ms before checking Tachometer */
 	bl		get_claw_status
 
 	ldr		r0, [r4]			/* Current Claw Position */
@@ -453,7 +456,7 @@ claw_stop_closing:
  	strb	r0, [r4, #8]		/* Update claw_closed */
 
 	ldr		r0, =closed
-	bl		nx_progcontent
+	bl		nx_progcontent2
 	pop		{r4, pc}
 
 /* Grasp Object Behavior
@@ -596,13 +599,13 @@ init_robot:
 
 	mov		r0, #FALSE
 	ldr		r1, =touched
-	strb	r0, [r1]		/* touched boolean */
+	strb	r0, [r1]			/* touched boolean */
 	ldr		r1, =claw_closed
-	strb	r0, [r1]	/* claw_closed boolean */
-
-	bl		get_claw_status
+	strb	r0, [r1]			/* claw_closed boolean */
 	ldr		r4, =claw_oldpos
-	str		r0, [r4]			/* Initialize Old Position = Current position */
+	str		r0, [r4]			/* Initialize Old Position = 0 (default initial position after nx__motors_init) */
+
+	bl		nx__motors_init		/* Initialize Motors */
 
 	ldr		r2, =actuator_tone_freq		/* Pointer to Tone Variables */
 	mov		r0, #TONE_INHIBITED
@@ -658,8 +661,17 @@ main_loop:
 	beq		robot_stop
 
 	/* Perform Sensor Readings */
-//	bl		get_light_readings
-//	bl		get_touch_status
+	bl		get_light_readings
+	bl		get_touch_status
+
+#if 1
+	// Debug Grasping Function
+	ldr		r4, =touched
+	ldrb	r0, [r4]
+	teq		r0, #FALSE			/* Touched Activated returns 255, not equal to #TRUE */
+	blne	claw_close
+	bleq	claw_open
+#endif
 
 	/* Evaluate Behaviors */
 //	bl		bbr_line_follower
@@ -673,6 +685,13 @@ main_arbitration:
 	/* Actuators */
 main_actuator:
 //	bl		grasper_actuation
+
+#if 1
+	// For Debugging
+	mov		r0, #SYSTICK_500MS
+	bl		nx_systick_wait_ms
+#endif
+
 	b		main_loop				/* continue event loop execution */
 
 robot_stop:
