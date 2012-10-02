@@ -49,10 +49,16 @@ FUNCDEF void nx_progshutdown(void);            /* Program Shutdown Routine */
 FUNCDEF void nx_progtitle(char *string);       /* Display Title string on LCD Screen */
 
 /**
- * Display Content string on LCD
+ * Display Content string on LCD (Row 2)
  *    @param string: Null-terminated string
  */
 FUNCDEF void nx_progcontent(char *string);     /* Display Content string on LCD Screen */
+
+/**
+ * Display Content string on LCD (Row 4)
+ *    @param string: Null-terminated string
+ */
+FUNCDEF void nx_progcontent2(char *string);     /* Display Content string on LCD Screen */
 
 #endif
 
