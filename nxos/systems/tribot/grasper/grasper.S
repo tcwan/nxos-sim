@@ -638,10 +638,10 @@ eval_line_follower:
 exit_grasper_arbiter:
 	pop		{pc}
 
-/* Grasper Actuator
+/* Grasper Actuator Controller
  *
  */
-grasper_actuation:
+grasper_controller:
 	push	{r4, r5, lr}
 
 	/* Speaker Actuation */
@@ -657,27 +657,27 @@ grasper_actuation:
 	ldr		r4, =actuator_portA		/* Base Address */
 	mov		r5, #LWHEEL_PORT		/* Use Port Index as loop counter */
 
-actuate_motor_loop:
+controller_motor_loop:
 	mov		r0, r5					/* Copy to Param 1 register */
 	ldrb	r1, [r4, r5]			/* Param 2: Motor Speed, retrieved from Actuator Base Address + (Port Index) */
 	teq		r1, #STOP_SPEED
-	beq		actuate_motor_stop
+	beq		controller_motor_stop
 
-actuate_motor_rotate:
+controller_motor_rotate:
  	bl		nx_motors_rotate
-	b		actuate_motor_cont		/* Check next loop */
+	b		controller_motor_cont		/* Check next loop */
 
-actuate_motor_stop:
+controller_motor_stop:
 	mov		r1, #FALSE				/* Don't Brake for Wheels */
 	cmp		r5, #CLAW_PORT
 	moveq	r1, #TRUE				/* Brake for Claw Actuator */
 	bl		nx_motors_stop
 
-actuate_motor_cont:
+controller_motor_cont:
 	subs	r5, r5, #1				/* Decrement Port Index */
-	bpl		actuate_motor_loop		/* Exit when Index is negative */
+	bpl		controller_motor_loop		/* Exit when Index is negative */
 
-exit_grasper_actuation:
+exit_grasper_controller:
 	pop		{r4, r5, pc}
 
 
@@ -781,8 +781,8 @@ main_loop:
 main_arbitration:
 	bl		grasper_arbiter			/* Arbiter */
 
-main_actuator:
-//	bl		grasper_actuation		/* Actuators */
+main_actuation:
+//	bl		grasper_controller		/* Actuator Controller */
 
 	b		main_loop				/* continue event loop execution */
 
