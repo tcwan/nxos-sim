@@ -724,6 +724,7 @@ init_robot:
  */
 shutdown_robot:
 	push	{lr}
+	bl		claw_close_immediate
 	bl		stop_motion				/* Stop motors */
 	bl		light_led_disable
 	pop		{pc}
