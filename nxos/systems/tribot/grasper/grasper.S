@@ -24,14 +24,14 @@
 #include "systems/tribot/include/tribot.h"
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
-#define ENABLE_BREAKPOINTS
+#undef ENABLE_BREAKPOINTS
 /* To disable Claw Debugging, change the following to #undef DEBUG_CLAW */
 #undef DEBUG_CLAW
 /* To disable Min-Max Debugging, change the following to #undef DEBUG_MIN_MAX */
 #undef DEBUG_MIN_MAX
 
 	.equ	MAX_ITERATIONS, 0x0FFFF
-
+	.equ	ROBOT_SCHED_DURATION,	100		/* 100 ms per robot scheduler loop */
 
 	/* Light Sensor Color Detection Intensity (0-100) ranges */
 	/* Light Sensor Raw Readings: White: 470-520; Edge: 540-580; Black: 680-700 */
@@ -65,6 +65,9 @@
 
 .data
 .align 4
+
+/* Scheduler Timeout value */
+sched_tick:	.word	0
 
 title:	 .asciz "Grasper Bot"
 pressed:  .asciz "Touch Pressed! "
@@ -715,6 +718,33 @@ init_robot:
 	bl		light_led_enable
 	ldr		r8, =MAX_ITERATIONS	/* Execution Lifetime Iteration Limiter */
 
+	bl		nx_systick_get_ms				/* Current systick */
+	add		r0, r0, #ROBOT_SCHED_DURATION	/* Next Scheduler Timeout value */
+	ldr		r2, =sched_tick
+	str		r0, [r2]						/* Update Scheduler Timeout */
+
+	pop		{pc}
+
+/** sleep_robot
+ *    Run loop scheduler timing task
+ *    This routine will wait till the next scheduler interval, then continue execution of Run Loop
+ *
+ *    Note: This is a busy wait implementation
+ */
+sleep_robot:
+	push	{lr}
+	bl		nx_systick_get_ms				/* Current systick in R0 */
+
+	ldr		r2, =sched_tick
+	ldr		r1, [r2]						/* Check Sceduler Timeout */
+	cmp		r1, r0
+	blo		exit_sleep_robot				/* Scheduler Timeout < Systick, so exit */
+
+next_sleep_robot:
+	add		r0, r0, #ROBOT_SCHED_DURATION	/* Next Scheduler Timeout value */
+	str		r0, [r2]						/* Update Next Scheduler Timeout */
+
+exit_sleep_robot:
 	pop		{pc}
 
 /** shutdown_robot
@@ -774,17 +804,15 @@ main_loop:
 	teq		r0, #FALSE				/* Touched Activated returns 255, not equal to #TRUE */
 	blne	claw_close_immediate
 	bleq	claw_open_immediate
-	mov		r0, #SYSTICK_500MS
-	bl		nx_systick_wait_ms
 #endif
 
 
 main_arbitration:
-	bl		grasper_arbiter			/* Arbiter */
+//	bl		grasper_arbiter			/* Arbiter */
 
 main_actuation:
 //	bl		grasper_controller		/* Actuator Controller */
-
+	bl		sleep_robot				/* Scheduler Wait Loop */
 	b		main_loop				/* continue event loop execution */
 
 robot_stop:
