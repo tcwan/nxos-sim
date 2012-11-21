@@ -39,18 +39,18 @@
 
 
 	/* Light Sensor Color Detection Intensity (0-100) ranges */
-	/* Light Sensor Raw Readings: White: 470-520; Edge: 540-580; Black: 680-700 */
+	/* White: 49-50; Edge: 54; Black: 66-67; Blue: 60-64 */
 	/* Changed the range so that it will be a smooth transition from White to Black */
 	.equ	WHITE_MIN, 45
-	.equ	WHITE_MAX, 51
-	.equ	EDGE_MIN,  52
-	.equ	EDGE_MAX,  60
-	.equ	BLACK_MIN, 61
+	.equ	WHITE_MAX, 53
+	.equ	EDGE_MIN,  54
+	.equ	EDGE_MAX,  64
+	.equ	BLACK_MIN, 65
 	.equ	BLACK_MAX, 70
 
 	/* Motor Control Constants */
-	.equ	FWD_SPEED, 70
-	.equ	FASTROT_SPEED, 50
+	.equ	FWD_SPEED, 50
+	.equ	FASTROT_SPEED, 40
 	.equ	SLOWROT_SPEED, 20
 
 
@@ -343,7 +343,7 @@ break:
 	mov		r6, #n		/* Number of readings to collect */
 
 main_loop:
-#if 0
+#ifdef DEBUG_MIN_MAX
 	mov		r0, #SYSTICK_1000MS
 	bl		nx_systick_wait_ms
 #endif
