@@ -39,7 +39,7 @@
 
 
 	/* Light Sensor Color Detection Intensity (0-100) ranges */
-	/* White: 49-50; Edge: 54; Black: 66-67; Blue: 60-64 */
+	/* 8547 TestPad White: 49-50; Edge: 54; Black: 66-67; Blue: 60-64 */
 	/* Changed the range so that it will be a smooth transition from White to Black */
 	.equ	WHITE_MIN, 45
 	.equ	WHITE_MAX, 53
