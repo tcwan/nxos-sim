@@ -1,0 +1,32 @@
+# $Id: Portfile 74794 2011-01-02 21:15:32Z ecronin@macports.org $
+
+PortSystem          1.0
+PortGroup           python27 1.0
+name                py27-nxt-python
+license             GPL
+version             2.2.2
+revision	    1
+epoch               1
+categories          python devel
+maintainers         nomaintainer
+description         Python library for controlling a LEGO NXT robot
+long_description    NXT-Python is a package for controlling a LEGO NXT robot \
+                    using either USB or Bluetooth. It is based on NXT_Python.
+
+platforms           darwin
+
+homepage            http://code.google.com/p/nxt-python/
+master_sites        googlecode:nxt-python
+distname            nxt-python-${version}
+#use_zip				yes
+
+checksums           md5 39b76db07ba22811651555ed33c35821 \
+                    sha1 c6543c1f601d13453e71606c6d84e3a28f0adcf7 \
+                    rmd160 e488b18f75b92c4fc20d9d49cffae40bf25f085d 
+
+#depends_lib-append  port:py27-pyusb-devel
+#depends_lib-append  port:py27-pyusb
+depends_lib-append   port:py27-lightblue
+#patchfiles          patch-nxt-locator.diff
+
+
