@@ -63,6 +63,21 @@
 	.equ	CLOSE_SPEED, -10
 	.equ	TACHO_THRESH, 1						/* Need value of 1 for reliability of detecting limits */
 
+	.macro time_elapsed	curr_time, prev_time, interval
+	/*
+	 * Dealing with elapsed time timestamp rollover:
+	 * http://www.arduino.cc/playground/Code/TimingRollover
+	 * Return TRUE only if (long)( current time - (prev_time + interval) ) >= 0
+	 *    Note: This used signed compare to come up with the correct decision
+	 */
+	add		\prev_time, \prev_time, \interval
+	rsbs	\curr_time, \prev_time, \curr_time
+/*	cmp		\curr_time, #0 */
+	movlt	r0, #FALSE
+	mvnge	r0, #FALSE					/* Must use NOT False to set R0 to True */
+	.endm
+
+
 .data
 .align 4
 
@@ -96,6 +111,8 @@ touchval: .byte   0
 touched:  .byte   0
 
 /* Claw Variables */
+claw_timestamp: .word 0
+claw_oldtstamp: .word 0
 claw_position: .word 0
 claw_oldpos:   .word 0
 claw_closed: .byte	0
@@ -157,6 +174,8 @@ exit_min_max_loop:
     STRB 	R4, [R2]       /* Store max into memory location */
 done_min_max:
 	pop		{r4, pc}
+
+
 
 
 /* Actuator Primitives */
@@ -381,6 +400,9 @@ exit_get_touch_status:
 	ldr		r4, =claw_position
 	str		r0, [r4]			/* Store 32-bit tachometer count */
 
+	bl		nx_systick_get_ms
+	str		r0, [r4, #-8]			/* Store 32-bit timestamp in claw_timestamp */
+
 exit_get_claw_status:
 	pop		{r4, pc}
 
@@ -548,12 +570,24 @@ bbr_grasp_object:
 	teq		r0, #FALSE				/* Touched Activated returns 255, not equal to #TRUE */
 	beq		exit_bbr_grasp_object	/* R0 contains FALSE already if this matches */
 
+	/* Check time of last claw_position update */
+	ldr		r4, =claw_position		/* pointer into claw variables */
+	ldr		r0, [r4, #-8]			/* retrieve current timestamp */
+	ldr		r1, [r4, #-4]			/* retrieve previous timestamp */
+	time_elapsed	r0, r1, #SYSTICK_1000MS
+	cmp		r0, #FALSE
+	beq		bbr_grasp_object_active	/* Has not reached time interval yet */
+
+////// TBD ////////
+
 enable_grasp_object:
 	ldr		r1, =claw_closed
 	ldrb	r0, [r1]				/* retrieve Claw Status */
 	teq		r0, #FALSE
 	bleq	claw_close				/* Claw is open, close it */
-	mov		r0, #TRUE				/* Activate Behavior */
+
+bbr_grasp_object_active:
+	mvn		r0, #FALSE				/* Activate Behavior */
 
 exit_bbr_grasp_object:
 	pop		{pc}
