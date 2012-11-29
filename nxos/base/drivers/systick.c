@@ -1,4 +1,4 @@
-/* Copyright (C) 2007 the NxOS developers
+/* Copyright (C) 2007-2012 the NxOS developers
  *
  * See AUTHORS for a full list of the developers.
  *
@@ -126,7 +126,17 @@ U32 nx_systick_get_ms(void) {
 void nx_systick_wait_ms(U32 ms) {
   U32 final = systick_time + ms;
 
+  /* Dealing with systick_time rollover:
+   * http://www.arduino.cc/playground/Code/TimingRollover
+   * Exit only if (long)( systick_time - final ) >= 0
+   *    Note: This used signed compare to come up with the correct decision
+   */
+#if 0
   while (systick_time < final);
+#else
+  while ((long) (systick_time - final) < 0);
+#endif
+
 }
 
 void nx_systick_wait_ns(U32 ns) {
