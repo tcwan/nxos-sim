@@ -6,7 +6,6 @@
  * - Line following (Light Sensor: WIP)
  * - Open Claws
  * - Grasp Object
- * - Play Tone
  *
  * This file must be processed using cpp before assembly.
  */
@@ -79,6 +78,19 @@
 	movge	r0, #TRUE
 	.endm
 
+/** @name Claw Movement State Enums
+ *
+ * Claw Movement State.
+ * The enums must be consecutive, starting from 0
+ */
+/*@{*/
+ENUM_BEGIN
+ENUM_VALASSIGN(CLAW_STOPPED, 0)   /**< Initial State. */
+ENUM_VAL(CLAW_OPENING)            /**< Claw Opening. */
+ENUM_VAL(CLAW_CLOSING)        	  /**< Clow Closing. */
+ENUM_END(claw_movement_state_t)
+/*@}*/
+
 
 .data
 .align 4
@@ -118,7 +130,7 @@ claw_oldtstamp: .word 0
 claw_position:  .word 0
 claw_oldpos:    .word 0
 claw_closed:    .byte 0
-claw_moving:    .byte 0
+claw_movement:  .byte 0
 
 /*
  * Behavior State Variables
@@ -127,9 +139,6 @@ claw_moving:    .byte 0
 
 /* Signal Inhibition Values */
 #define MOTOR_INHIBITED 0x80
-#define TONE_INHIBITED 0x00
-#define TONE_ENABLED_FREQ 2500		/* Hz */
-#define TONE_ENABLED_DUR   500		/* ms */
 
 /* Current Actuator Settings */
 actuator_speedA:         .byte MOTOR_INHIBITED
@@ -139,9 +148,6 @@ actuator_brakeA:         .byte FALSE
 actuator_brakeB:         .byte FALSE
 actuator_brakeC:         .byte FALSE
 
-actuator_tone_freq:      .word TONE_INHIBITED
-actuator_tone_dur:       .word TONE_INHIBITED
-
 /* Previous Actuator Settings */
 actuator_oldspeedA:      .byte MOTOR_INHIBITED
 actuator_oldspeedB:      .byte MOTOR_INHIBITED
@@ -149,9 +155,6 @@ actuator_oldspeedC:      .byte MOTOR_INHIBITED
 actuator_oldbrakeA:      .byte FALSE
 actuator_oldbrakeB:      .byte FALSE
 actuator_oldbrakeC:      .byte FALSE
-
-actuator_oldtone_freq:   .word TONE_INHIBITED
-actuator_oldtone_dur:    .word TONE_INHIBITED
 
 .code 32
 .text
@@ -165,6 +168,7 @@ actuator_oldtone_dur:    .word TONE_INHIBITED
  * R4: max value
  */
 
+	.type   min_max, %function
 	.global min_max
 min_max:
 	push	{r4, lr}
@@ -424,86 +428,6 @@ exit_get_claw_status:
 	pop		{r4, pc}
 
 
-/* claw_open_immediate
- *    Open Claws to maximum aperature.
- *      Keep motor engaged until tachometer shows no progress
- *      Note: This is best done using lower speed to the Motor (within Threshold value)
- *		R4: Address Pointer to Claw variables
- */
-claw_open_immediate:
- 	push	{r4, lr}
-	ldr		r4, =claw_position
-
-claw_start_opening:
- 	mov		r0, #CLAW_PORT
- 	mov		r1, #OPEN_SPEED
- 	bl		nx_motors_rotate	/* !!!!! */
-claw_keep_opening:
-	mov		r0, #SYSTICK_100MS
-	bl		nx_systick_wait_ms	/* Wait 100 ms before checking Tachometer */
-	bl		get_claw_status
-
-	ldr		r0, [r4]			/* Current Claw Position */
-	ldr		r1, [r4, #4]		/* Old Claw Position */
-	subs	r2, r0, r1			/* Current - Old Positions */
-	rsblt	r2, r0, r1			/* Absolute difference in R2 */
-	str		r0, [r4, #4]		/* Store Current Claw Position as Old Claw Position */
-	cmp		r2, #TACHO_THRESH	/* Is it within margin of error? */
-	bhi		claw_keep_opening
-
-claw_stop_opening:
- 	mov		r0, #CLAW_PORT
- 	mov		r1, #TRUE			/* We want braking */
-	bl		nx_motors_stop
-
- 	mov		r0, #FALSE
- 	strb	r0, [r4, #8]		/* Update claw_closed */
-
-	ldr		r0, =opened
-	bl		nx_progcontent2
-	pop		{r4, pc}
-
-/* claw_close_immediate
- *    Close Claws to minimum aperature (gripping object).
- *      Keep motor engaged until tachometer shows no progress (within Threshold value)
- *      Note: This is best done using lower speed to the Motor
- *		R4: Address Pointer to Claw variables
- */
-claw_close_immediate:
- 	push	{r4, lr}
-	ldr		r4, =claw_position
-
-claw_start_closing:
- 	mov		r0, #CLAW_PORT
- 	mov		r1, #CLOSE_SPEED
- 	bl		nx_motors_rotate	/* !!!!! */
-
-claw_keep_closing:
-	mov		r0, #SYSTICK_100MS
-	bl		nx_systick_wait_ms	/* Wait 100 ms before checking Tachometer */
-	bl		get_claw_status
-
-	ldr		r0, [r4]			/* Current Claw Position */
-	ldr		r1, [r4, #4]		/* Old Claw Position */
-	subs	r2, r0, r1			/* Current - Old Positions */
-	rsblt	r2, r0, r1			/* Absolute difference in R2 */
-	str		r0, [r4, #4]		/* Store Current Claw Position as Old Claw Position */
-	cmp		r2, #TACHO_THRESH	/* Is it within margin of error? */
-	bhi		claw_keep_closing
-
-claw_stop_closing:
- 	mov		r0, #CLAW_PORT
- 	mov		r1, #TRUE			/* We want braking */
-	bl		nx_motors_stop
-
-	ldr		r4, =claw_closed
- 	mov		r0, #TRUE
- 	strb	r0, [r4, #8]		/* Update claw_closed */
-
-	ldr		r0, =closed
-	bl		nx_progcontent2
-	pop		{r4, pc}
-
 /* Update Actuator State
  *    Program Actuator State into Array
  *	  Inputs:
@@ -649,163 +573,174 @@ exit_bbr_line_follower:
  *
  * Returns:
  *    Activated : Boolean
+ *
+ *    Registers Used:
+ *       R4: claw_movement pointer
+ *       R5: touched pointer
+ *       R6: claw_closed pointer
  */
 bbr_open_claws:
 	/* Open Claws Algorithm:
-	 *    Determine if Touch Sensor is Activated
-	 *	  If Not Touched
-	 *		If Claw is Closed
-	 *		    Open Claw
+	 *    If Claw Movement == STOPPED
+	 *	    If Not Touched AND Claw Closed
+	 *		  Claw Movement == OPENING
+	 *		  Open Claw
+	 *		  Activate Behavior
+	 *      Else
+	 *        Deactivate Behavior
+	 *    Else if Claw Movement == OPENING
+	 *      If Claw Opening has fully stopped
+	 *		  Claw Closed = False
+	 *        Claw Movement == STOPPED
+	 *        Lock Claw
 	 *		Activate Behavior
 	 *    Else
-	 *       Deactivate Behavior
+	 *      Deactivate Behavior
 	 */
-	push	{lr}
+	push	{r4, r5, r6, lr}
+	/* Setup Pointers at start of routine */
+	ldr		r4, =claw_movement
+	ldr		r5, =touched
+	ldr		r6, =claw_closed
 
-	ldr		r1, =touched
-	ldrb	r0, [r1]
+	ldrb	r0, [r4]				/* retrieve Claw Movement Status */
+	teq		r0, #CLAW_STOPPED
+	bne		bbr_claw_check_still_opening	/* still moving, check if we should stop */
+
+bbr_check_open_claws:
+	/* (!touched && claw_closed)
+	 * Negate expression for branch to Else Clause
+	 * Using De-Morgan's Law, the Else trigger clause is:
+	 * (touched || !claw_closed)
+	 */
+	ldrb	r0, [r5]
 	teq		r0, #FALSE				/* Touched Activated returns 255, not equal to #TRUE */
-	movne	r0, #FALSE				/* Touch Activated, deactivate Behavior and exit */
+	movne	r0, #FALSE				/* Touched (TRUE), deactivate Behavior and exit */
 	bne		exit_bbr_open_claws
 
 	/* Check Claw Status */
-	ldr		r1, =claw_closed
-	ldrb	r0, [r1]				/* retrieve Claw Closed Status */
+	ldrb	r0, [r6]				/* retrieve Claw Closed Status */
 	teq		r0, #FALSE
-	beq		bbr_open_claws_active	/* If Opened, then we are still active, with nothing to do */
+	beq		exit_bbr_open_claws		/* If Opened (Claw Closed == False), deactivate Behavior and exit */
 
-	ldr		r1, =claw_moving
-	ldrb	r0, [r1]				/* retrieve Claw Movement Status */
-	teq		r0, #FALSE
-	bne		bbr_claw_still_opening	/* still moving, check if we should stop */
+bbr_start_opening_claws:
+	mov		r0, #CLAW_OPENING
+	strb	r0, [r4]				/* Claw Movement = OPENING */
 
-	mov		r0, #TRUE
-	strb	r0, [r1]				/* otherwise, update Claw Movement Status */
-	bl		open_claw				/* start closing claw */
+	bl		open_claw				/* start opening claw */
 	b		bbr_open_claws_active	/* let controller do its work */
+
+bbr_claw_check_still_opening:
+	teq		r0, #CLAW_OPENING
+	movne	r0, #FALSE				/* Not Claw Opening Movement, deactivate Behavior and exit */
+	bne		exit_bbr_open_claws
 
 bbr_claw_still_opening:
 	bl		has_claw_fully_stopped
 	teq		r0, #FALSE				/* check if the movement is complete */
-	beq		bbr_open_claws_active
+	beq		bbr_open_claws_active	/* No, still Opening, keep Behavior active */
 
 bbr_claw_opening_stopped:
-	ldr		r1, =claw_moving
 	mov		r0, #FALSE
-	strb	r0, [r1]				/* Update Claw Movement Status */
-	bl		lock_claw
+	strb	r0, [r6]				/* update Claw Closed Status */
+
+	mov		r0, #CLAW_STOPPED
+	strb	r0, [r4]				/* Update Claw Movement Status */
+
+	bl		lock_claw				/* Keep Behavior Active for one more iteration */
 
 bbr_open_claws_active:
 	mov		r0, #TRUE				/* Activate Behavior */
 
 exit_bbr_open_claws:
-	pop		{pc}
-
+	pop		{r4, r5, r6, pc}
 
 /* Grasp Object Behavior
  *
  * Returns:
  *    Activated : Boolean
+ *
+ *    Registers Used:
+ *       R4: claw_movement pointer
+ *       R5: touched pointer
+ *       R6: claw_closed pointer
  */
 bbr_grasp_object:
 	/* Grasp Object Algorithm:
-	 *    Determine if Touch Sensor is Activated
-	 *	  If Touched
-	 *		If Claw is Open
-	 *		    Close Claw
+	 *    If Claw Movement == STOPPED
+	 *	    If Touched AND Not Claw Closed (i.e., Claw Open)
+	 *		  Claw Movement == CLOSING
+	 *		  Close Claw
+	 *		  Activate Behavior
+	 *      Else
+	 *        Deactivate Behavior
+	 *    *** Note: If (Touched AND Claw Closed), the behavior is disabled currently
+	 *    Else if Claw Movement == CLOSING
+	 *      If Claw Closing has fully stopped
+	 *		  Claw Closed = True
+	 *        Claw Movement == STOPPED
+	 *        Lock Claw
 	 *		Activate Behavior
 	 *    Else
-	 *       Deactivate Behavior
+	 *      Deactivate Behavior
 	 */
-	push	{lr}
+	push	{r4, r5, r6, lr}
+	/* Setup Pointers at start of routine */
+	ldr		r4, =claw_movement
+	ldr		r5, =touched
+	ldr		r6, =claw_closed
 
-	ldr		r1, =touched
-	ldrb	r0, [r1]
+	ldrb	r0, [r4]				/* retrieve Claw Movement Status */
+	teq		r0, #CLAW_STOPPED
+	bne		bbr_claw_check_still_closing	/* still moving, check if we should stop */
+
+bbr_check_grasp_object:
+	/* (touched && !claw_closed)
+	 * Negate expression for branch to Else Clause
+	 * Using De-Morgan's Law, the Else trigger clause is:
+	 * (!touched || claw_closed)
+	 */
+	ldrb	r0, [r5]
 	teq		r0, #FALSE				/* Touched Activated returns 255, not equal to #TRUE */
-	beq		exit_bbr_grasp_object	/* R0 contains FALSE already if this matches */
+	beq		exit_bbr_grasp_object	/* Touched (R0 == FALSE), deactivate Behavior and exit */
 
 	/* Check Claw Status */
-	ldr		r1, =claw_closed
-	ldrb	r0, [r1]				/* retrieve Claw Closed Status */
+	ldrb	r0, [r6]				/* retrieve Claw Closed Status */
 	teq		r0, #FALSE
-	bne		bbr_grasp_object_active	/* If Closed, then we are still active, with nothing to do */
+	movne	r0, #FALSE				/* Claw Closed (TRUE), deactivate Behavior and exit */
+	bne		exit_bbr_grasp_object	/* If Claw Closed, deactivate Behavior and exit */
 
-	ldr		r1, =claw_moving
-	ldrb	r0, [r1]				/* retrieve Claw Movement Status */
-	teq		r0, #FALSE
-	bne		bbr_claw_still_closing	/* still moving, check if we should stop */
+bbr_start_grasp_object:
+	mov		r0, #CLAW_CLOSING
+	strb	r0, [r4]				/* Claw Movement = OPENING */
 
-	mov		r0, #TRUE
-	strb	r0, [r1]				/* otherwise, update Claw Movement Status */
 	bl		close_claw				/* start closing claw */
 	b		bbr_grasp_object_active	/* let controller do its work */
+
+bbr_claw_check_still_closing:
+	teq		r0, #CLAW_CLOSING
+	movne	r0, #FALSE				/* Not Claw Closing Movement, deactivate Behavior and exit */
+	bne		exit_bbr_grasp_object
 
 bbr_claw_still_closing:
 	bl		has_claw_fully_stopped
 	teq		r0, #FALSE				/* check if the movement is complete */
-	beq		bbr_grasp_object_active
+	beq		bbr_grasp_object_active	/* No, still Closing, keep Behavior active */
 
 bbr_claw_closing_stopped:
-	ldr		r1, =claw_moving
-	mov		r0, #FALSE
-	strb	r0, [r1]				/* Update Claw Movement Status */
-	bl		lock_claw
+	mov		r0, #TRUE
+	strb	r0, [r6]				/* update Claw Closed Status */
+
+	mov		r0, #CLAW_STOPPED
+	strb	r0, [r4]				/* Update Claw Movement Status */
+
+	bl		lock_claw				/* Keep Behavior Active for one more iteration */
 
 bbr_grasp_object_active:
 	mov		r0, #TRUE				/* Activate Behavior */
 
 exit_bbr_grasp_object:
-	pop		{pc}
-
-/* Play Tone Behavior
- *
- * Returns:
- *    Activated : boolean
- */
-bbr_play_tone:
-	/* Play Tone Algorithm:
-	 *    Determine if Touch Sensor is Activated
-	 *    and Claw is Closed
-	 *    If True, enable Tone Playback, Stop Motors, Activate Behavior
-	 *    Else, keep silent, Deactivate Behavior.
-	 */
-	push	{lr}
-	ldr		r2, =actuator_tone_freq	/* Pointer to Tone Variables */
-
-	/* Check Touch Status */
-	ldr		r1, =touched
-	ldrb	r0, [r1]		/* retrieve Touched status */
-	teq		r0, #FALSE
-	beq		keep_silent
-
-	/* Check Claw Status */
-	ldr		r1, =claw_closed
-	ldrb	r0, [r1]		/* retrieve Claw Status */
-	teq		r0, #FALSE
-	beq		keep_silent
-
-enable_tone:
-	ldr		r0, =TONE_ENABLED_FREQ
-	str		r0, [r2]			/* Frequency */
-	mov		r0, #TONE_ENABLED_DUR
-	str		r0, [r2, #4]		/* Duration */
-
-	mov		r0, #STOP_SPEED		/* Stop Motors */
-	ldr		r2, =actuator_speedA
-	str		r0, [r2, #RWHEEL_PORT]		/* Store into Actuator variable using Indexed Offset addressing */
-	str		r0, [r2, #LWHEEL_PORT]		/* Store into Actuator variable using Indexed Offset addressing */
-
-	mov		r0, #TRUE			/* Activate Behavior */
-	b		exit_bbr_play_tone
-
-keep_silent:
-	mov		r0, #TONE_INHIBITED
-	str		r0, [r2]			/* Frequency */
-	str		r0, [r2, #4]		/* Duration */
-	mov		r0, #FALSE			/* Deactivate Behavior */
-
-exit_bbr_play_tone:
-	pop		{pc}
+	pop		{r4, r5, r6, pc}
 
 /* Grasper Arbiter
  *	 The Arbiter implemented here is a strict priority arbiter
@@ -826,12 +761,12 @@ exit_bbr_play_tone:
 grasper_arbiter:
 	push	{lr}
 	/* Evaluate Behaviors */
-eval_play_tone:
-	bl		bbr_play_tone
-	teq		r0, #FALSE
-	bne		exit_grasper_arbiter		/* Activated, skip other behaviors */
 eval_grasp_object:
 	bl		bbr_grasp_object
+	teq		r0, #FALSE
+	bne		exit_grasper_arbiter		/* Activated, skip other behaviors */
+eval_open_claws:
+	bl		bbr_open_claws
 	teq		r0, #FALSE
 	bne		exit_grasper_arbiter		/* Activated, skip other behaviors */
 eval_line_follower:
@@ -845,13 +780,6 @@ exit_grasper_arbiter:
  */
 grasper_controller:
 	push	{r4, r5, r6, lr}
-
-	/* Speaker Actuation */
-	ldr		r2, =actuator_tone_freq
-	ldr		r0, [r2]			/* Frequency */
-	ldr		r1, [r2, #4]		/* Duration */
-	cmp		r0, #TONE_INHIBITED
-	blne	nx_sound_freq		/* Play Tone if Not TONE_INHIBITED */
 
 	/* Motor Actuation
 	 *     We assume that the Motor Speed value is always valid (i.e., not Inhibited)
@@ -897,13 +825,14 @@ init_robot:
 	bl		nx_sensors_analog_enable
 
 
-	mov		r0, #TRUE			/* force claw opening on init */
+	mov		r0, #TRUE			/* force claw opening on init via Open-Claws Behavior */
 	ldr		r1, =claw_closed
 	strb	r0, [r1]			/* claw_closed boolean */
 
+	mov		r0, #CLAW_STOPPED
+	ldr		r1, =claw_movement
+	strb	r0, [r1]			/* claw_movement enum */
 	mov		r0, #FALSE
-	ldr		r1, =claw_moving
-	strb	r0, [r1]			/* claw_moving boolean */
 	ldr		r1, =touched
 	strb	r0, [r1]			/* touched boolean */
 	ldr		r4, =claw_oldpos
@@ -913,12 +842,7 @@ init_robot:
 
 	bl		nx__motors_init		/* Initialize Motors */
 
-	ldr		r2, =actuator_tone_freq		/* Pointer to Tone Variables */
-	mov		r0, #TONE_INHIBITED
-	str		r0, [r2]			/* Frequency */
-	str		r0, [r2, #4]		/* Duration */
-
-	bl		claw_open_immediate
+	// bl		claw_open_immediate			/* Disabled, use BBR Behavior Open-Claws instead */
 	bl		light_led_enable
 	ldr		r8, =MAX_ITERATIONS	/* Execution Lifetime Iteration Limiter */
 
@@ -932,21 +856,24 @@ init_robot:
 /** sleep_robot
  *    Run loop scheduler timing task
  *    This routine will wait till the next scheduler interval, then continue execution of Run Loop
- *
+ *    R2: Pointer to sched_tick (previous timer expiry timestamp)
  *    Note: This is a busy wait implementation
  */
 sleep_robot:
 	push	{lr}
-	bl		nx_systick_get_ms				/* Current systick in R0 */
+	ldr		r2, =sched_tick					/* Setup Pointer to sched_tick */
 
-	ldr		r2, =sched_tick
-	ldr		r1, [r2]						/* Check Sceduler Timeout */
-	cmp		r1, r0
-	blo		exit_sleep_robot				/* Scheduler Timeout < Systick, so exit */
+cont_sleep:
+	bl		nx_systick_get_ms				/* Current systick in R0 */
+	ldr		r1, [r2]						/* Prev systick in R1 */
+	time_elapsed r0, r1, #ROBOT_SCHED_DURATION	/* Returns TRUE if timer exceeded duration */
+
+	cmp		r0, #FALSE						/* If Timer reached, return value is TRUE */
+	beq		cont_sleep						/* Scheduler Timeout < Systick, so exit */
 
 next_sleep_robot:
-	add		r0, r0, #ROBOT_SCHED_DURATION	/* Next Scheduler Timeout value */
-	str		r0, [r2]						/* Update Next Scheduler Timeout */
+	bl		nx_systick_get_ms				/* Current systick in R0 */
+	str		r0, [r2]						/* Update sched_tick with current systick */
 
 exit_sleep_robot:
 	pop		{pc}
@@ -958,16 +885,97 @@ exit_sleep_robot:
  */
 shutdown_robot:
 	push	{lr}
-	bl		claw_close_immediate
+	bl		claw_close_immediate	/* FIXME: Can we replace it with another routne? */
 	bl		stop_motion				/* Stop motors */
 	bl		light_led_disable
 	pop		{pc}
+
+/* claw_open_immediate
+ *    Open Claws to maximum aperature.
+ *      Keep motor engaged until tachometer shows no progress
+ *      Note: This is best done using slower speed to the Motor (within Threshold value)
+ *		R4: Address Pointer to Claw variables
+ */
+claw_open_immediate:
+ 	push	{r4, lr}
+	ldr		r4, =claw_position
+
+claw_start_opening:
+ 	mov		r0, #CLAW_PORT
+ 	mov		r1, #OPEN_SPEED
+ 	bl		nx_motors_rotate	/* !!!!! */
+claw_keep_opening:
+	mov		r0, #SYSTICK_100MS
+	bl		nx_systick_wait_ms	/* Wait 100 ms before checking Tachometer */
+	bl		get_claw_status
+
+	ldr		r0, [r4]			/* Current Claw Position */
+	ldr		r1, [r4, #4]		/* Old Claw Position */
+	subs	r2, r0, r1			/* Current - Old Positions */
+	rsblt	r2, r0, r1			/* Absolute difference in R2 */
+	str		r0, [r4, #4]		/* Store Current Claw Position as Old Claw Position */
+	cmp		r2, #TACHO_THRESH	/* Is it within margin of error? */
+	bhi		claw_keep_opening
+
+claw_stop_opening:
+ 	mov		r0, #CLAW_PORT
+ 	mov		r1, #TRUE			/* We want braking */
+	bl		nx_motors_stop
+
+ 	mov		r0, #FALSE
+ 	strb	r0, [r4, #8]		/* Update claw_closed */
+
+	ldr		r0, =opened
+	bl		nx_progcontent2
+	pop		{r4, pc}
+
+/* claw_close_immediate
+ *    Close Claws to minimum aperature (gripping object).
+ *      Keep motor engaged until tachometer shows no progress (within Threshold value)
+ *      Note: This is best done using slower speed to the Motor
+ *		R4: Address Pointer to Claw variables
+ */
+claw_close_immediate:
+ 	push	{r4, lr}
+	ldr		r4, =claw_position
+
+claw_start_closing:
+ 	mov		r0, #CLAW_PORT
+ 	mov		r1, #CLOSE_SPEED
+ 	bl		nx_motors_rotate	/* !!!!! */
+
+claw_keep_closing:
+	mov		r0, #SYSTICK_100MS
+	bl		nx_systick_wait_ms	/* Wait 100 ms before checking Tachometer */
+	bl		get_claw_status
+
+	ldr		r0, [r4]			/* Current Claw Position */
+	ldr		r1, [r4, #4]		/* Old Claw Position */
+	subs	r2, r0, r1			/* Current - Old Positions */
+	rsblt	r2, r0, r1			/* Absolute difference in R2 */
+	str		r0, [r4, #4]		/* Store Current Claw Position as Old Claw Position */
+	cmp		r2, #TACHO_THRESH	/* Is it within margin of error? */
+	bhi		claw_keep_closing
+
+claw_stop_closing:
+ 	mov		r0, #CLAW_PORT
+ 	mov		r1, #TRUE			/* We want braking */
+	bl		nx_motors_stop
+
+	ldr		r4, =claw_closed
+ 	mov		r0, #TRUE
+ 	strb	r0, [r4, #8]		/* Update claw_closed */
+
+	ldr		r0, =closed
+	bl		nx_progcontent2
+	pop		{r4, pc}
 
 /** main
  *    Main Program
  *		R7: Touched (boolean)
  *		R8: Iteration Counter (termination)
  */
+	.type   main, %function
 	.global	main
 main:
 	push	{lr}
@@ -997,8 +1005,6 @@ main_loop:
 	/* Perform Sensor Readings */
 	bl		get_light_readings
 	bl		get_touch_status
-
-// The following cannot be used with claw_open_immediate and claw_close_immediate in order to work with the arbiter scheme
 	bl		get_claw_status
 
 #ifdef DEBUG_CLAW
