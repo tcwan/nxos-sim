@@ -782,7 +782,6 @@ grasper_controller:
 	push	{r4, r5, r6, lr}
 
 	/* Motor Actuation
-	 *     We assume that the Motor Speed value is always valid (i.e., not Inhibited)
 	 */
 	ldr		r4, =actuator_speedA	/* Speed Base Address */
 	ldr		r5, =actuator_brakeA	/* Brake Base Address */
@@ -791,6 +790,8 @@ grasper_controller:
 controller_motor_loop:
 	mov		r0, r6					/* Copy to Param 1 register */
 	ldrb	r1, [r4, r6]			/* Param 2: Motor Speed, retrieved from Speed Base Address + (Port Index) */
+	teq		r1, #MOTOR_INHIBITED	/* If Inhibited or Stopped, Stop Motor */
+	beq		controller_motor_stop
 	teq		r1, #STOP_SPEED
 	beq		controller_motor_stop
 
@@ -799,7 +800,7 @@ controller_motor_rotate:
 	b		controller_motor_cont	/* Check next loop */
 
 controller_motor_stop:
-	ldrb	r1, [r4, r6]			/* Param 2: Brake (bool), retrieved from Brake Base Address + (Port Index) */
+	ldrb	r1, [r5, r6]			/* Param 2: Brake (bool), retrieved from Brake Base Address + (Port Index) */
 	bl		nx_motors_stop
 
 controller_motor_cont:
