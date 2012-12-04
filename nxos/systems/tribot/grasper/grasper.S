@@ -25,7 +25,7 @@
 #include "systems/tribot/include/tribot.h"
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
-#undef ENABLE_BREAKPOINTS
+#define ENABLE_BREAKPOINTS
 /* To disable Claw Debugging, change the following to #undef DEBUG_CLAW */
 #undef DEBUG_CLAW
 /* To disable Min-Max Debugging, change the following to #undef DEBUG_MIN_MAX */
@@ -1018,10 +1018,10 @@ main_loop:
 
 
 main_arbitration:
-//	bl		grasper_arbiter			/* Arbiter */
+	bl		grasper_arbiter			/* Arbiter */
 
 main_actuation:
-//	bl		grasper_controller		/* Actuator Controller */
+	bl		grasper_controller		/* Actuator Controller */
 	bl		sleep_robot				/* Scheduler Wait Loop */
 	b		main_loop				/* continue event loop execution */
 
