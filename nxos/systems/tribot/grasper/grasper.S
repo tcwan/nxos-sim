@@ -25,9 +25,9 @@
 #include "systems/tribot/include/tribot.h"
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
-#define ENABLE_BREAKPOINTS
+#undef ENABLE_BREAKPOINTS
 /* To disable Claw Debugging, change the following to #undef DEBUG_CLAW */
-#undef DEBUG_CLAW
+#define DEBUG_CLAW
 /* To disable Min-Max Debugging, change the following to #undef DEBUG_MIN_MAX */
 #undef DEBUG_MIN_MAX
 
@@ -438,7 +438,7 @@ exit_get_claw_status:
  *    Note: This is an internal routine shared by various functions
  */
 _update_actuator_state:
-	push	{pc}
+	push	{lr}
 	ldr		r3, =actuator_speedA	/* start address of actuator speed array */
 	strb	r1, [r3, r0]			/* store OPEN_SPEED into speed[CLAW_PORT] */
 	ldr		r3, =actuator_brakeA	/* start address of actuator brake array */
@@ -450,7 +450,7 @@ _update_actuator_state:
  *    Activate Motor (Open), Don't Brake
  */
 open_claw:
-	push	{pc}
+	push	{lr}
 	mov		r0, #CLAW_PORT
  	mov		r1, #OPEN_SPEED
 	mov		r2, #FALSE				/* Don't brake when opening claw */
@@ -461,7 +461,7 @@ open_claw:
  *    Activate Motor (Close), Don't Brake
  */
 close_claw:
-	push	{pc}
+	push	{lr}
 	mov		r0, #CLAW_PORT
  	mov		r1, #CLOSE_SPEED
 	mov		r2, #FALSE				/* Don't brake when closing claw */
@@ -472,7 +472,7 @@ close_claw:
  *    Stop Motor, Brake
  */
 lock_claw:
-	push	{pc}
+	push	{lr}
 	mov		r0, #CLAW_PORT
  	mov		r1, #STOP_SPEED
 	mov		r2, #TRUE				/* Brake when locking claw */
@@ -488,7 +488,7 @@ lock_claw:
  *    We only update the status every SYSTICK_100MS
  */
 has_claw_fully_stopped:
-	push	{r4, pc}
+	push	{r4, lr}
 claw_check_update_interval:
 	/* Check time of last claw_position update */
 	ldr		r4, =claw_position		/* pointer into claw variables */
@@ -712,7 +712,7 @@ bbr_check_grasp_object:
 
 bbr_start_grasp_object:
 	mov		r0, #CLAW_CLOSING
-	strb	r0, [r4]				/* Claw Movement = OPENING */
+	strb	r0, [r4]				/* Claw Movement = CLOSING */
 
 	bl		close_claw				/* start closing claw */
 	b		bbr_grasp_object_active	/* let controller do its work */
@@ -787,6 +787,8 @@ grasper_controller:
 	ldr		r5, =actuator_brakeA	/* Brake Base Address */
 	mov		r6, #LWHEEL_PORT		/* Use Port Index as loop counter */
 
+	/* FIXME: We don't check old settings, but keep reprogramming the motors */
+
 controller_motor_loop:
 	mov		r0, r6					/* Copy to Param 1 register */
 	ldrb	r1, [r4, r6]			/* Param 2: Motor Speed, retrieved from Speed Base Address + (Port Index) */
@@ -826,7 +828,7 @@ init_robot:
 	bl		nx_sensors_analog_enable
 
 
-	mov		r0, #TRUE			/* force claw opening on init via Open-Claws Behavior */
+	mov		r0, #FALSE			/* force claw opening on init via Open-Claws Behavior */
 	ldr		r1, =claw_closed
 	strb	r0, [r1]			/* claw_closed boolean */
 
@@ -840,8 +842,6 @@ init_robot:
 	str		r0, [r4]			/* Initialize Old Position = 0 (default initial position after nx__motors_init) */
 	ldr		r4, =claw_oldtstamp
 	str		r0, [r4]			/* Initialize Claw Position Old Timestamp = 0 */
-
-	bl		nx__motors_init		/* Initialize Motors */
 
 	// bl		claw_open_immediate			/* Disabled, use BBR Behavior Open-Claws instead */
 	bl		light_led_enable
