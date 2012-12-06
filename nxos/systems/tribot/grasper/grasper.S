@@ -27,7 +27,7 @@
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
 #undef ENABLE_BREAKPOINTS
 /* To disable Claw Debugging, change the following to #undef DEBUG_CLAW */
-#define DEBUG_CLAW
+#undef DEBUG_CLAW
 /* To disable Min-Max Debugging, change the following to #undef DEBUG_MIN_MAX */
 #undef DEBUG_MIN_MAX
 
@@ -138,20 +138,21 @@ claw_movement:  .byte 0
 
 
 /* Signal Inhibition Values */
-#define MOTOR_INHIBITED 0x80
+#define MOTOR_INHIBITED 0xFFFFFF80
+#define MOTOR_INHIBITED_BYTE (MOTOR_INHIBITED && 0xFF)		/* For data initialization use */
 
 /* Current Actuator Settings */
-actuator_speedA:         .byte MOTOR_INHIBITED
-actuator_speedB:         .byte MOTOR_INHIBITED
-actuator_speedC:         .byte MOTOR_INHIBITED
+actuator_speedA:         .byte MOTOR_INHIBITED_BYTE
+actuator_speedB:         .byte MOTOR_INHIBITED_BYTE
+actuator_speedC:         .byte MOTOR_INHIBITED_BYTE
 actuator_brakeA:         .byte FALSE
 actuator_brakeB:         .byte FALSE
 actuator_brakeC:         .byte FALSE
 
 /* Previous Actuator Settings */
-actuator_oldspeedA:      .byte MOTOR_INHIBITED
-actuator_oldspeedB:      .byte MOTOR_INHIBITED
-actuator_oldspeedC:      .byte MOTOR_INHIBITED
+actuator_oldspeedA:      .byte MOTOR_INHIBITED_BYTE
+actuator_oldspeedB:      .byte MOTOR_INHIBITED_BYTE
+actuator_oldspeedC:      .byte MOTOR_INHIBITED_BYTE
 actuator_oldbrakeA:      .byte FALSE
 actuator_oldbrakeB:      .byte FALSE
 actuator_oldbrakeC:      .byte FALSE
@@ -791,8 +792,10 @@ grasper_controller:
 
 controller_motor_loop:
 	mov		r0, r6					/* Copy to Param 1 register */
-	ldrb	r1, [r4, r6]			/* Param 2: Motor Speed, retrieved from Speed Base Address + (Port Index) */
-	teq		r1, #MOTOR_INHIBITED	/* If Inhibited or Stopped, Stop Motor */
+	ldr		r2, =MOTOR_INHIBITED	/* Explicit load into R2. We can't use MOTOR_INHIBITED as an Operand 2 constant value */
+	ldrsb	r1, [r4, r6]			/* Param 2: Motor Speed, retrieved from Speed Base Address + (Port Index) */
+	/* Note: We need to use LDR Signed Byte to make sure that negative values are loaded correctly */
+	teq		r1, r2					/* If Inhibited or Stopped, Stop Motor */
 	beq		controller_motor_stop
 	teq		r1, #STOP_SPEED
 	beq		controller_motor_stop
@@ -828,7 +831,7 @@ init_robot:
 	bl		nx_sensors_analog_enable
 
 
-	mov		r0, #FALSE			/* force claw opening on init via Open-Claws Behavior */
+	mov		r0, #TRUE			/* force claw opening on init via Open-Claws Behavior */
 	ldr		r1, =claw_closed
 	strb	r0, [r1]			/* claw_closed boolean */
 
