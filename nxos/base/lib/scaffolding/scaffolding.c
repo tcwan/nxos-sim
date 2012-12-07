@@ -68,3 +68,10 @@ FUNCDEF void nx_progcontent2(char *string) {
   nx_display_string(string);
 
 }
+
+FUNCDEF void nx_progcontentX(char *string, int row) {
+  /* Display Content string on LCD Screen */
+  nx_display_cursor_set_pos(0, row);
+  nx_display_string(string);
+
+}
