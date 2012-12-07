@@ -34,6 +34,10 @@
 	.equ	MAX_ITERATIONS, 0x0FFFF
 	.equ	ROBOT_SCHED_DURATION,	100		/* 100 ms per robot scheduler loop */
 
+	/* LCD Display Constants */
+	.equ	TOUCH_ROW, 3				/* Touch Display Row Index */
+	.equ	BEHAVIOR_ROW, 6				/* Behavior Display Row Index */
+
 	/* Light Sensor Color Detection Intensity (0-100) ranges */
 	/* Light Sensor Raw Readings: White: 470-520; Edge: 540-580; Black: 680-700 */
 	/* Changed the range so that it will be a smooth transition from White to Black */
@@ -47,8 +51,6 @@
 	/* Touch Sensor Threshold */
 	/* Touch Sensor Raw Readings: Pressed: 183; Released: 1023 */
 	.equ	TOUCH_THRESH, 256
-
-	.equ	TOUCH_ROW, 3				/* Touch Display Row Index */
 
 	/* Wheel Control Constants */
 	.equ	STOP_SPEED, 0
@@ -104,6 +106,11 @@ white:	  .asciz " Line: White  "
 black:	  .asciz " Line: Black  "
 edge:	  .asciz " Line: Edge   "
 unknown:  .asciz " Line: Unknown"
+
+graspobject_behavior: .asciz "BBR:Grasp-Object"
+openclaws_behavior:	  .asciz "BBR:Open-Claws  "
+followline_behavior:  .asciz "BBR:Follow-Line "
+idle_behavior:        .asciz "BBR:Idle        "
 
 
 .data
@@ -207,6 +214,29 @@ exit_min_max_loop:
 done_min_max:
 	pop		{r4, pc}
 
+
+/** print_claw_state
+ *    Claw Status output to LCD
+ */
+print_claw_state:
+	push	{lr}
+	ldr		r1, =claw_closed	/* Use R1 as Pointer to claw_closed */
+	ldrb	r0, [r1]			/* Retrieve claw_closed value to R0 */
+	teq		r0, #FALSE
+	ldreq	r0, =opened
+	ldrne	r0, =closed
+	bl		nx_progcontent2
+	pop		{pc}
+
+/** print_behavior_state
+ *    Behavior output to LCD
+ *		R0: Behavior Display String
+ */
+print_behavior_state:
+	push	{lr}
+	mov		r1, #BEHAVIOR_ROW
+	bl		nx_progcontentX
+	pop		{pc}
 
 /* Actuator Primitives */
 plip:
@@ -391,6 +421,8 @@ calc_min_max:
  *          and reenables the Light Sensor LED output when not active.
  *
  *		R4: Address Pointer to Touch variables
+ *	FIXME: Currently we force a 3 ms delay in this routine.
+ *			It should be handled using timestamps similar to Claw Position Detection
  */
  get_touch_status:
  	push	{r4, lr}
@@ -438,6 +470,8 @@ exit_get_touch_status:
 
 	bl		nx_systick_get_ms
 	str		r0, [r4, #-8]			/* Store 32-bit timestamp in claw_timestamp */
+
+	bl		print_claw_state
 
 exit_get_claw_status:
 	pop		{r4, pc}
@@ -563,22 +597,33 @@ exit_has_claw_fully_stopped:
 /* Line Follower Behavior
  *
  * Returns:
- *    Activated : boolean
+ *    MOVING : boolean
  */
 bbr_line_follower:
 	/* Line Follower Algorithm:
-	 * 1. Determine if we're:
-	 *     -- inside line
-	 *     -- on edge
-	 *     -- outside line
-	 * 2. If Inside Line, move straight ahead
-	 * 3. If On Edge, rotate slowly
-	 * 4. If Outside Line, rotate quickly
-	 *
+	 *    If Not Touched
+	 * 	     1. Determine if we're:
+	 *          -- inside line
+	 *          -- on edge
+	 *          -- outside line
+	 *       2. If Inside Line, move straight ahead
+	 *       3. If On Edge, rotate slowly
+	 *       4. If Outside Line, rotate quickly
+	 *       5. If Unknown, Stop Moving, return FALSE
+	 *            Else return TRUE
+	 *    Else
+	 *		 Stop Moving
+	 *       Return FALSE
 	 * Always Activate Behavior
 	 */
 	push	{lr}
 
+	ldr		r2, =touched
+	ldrb	r0, [r2]
+	teq		r0, #FALSE				/* Touched Activated returns 255, not equal to #TRUE */
+	bne		found_unknown			/* If Touched (TRUE), stop moving (identical to found unknown) */
+
+line_follower_check_line:
 	/* Get Light Sensor min and max values */
 	ldr		r2, =min
 	ldrb	r0, [r2]			/* min */
@@ -594,26 +639,31 @@ check_white:
 	cmp		r1, #WHITE_MAX
 	bhi		check_edge
 	bl		fast_cwrotate_motion
-	b		exit_bbr_line_follower
+	b		activate_bbr_line_follower
 check_edge:
 	cmp		r0, #EDGE_MIN
 	blo		found_unknown
 	cmp		r1, #EDGE_MAX
 	bhi		check_black
 	bl		slow_cwrotate_motion
-	b		exit_bbr_line_follower
+	b		activate_bbr_line_follower
 check_black:
 	cmp		r0, #BLACK_MIN
 	blo		found_unknown
 	cmp		r1, #BLACK_MAX
 	bhi		found_unknown
 	bl		forward_motion
-	b		exit_bbr_line_follower
+	b		activate_bbr_line_follower
 
 found_unknown:
+	/* If we can't determine the color, stop moving */
 	bl		stop_motion
-exit_bbr_line_follower:
+	mov		r0, #FALSE					/* Not Moving */
+	b		exit_bbr_line_follower
+
+activate_bbr_line_follower:
 	mov		r0, #TRUE					/* Always activated */
+exit_bbr_line_follower:
 	pop		{pc}
 
 /* Open Claws Behavior
@@ -821,36 +871,81 @@ grasper_arbiter:
 eval_grasp_object:
 	bl		bbr_grasp_object
 	teq		r0, #FALSE
+	ldrne	r0, =graspobject_behavior
 	bne		exit_grasper_arbiter		/* Activated, skip other behaviors */
 eval_open_claws:
 	bl		bbr_open_claws
 	teq		r0, #FALSE
+	ldrne	r0, =openclaws_behavior
 	bne		exit_grasper_arbiter		/* Activated, skip other behaviors */
 eval_line_follower:
 	bl		bbr_line_follower
+	ldrne	r0, =followline_behavior
+	ldreq	r0, =idle_behavior
 
 exit_grasper_arbiter:
+	bl		print_behavior_state
 	pop		{pc}
 
 /* Grasper Actuator Controller
  *
+ *		(Scratch)
+ *		R0: Motor Index for calling nx_motors_* routines
+ *		R1: Speed or Brake settings for calling nx_motors_* routines
+ *		R2: MOTOR_INHIBITED Constant for comparisons
+ *
+ *		(Preserved)
+ *		R4: Address Pointer to Actuator Speed variables
+ *		R5: Address Pointer to Actuator Brake variables
+ *		R6: Address Pointer to Previous Actuator Speed variables
+ *		R7: Address Pointer to Previous Actuator Brake variables
+ *		R8: Motor Port Index
  */
 grasper_controller:
-	push	{r4, r5, r6, lr}
+	push	{r4-r8, lr}
 
-	/* Motor Actuation
+	/* Motor Actuation State Addresses
 	 */
-	ldr		r4, =actuator_speedA	/* Speed Base Address */
-	ldr		r5, =actuator_brakeA	/* Brake Base Address */
-	mov		r6, #LWHEEL_PORT		/* Use Port Index as loop counter */
-
-	/* FIXME: We don't check old settings, but keep reprogramming the motors */
+	ldr		r4, =actuator_oldspeedA	/* Previous Speed Base Address */
+	ldr		r5, =actuator_speedA	/* Speed Base Address */
+	ldr		r6, =actuator_oldbrakeA	/* Previous Brake Base Address */
+	ldr		r7, =actuator_brakeA	/* Brake Base Address */
+	mov		r8, #LWHEEL_PORT		/* Use Port Index as loop counter */
 
 controller_motor_loop:
-	mov		r0, r6					/* Copy to Param 1 register */
+
+/*		(Scratch)
+ *		R0: Previous Speed Settings
+ *		R1: Current Speed Settings
+ *		R2: Previous Brake settings
+ *		R3: Current Brake Settings
+ */
+	/* Check against Previous Settings */
+	/* Note: We need to use LDR Signed Byte to make sure that negative Speed values are loaded correctly */
+
+	ldrsb	r0, [r4, r8]			/* Previous Motor Speed, retrieved from Speed Base Address + (Port Index) */
+	ldrsb	r1, [r5, r8]			/* Current: Motor Speed, retrieved from Speed Base Address + (Port Index) */
+	ldrb	r2, [r6, r8]			/* Previous Brake (bool), retrieved from Brake Base Address + (Port Index) */
+	ldrb	r3, [r7, r8]			/* Current Brake (bool), retrieved from Brake Base Address + (Port Index) */
+
+	teq		r0, r1
+	bne		controller_update_settings	/* Different settings, so process it */
+	teq		r2, r3
+	beq		controller_motor_cont	/* All settings unchanged, just skip to next entry */
+
+controller_update_settings:
+	strb	r1, [r4, r8]
+	strb	r3, [r6, r8]			/* Copy Current Settings to Previous Settings */
+
+/*		(Scratch)
+ *		R0: Motor Index for calling nx_motors_* routines
+ *		R1: Speed or Brake settings for calling nx_motors_* routines
+ *		R2: MOTOR_INHIBITED Constant for comparisons
+ */
+
+check_new_motor_speed:
+	mov		r0, r8					/* Copy to Param 1 register for calling nx_motors_* routines */
 	ldr		r2, =MOTOR_INHIBITED	/* Explicit load into R2. We can't use MOTOR_INHIBITED as an Operand 2 constant value */
-	ldrsb	r1, [r4, r6]			/* Param 2: Motor Speed, retrieved from Speed Base Address + (Port Index) */
-	/* Note: We need to use LDR Signed Byte to make sure that negative values are loaded correctly */
 	teq		r1, r2					/* If Inhibited or Stopped, Stop Motor */
 	beq		controller_motor_stop
 	teq		r1, #STOP_SPEED
@@ -861,15 +956,15 @@ controller_motor_rotate:
 	b		controller_motor_cont	/* Check next loop */
 
 controller_motor_stop:
-	ldrb	r1, [r5, r6]			/* Param 2: Brake (bool), retrieved from Brake Base Address + (Port Index) */
+	mov		r1, r3					/* Copy Brake to Param 2 register (R1) for calling nx_motors_* routines */
 	bl		nx_motors_stop
 
 controller_motor_cont:
-	subs	r6, r6, #1				/* Decrement Port Index */
+	subs	r8, r8, #1				/* Decrement Port Index */
 	bpl		controller_motor_loop	/* Exit when Index is negative */
 
 exit_grasper_controller:
-	pop		{r4, r5, r6, pc}
+	pop		{r4-r8, pc}
 
 
 /** init_robot
@@ -1035,18 +1130,6 @@ claw_stop_closing:
 	bl		nx_progcontent2
 	pop		{r4, pc}
 
-/** print_claw_state
- *    Claw Status output to LCD
- */
-print_claw_state:
-	push	{lr}
-	ldr		r1, =claw_closed	/* Use R1 as Pointer to claw_closed */
-	ldrb	r0, [r1]			/* Retrieve claw_closed value to R0 */
-	teq		r0, #FALSE
-	ldreq	r0, =opened
-	ldrne	r0, =closed
-	bl		nx_progcontent2
-	pop		{pc}
 
 
 /** main
@@ -1095,7 +1178,6 @@ main_loop:
 	bleq	claw_open_immediate
 #endif
 
-	bl		print_claw_state
 
 main_arbitration:
 	bl		grasper_arbiter			/* Arbiter */
