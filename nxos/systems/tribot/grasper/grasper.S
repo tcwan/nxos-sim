@@ -93,13 +93,8 @@ ENUM_VAL(CLAW_CLOSING)        	  /**< Clow Closing. */
 ENUM_END(claw_movement_state_t)
 /*@}*/
 
-
-.data
+.text
 .align 4
-
-/* Scheduler Timeout value */
-sched_tick:	.word	0
-
 title:	  .asciz "Grasper Bot"
 pressed:  .asciz "Touch: Pressed "
 released: .asciz "Touch: Released"
@@ -110,6 +105,12 @@ black:	  .asciz " Line: Black  "
 edge:	  .asciz " Line: Edge   "
 unknown:  .asciz " Line: Unknown"
 
+
+.data
+.align 4
+
+/* Scheduler Timeout value */
+sched_tick:	.word	0
 
 #ifdef DEBUG_MIN_MAX
 minstring: .asciz "min: "
@@ -128,6 +129,14 @@ robot_state: .byte	0
 touchval: .byte   0
 touched:  .byte   0
 
+.align 4
+/*
+ * GNU Assembler BUG?
+ * We need to redefine word alignment here, else the
+ * Assembler treats the following word variables as
+ * shorts
+ */
+
 /* Claw Behavior Variables */
 claw_timestamp: .word 0
 claw_oldtstamp: .word 0
@@ -136,9 +145,6 @@ claw_oldpos:    .word 0
 claw_closed:    .byte 0
 claw_movement:  .byte 0
 
-/*
- * Behavior State Variables
- */
 
 
 /* Signal Inhibition Values */
@@ -202,8 +208,6 @@ done_min_max:
 	pop		{r4, pc}
 
 
-
-
 /* Actuator Primitives */
 plip:
 	push	{lr}
@@ -227,6 +231,7 @@ plap:
 	pop		{pc}
 
 
+/* Sensor Primitives */
 touch_detected:
 	push	{lr}
 	bl		plip
@@ -257,6 +262,7 @@ light_led_disable:
 	bl		nx_sensors_analog_digi_clear
 	pop		{pc}
 
+///// FIXME: Convert to BBR Staggered Processing ////////
 forward_motion:
 	push	{lr}
 /*	bl		plip */
@@ -343,6 +349,8 @@ stop_motion:
 	bl		nx_motors_stop
 1:
 	pop		{pc}
+
+/* Sensor Input Routine */
 
 /* get_light_readings
  *    Light Sensor Input Routine
@@ -434,6 +442,7 @@ exit_get_touch_status:
 exit_get_claw_status:
 	pop		{r4, pc}
 
+/* Behavior Support Routines */
 
 /* Update Actuator State
  *    Program Actuator State into Array
@@ -549,6 +558,7 @@ claw_update_pos:
 exit_has_claw_fully_stopped:
 	pop		{r4, pc}
 
+/* Behavior Routines */
 
 /* Line Follower Behavior
  *
@@ -892,7 +902,10 @@ init_robot:
 	ldr		r4, =claw_oldtstamp
 	str		r0, [r4]			/* Initialize Claw Position Old Timestamp = 0 */
 
-	// bl		claw_open_immediate			/* Disabled, use BBR Behavior Open-Claws instead */
+#if 0
+	bl		claw_open_immediate			/* Disabled, use BBR Behavior Open-Claws instead */
+#endif
+
 	bl		light_led_enable
 	ldr		r8, =MAX_ITERATIONS	/* Execution Lifetime Iteration Limiter */
 
@@ -939,6 +952,8 @@ shutdown_robot:
 	bl		stop_motion				/* Stop motors */
 	bl		light_led_disable
 	pop		{pc}
+
+/* Non-BBR Actuator Routines */
 
 /* claw_open_immediate
  *    Open Claws to maximum aperature.
