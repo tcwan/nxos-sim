@@ -120,6 +120,8 @@ maxstring: .asciz "max: "
 readings: .space  n, 0x0
 min:      .byte   0
 max:      .byte   0
+
+/* Line Following Behavior Variables */
 robot_state: .byte	0
 
 /* Touch Sensor Variables */
@@ -141,7 +143,7 @@ claw_movement:  .byte 0
 
 /* Signal Inhibition Values */
 #define MOTOR_INHIBITED 0xFFFFFF80
-#define MOTOR_INHIBITED_BYTE (MOTOR_INHIBITED && 0xFF)		/* For data initialization use */
+#define MOTOR_INHIBITED_BYTE (MOTOR_INHIBITED & 0xFF)		/* For data initialization use */
 
 /* Current Actuator Settings */
 actuator_speedA:         .byte MOTOR_INHIBITED_BYTE
