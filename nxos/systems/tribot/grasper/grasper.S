@@ -48,6 +48,8 @@
 	/* Touch Sensor Raw Readings: Pressed: 183; Released: 1023 */
 	.equ	TOUCH_THRESH, 256
 
+	.equ	TOUCH_ROW, 3				/* Touch Display Row Index */
+
 	/* Wheel Control Constants */
 	.equ	STOP_SPEED, 0
 	.equ	FWD_SPEED, 60
@@ -98,15 +100,15 @@ ENUM_END(claw_movement_state_t)
 /* Scheduler Timeout value */
 sched_tick:	.word	0
 
-title:	 .asciz "Grasper Bot"
-pressed:  .asciz "Touch Pressed! "
-released: .asciz "Touch Released!"
-opened:  .asciz "Claw Opened!"
-closed:  .asciz "Claw Closed!"
-white:	 .asciz "White!  "
-black:	 .asciz "Black!  "
-edge:	 .asciz "Edge!   "
-unknown: .asciz "Unknown!"
+title:	  .asciz "Grasper Bot"
+pressed:  .asciz "Touch: Pressed "
+released: .asciz "Touch: Released"
+opened:   .asciz " Claw: Opened"
+closed:   .asciz " Claw: Closed"
+white:	  .asciz " Line: White  "
+black:	  .asciz " Line: Black  "
+edge:	  .asciz " Line: Edge   "
+unknown:  .asciz " Line: Unknown"
 
 
 #ifdef DEBUG_MIN_MAX
@@ -227,14 +229,16 @@ touch_detected:
 	push	{lr}
 	bl		plip
 	ldr		r0, =pressed
-	bl		nx_progcontent
+	mov		r1, #TOUCH_ROW
+	bl		nx_progcontentX
 	pop		{pc}
 
 touch_lost:
 	push	{lr}
 	bl		plop
 	ldr		r0, =released
-	bl		nx_progcontent
+	mov		r1, #TOUCH_ROW
+	bl		nx_progcontentX
 	pop		{pc}
 
 light_led_enable:
@@ -480,13 +484,43 @@ lock_claw:
 	bl		_update_actuator_state	/* Store in Actuator State Array */
 	pop		{pc}
 
+/* Unlock Claw
+ *    Stop Motor, Brake
+ */
+unlock_claw:
+	push	{lr}
+	mov		r0, #CLAW_PORT
+ 	mov		r1, #STOP_SPEED
+	mov		r2, #FALSE				/* Don't Brake when unlocking claw */
+	bl		_update_actuator_state	/* Store in Actuator State Array */
+	pop		{pc}
+
+/* Has Claw Started Moving
+ *
+ * Returns: Boolean (TRUE if Claw Actuator Speed is non-zero)
+ *    Check if the Claw Actuator Speed is non-zero
+ */
+has_claw_started_moving:
+	push	{r4, lr}
+	ldr		r4, =actuator_speedA
+	ldr		r2, =MOTOR_INHIBITED
+	ldrb	r0, [r4, #CLAW_PORT]	/* Retrieve currently programmed claw actuator speed */
+	teq		r0, r2
+	beq		claw_is_stopped			/* If Motor Inhibited, it is equivalent to Stopped */
+	teq		r0, #STOP_SPEED
+	movne	r0, #TRUE				/* Return TRUE if Claw Acutuator Speed is non-zero */
+	bne		exit_has_claw_started_moving
+claw_is_stopped:
+	mov		r0, #FALSE
+exit_has_claw_started_moving:
+	pop		{r4, pc}
 
 /* Has Claw Fully Stopped
  *
  * Returns: Boolean (TRUE if Claw Fully Stopped)
  *    Check if the Claw Open/Close Action is completed
  *    Some debouncing of inputs is done here.
- *    We only update the status every SYSTICK_100MS
+ *    We only update the status every SYSTICK_50MS
  */
 has_claw_fully_stopped:
 	push	{r4, lr}
@@ -495,7 +529,7 @@ claw_check_update_interval:
 	ldr		r4, =claw_position		/* pointer into claw variables */
 	ldr		r0, [r4, #-8]			/* retrieve current timestamp */
 	ldr		r1, [r4, #-4]			/* retrieve previous timestamp */
-	time_elapsed r0, r1, #SYSTICK_100MS
+	time_elapsed r0, r1, #SYSTICK_50MS
 	cmp		r0, #FALSE
 	beq		exit_has_claw_fully_stopped	/* Has not reached target update time interval yet, return FALSE */
 
@@ -628,7 +662,7 @@ bbr_start_opening_claws:
 	mov		r0, #CLAW_OPENING
 	strb	r0, [r4]				/* Claw Movement = OPENING */
 
-	bl		open_claw				/* start opening claw */
+	bl		unlock_claw				/* start opening claw */
 	b		bbr_open_claws_active	/* let controller do its work */
 
 bbr_claw_check_still_opening:
@@ -637,6 +671,11 @@ bbr_claw_check_still_opening:
 	bne		exit_bbr_open_claws
 
 bbr_claw_still_opening:
+	bl		has_claw_started_moving
+	teq		r0, #FALSE				/* Check if claw motor is moving (non-zero speed) */
+	bleq	open_claw				/* Keep opening claw */
+	beq		bbr_open_claws_active	/* No, still Opening, keep Behavior active */
+
 	bl		has_claw_fully_stopped
 	teq		r0, #FALSE				/* check if the movement is complete */
 	beq		bbr_open_claws_active	/* No, still Opening, keep Behavior active */
@@ -715,7 +754,7 @@ bbr_start_grasp_object:
 	mov		r0, #CLAW_CLOSING
 	strb	r0, [r4]				/* Claw Movement = CLOSING */
 
-	bl		close_claw				/* start closing claw */
+	bl		unlock_claw				/* start closing claw */
 	b		bbr_grasp_object_active	/* let controller do its work */
 
 bbr_claw_check_still_closing:
@@ -724,6 +763,11 @@ bbr_claw_check_still_closing:
 	bne		exit_bbr_grasp_object
 
 bbr_claw_still_closing:
+	bl		has_claw_started_moving
+	teq		r0, #FALSE				/* Check if claw motor is moving (non-zero speed) */
+	bleq	close_claw				/* No, Keep closing claw */
+	beq		bbr_grasp_object_active	/* No, still Closing, keep Behavior active */
+
 	bl		has_claw_fully_stopped
 	teq		r0, #FALSE				/* check if the movement is complete */
 	beq		bbr_grasp_object_active	/* No, still Closing, keep Behavior active */
@@ -974,6 +1018,20 @@ claw_stop_closing:
 	bl		nx_progcontent2
 	pop		{r4, pc}
 
+/** print_claw_state
+ *    Claw Status output to LCD
+ */
+print_claw_state:
+	push	{lr}
+	ldr		r1, =claw_closed	/* Use R1 as Pointer to claw_closed */
+	ldrb	r0, [r1]			/* Retrieve claw_closed value to R0 */
+	teq		r0, #FALSE
+	ldreq	r0, =opened
+	ldrne	r0, =closed
+	bl		nx_progcontent2
+	pop		{pc}
+
+
 /** main
  *    Main Program
  *		R7: Touched (boolean)
@@ -1020,6 +1078,7 @@ main_loop:
 	bleq	claw_open_immediate
 #endif
 
+	bl		print_claw_state
 
 main_arbitration:
 	bl		grasper_arbiter			/* Arbiter */
