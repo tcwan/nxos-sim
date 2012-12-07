@@ -32,7 +32,8 @@
 #undef DEBUG_MIN_MAX
 
 	.equ	MAX_ITERATIONS, 0x0FFFF
-	.equ	ROBOT_SCHED_DURATION,	100		/* 100 ms per robot scheduler loop */
+	.equ	CLAWPOS_CHECK_INTERVAL, SYSTICK_100MS		/* Keep CLAWPOS_CHECK_INTERVAL <= ROBOT_SCHED_DURATION to avoid going out of sync */
+	.equ	ROBOT_SCHED_DURATION,	SYSTICK_100MS		/* 50 ms per robot scheduler loop */
 
 	/* LCD Display Constants */
 	.equ	TOUCH_ROW, 3				/* Touch Display Row Index */
@@ -42,10 +43,10 @@
 	/* Light Sensor Raw Readings: White: 470-520; Edge: 540-580; Black: 680-700 */
 	/* Changed the range so that it will be a smooth transition from White to Black */
 	.equ	WHITE_MIN, 45
-	.equ	WHITE_MAX, 51
-	.equ	EDGE_MIN,  52
-	.equ	EDGE_MAX,  60
-	.equ	BLACK_MIN, 61
+	.equ	WHITE_MAX, 53
+	.equ	EDGE_MIN,  54
+	.equ	EDGE_MAX,  64
+	.equ	BLACK_MIN, 65
 	.equ	BLACK_MAX, 70
 
 	/* Touch Sensor Threshold */
@@ -54,9 +55,9 @@
 
 	/* Wheel Control Constants */
 	.equ	STOP_SPEED, 0
-	.equ	FWD_SPEED, 60
-	.equ	FASTROT_SPEED, 50
-	.equ	SLOWROT_SPEED, 30
+	.equ	FWD_SPEED, 30
+	.equ	FASTROT_SPEED, 40
+	.equ	SLOWROT_SPEED, 20
 
 	/* Claw Control Constants
 	 *    Open and Close Speeds are directional (signed)
@@ -292,7 +293,6 @@ light_led_disable:
 	bl		nx_sensors_analog_digi_clear
 	pop		{pc}
 
-///// FIXME: Convert to BBR Staggered Processing ////////
 forward_motion:
 	push	{lr}
 /*	bl		plip */
@@ -306,12 +306,13 @@ forward_motion:
 	beq		1f						/* Already in given state */
 	strb	r1, [r2]				/* State Change: Update new state */
 
+	mov		r1, #FWD_SPEED
+	mov		r2, #FALSE				/* Don't brake */
 	mov		r0, #RWHEEL_PORT
-	mov		r1, #FWD_SPEED
-	bl		nx_motors_rotate
+	bl		_update_actuator_state	/* Does not destroy R0, R1, R2 */
 	mov		r0, #LWHEEL_PORT
-	mov		r1, #FWD_SPEED
-	bl		nx_motors_rotate
+	bl		_update_actuator_state	/* Does not destroy R0, R1, R2 */
+
 1:
 	pop		{pc}
 
@@ -328,12 +329,15 @@ fast_cwrotate_motion:
 	beq		1f						/* Already in given state */
 	strb	r1, [r2]				/* State Change: Update new state */
 
+
+	mov		r1, #STOP_SPEED
+	mov		r2, #FALSE				/* Don't brake */
 	mov		r0, #RWHEEL_PORT
-	mov		r1, #FALSE				/* Don't brake */
-	bl		nx_motors_stop
-	mov		r0, #LWHEEL_PORT
+	bl		_update_actuator_state	/* Does not destroy R0, R1, R2 */
+
 	mov		r1, #FASTROT_SPEED
-	bl		nx_motors_rotate
+	mov		r0, #LWHEEL_PORT
+	bl		_update_actuator_state	/* Does not destroy R0, R1, R2 */
 1:
 	pop		{pc}
 
@@ -350,12 +354,14 @@ slow_cwrotate_motion:
 	beq		1f						/* Already in given state */
 	strb	r1, [r2]				/* State Change: Update new state */
 
+	mov		r1, #STOP_SPEED
+	mov		r2, #FALSE				/* Don't brake */
 	mov		r0, #LWHEEL_PORT
-	mov		r1, #FALSE				/* Don't brake */
-	bl		nx_motors_stop
-	mov		r0, #RWHEEL_PORT
+	bl		_update_actuator_state	/* Does not destroy R0, R1, R2 */
+
 	mov		r1, #SLOWROT_SPEED
-	bl		nx_motors_rotate
+	mov		r0, #RWHEEL_PORT
+	bl		_update_actuator_state	/* Does not destroy R0, R1, R2 */
 1:
 	pop		{pc}
 
@@ -371,12 +377,13 @@ stop_motion:
 	beq		1f						/* Already in given state */
 	strb	r1, [r2]				/* State Change: Update new state */
 
-	mov		r0, #RWHEEL_PORT
-	mov		r1, #FALSE		/* Don't brake */
-	bl		nx_motors_stop
+	mov		r1, #STOP_SPEED
+	mov		r2, #FALSE				/* Don't brake */
 	mov		r0, #LWHEEL_PORT
-	mov		r1, #FALSE		/* Don't brake */
-	bl		nx_motors_stop
+	bl		_update_actuator_state	/* Does not destroy R0, R1, R2 */
+
+	mov		r0, #RWHEEL_PORT
+	bl		_update_actuator_state	/* Does not destroy R0, R1, R2 */
 1:
 	pop		{pc}
 
@@ -495,9 +502,21 @@ _update_actuator_state:
 	strb	r2, [r3, r0]			/* store Brake status into brake[CLAW_PORT] */
 	pop		{pc}
 
+/* Brake Wheels
+ *    Stop and Brake Wheel Motors
+ */
+brake_wheels:
+	push	{lr}
+	mov		r0, #RWHEEL_PORT
+ 	mov		r1, #STOP_SPEED
+	mov		r2, #TRUE				/* Brake Wheels when activating claw */
+	bl		_update_actuator_state	/* Does not modify R0, R1, R2 */
+	mov		r0, #LWHEEL_PORT
+	bl		_update_actuator_state	/* Does not modify R0, R1, R2 */
+	pop		{pc}
 
 /* Open Claw
- *    Activate Motor (Open), Don't Brake
+ *    Activate Claw Motor (Open), Don't Brake
  */
 open_claw:
 	push	{lr}
@@ -505,10 +524,19 @@ open_claw:
  	mov		r1, #OPEN_SPEED
 	mov		r2, #FALSE				/* Don't brake when opening claw */
 	bl		_update_actuator_state	/* Store in Actuator State Array */
+
+	mov		r0, #RWHEEL_PORT
+ 	mov		r1, #STOP_SPEED
+	mov		r2, #TRUE				/* Brake Wheels when activating claw */
+	bl		_update_actuator_state	/* Store in Actuator State Array */
+	mov		r0, #LWHEEL_PORT
+	bl		_update_actuator_state	/* Store in Actuator State Array */
+
+	bl		brake_wheels
 	pop		{pc}
 
 /* Close Claw
- *    Activate Motor (Close), Don't Brake
+ *    Activate Claw Motor (Close), Don't Brake
  */
 close_claw:
 	push	{lr}
@@ -516,10 +544,12 @@ close_claw:
  	mov		r1, #CLOSE_SPEED
 	mov		r2, #FALSE				/* Don't brake when closing claw */
 	bl		_update_actuator_state	/* Store in Actuator State Array */
+
+	bl		brake_wheels
 	pop		{pc}
 
 /* Lock Claw
- *    Stop Motor, Brake
+ *    Stop Claw Motor, Brake
  */
 lock_claw:
 	push	{lr}
@@ -527,6 +557,8 @@ lock_claw:
  	mov		r1, #STOP_SPEED
 	mov		r2, #TRUE				/* Brake when locking claw */
 	bl		_update_actuator_state	/* Store in Actuator State Array */
+
+	bl		brake_wheels
 	pop		{pc}
 
 /* Unlock Claw
@@ -565,7 +597,7 @@ exit_has_claw_started_moving:
  * Returns: Boolean (TRUE if Claw Fully Stopped)
  *    Check if the Claw Open/Close Action is completed
  *    Some debouncing of inputs is done here.
- *    We only update the status every SYSTICK_50MS
+ *    We only update the status every CLAWPOS_CHECK_INTERVAL
  */
 has_claw_fully_stopped:
 	push	{r4, lr}
@@ -574,7 +606,7 @@ claw_check_update_interval:
 	ldr		r4, =claw_position		/* pointer into claw variables */
 	ldr		r0, [r4, #-8]			/* retrieve current timestamp */
 	ldr		r1, [r4, #-4]			/* retrieve previous timestamp */
-	time_elapsed r0, r1, #SYSTICK_50MS
+	time_elapsed r0, r1, #CLAWPOS_CHECK_INTERVAL
 	cmp		r0, #FALSE
 	beq		exit_has_claw_fully_stopped	/* Has not reached target update time interval yet, return FALSE */
 
