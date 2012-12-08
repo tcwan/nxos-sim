@@ -3,7 +3,8 @@
  *  Test Basic Tribot Functionality
  *
  * The following behaviors have been implemented
- * - Line following (Light Sensor: WIP)
+ * - Idle
+ * - Line following
  * - Open Claws
  * - Grasp Object
  *
@@ -293,6 +294,43 @@ light_led_disable:
 	bl		nx_sensors_analog_digi_clear
 	pop		{pc}
 
+/* Actuator Primitives */
+
+/* Update Actuator State
+ *    Program Actuator State into Array
+ *	  Inputs:
+ *		R0: Port Index
+ *		R1: Motor Speed
+ *		R2: Brake (Boolean)
+ *
+ *    Note: This is an internal routine shared by various functions
+ */
+_update_actuator_state:
+	push	{lr}
+	ldr		r3, =actuator_speedA	/* start address of actuator speed array */
+	strb	r1, [r3, r0]			/* store OPEN_SPEED into speed[CLAW_PORT] */
+	ldr		r3, =actuator_brakeA	/* start address of actuator brake array */
+	strb	r2, [r3, r0]			/* store Brake status into brake[CLAW_PORT] */
+	pop		{pc}
+
+/* Brake Wheels
+ *    Stop and Brake Wheel Motors
+ */
+brake_wheels:
+	push	{lr}
+	ldr		r2, =robot_state
+	mov		r1, #ROBOT_STOP
+	strb	r1, [r2]				/* State Change: Update new state */
+
+	mov		r0, #RWHEEL_PORT
+ 	mov		r1, #STOP_SPEED
+	mov		r2, #TRUE				/* Brake Wheels when activating claw */
+	bl		_update_actuator_state	/* Does not modify R0, R1, R2 */
+	mov		r0, #LWHEEL_PORT
+	bl		_update_actuator_state	/* Does not modify R0, R1, R2 */
+
+	pop		{pc}
+
 forward_motion:
 	push	{lr}
 /*	bl		plip */
@@ -485,36 +523,6 @@ exit_get_claw_status:
 
 /* Behavior Support Routines */
 
-/* Update Actuator State
- *    Program Actuator State into Array
- *	  Inputs:
- *		R0: Port Index
- *		R1: Motor Speed
- *		R2: Brake (Boolean)
- *
- *    Note: This is an internal routine shared by various functions
- */
-_update_actuator_state:
-	push	{lr}
-	ldr		r3, =actuator_speedA	/* start address of actuator speed array */
-	strb	r1, [r3, r0]			/* store OPEN_SPEED into speed[CLAW_PORT] */
-	ldr		r3, =actuator_brakeA	/* start address of actuator brake array */
-	strb	r2, [r3, r0]			/* store Brake status into brake[CLAW_PORT] */
-	pop		{pc}
-
-/* Brake Wheels
- *    Stop and Brake Wheel Motors
- */
-brake_wheels:
-	push	{lr}
-	mov		r0, #RWHEEL_PORT
- 	mov		r1, #STOP_SPEED
-	mov		r2, #TRUE				/* Brake Wheels when activating claw */
-	bl		_update_actuator_state	/* Does not modify R0, R1, R2 */
-	mov		r0, #LWHEEL_PORT
-	bl		_update_actuator_state	/* Does not modify R0, R1, R2 */
-	pop		{pc}
-
 /* Open Claw
  *    Activate Claw Motor (Open), Don't Brake
  */
@@ -627,9 +635,18 @@ exit_has_claw_fully_stopped:
 /* Behavior Routines */
 
 /* Line Follower Behavior
+ *    Always Activated
+ *
+ */
+bbr_idle:
+	push	{lr}
+	bl		brake_wheels
+	pop		{pc}
+
+/* Line Follower Behavior
  *
  * Returns:
- *    MOVING : boolean
+ *    Activated : Boolean
  */
 bbr_line_follower:
 	/* Line Follower Algorithm:
@@ -641,19 +658,18 @@ bbr_line_follower:
 	 *       2. If Inside Line, move straight ahead
 	 *       3. If On Edge, rotate slowly
 	 *       4. If Outside Line, rotate quickly
-	 *       5. If Unknown, Stop Moving, return FALSE
-	 *            Else return TRUE
+	 *       5. If Unknown, Stop Moving
+	 *		 Activate Behavior
 	 *    Else
-	 *		 Stop Moving
-	 *       Return FALSE
-	 * Always Activate Behavior
+	 *		 Deactivate Behavior
 	 */
 	push	{lr}
 
 	ldr		r2, =touched
 	ldrb	r0, [r2]
 	teq		r0, #FALSE				/* Touched Activated returns 255, not equal to #TRUE */
-	bne		found_unknown			/* If Touched (TRUE), stop moving (identical to found unknown) */
+	movne	r0, #FALSE				/* Touched (TRUE), deactivate Behavior and exit */
+	bne		exit_bbr_line_follower
 
 line_follower_check_line:
 	/* Get Light Sensor min and max values */
@@ -690,8 +706,6 @@ check_black:
 found_unknown:
 	/* If we can't determine the color, stop moving */
 	bl		stop_motion
-	mov		r0, #FALSE					/* Not Moving */
-	b		exit_bbr_line_follower
 
 activate_bbr_line_follower:
 	mov		r0, #TRUE					/* Always activated */
@@ -912,8 +926,13 @@ eval_open_claws:
 	bne		exit_grasper_arbiter		/* Activated, skip other behaviors */
 eval_line_follower:
 	bl		bbr_line_follower
+	teq		r0, #FALSE
 	ldrne	r0, =followline_behavior
-	ldreq	r0, =idle_behavior
+	bne		exit_grasper_arbiter		/* Activated, skip other behaviors */
+
+arbiter_idle:
+	bl		bbr_idle
+	ldr		r0, =idle_behavior
 
 exit_grasper_arbiter:
 	bl		print_behavior_state
@@ -1082,6 +1101,8 @@ shutdown_robot:
 
 /* Non-BBR Actuator Routines */
 
+#ifdef DEBUG_CLAW
+
 /* claw_open_immediate
  *    Open Claws to maximum aperature.
  *      Keep motor engaged until tachometer shows no progress
@@ -1095,7 +1116,8 @@ claw_open_immediate:
 claw_start_opening:
  	mov		r0, #CLAW_PORT
  	mov		r1, #OPEN_SPEED
- 	bl		nx_motors_rotate	/* !!!!! */
+ 	bl		nx_motors_rotate
+
 claw_keep_opening:
 	mov		r0, #SYSTICK_100MS
 	bl		nx_systick_wait_ms	/* Wait 100 ms before checking Tachometer */
@@ -1121,12 +1143,18 @@ claw_stop_opening:
 	bl		nx_progcontent2
 	pop		{r4, pc}
 
+#endif
+
+
 /* claw_close_immediate
  *    Close Claws to minimum aperature (gripping object).
  *      Keep motor engaged until tachometer shows no progress (within Threshold value)
  *      Note: This is best done using slower speed to the Motor
  *		R4: Address Pointer to Claw variables
+ *
+ *    Note: This routine is needed by shutdown_robot as we're no longer running the main loop.
  */
+
 claw_close_immediate:
  	push	{r4, lr}
 	ldr		r4, =claw_position
@@ -1134,7 +1162,7 @@ claw_close_immediate:
 claw_start_closing:
  	mov		r0, #CLAW_PORT
  	mov		r1, #CLOSE_SPEED
- 	bl		nx_motors_rotate	/* !!!!! */
+ 	bl		nx_motors_rotate
 
 claw_keep_closing:
 	mov		r0, #SYSTICK_100MS
@@ -1202,20 +1230,24 @@ main_loop:
 	bl		get_claw_status
 
 #ifdef DEBUG_CLAW
-	// Debug Grasping Function
+
+	// Debug Grasping Function using Direct Claw Motor Actuation
 	ldr		r4, =touched
 	ldrb	r0, [r4]
 	teq		r0, #FALSE				/* Touched Activated returns 255, not equal to #TRUE */
 	blne	claw_close_immediate
 	bleq	claw_open_immediate
-#endif
 
+#else
 
 main_arbitration:
-	bl		grasper_arbiter			/* Arbiter */
+	bl		grasper_arbiter			/* Behavior Arbiter */
 
 main_actuation:
 	bl		grasper_controller		/* Actuator Controller */
+
+#endif
+
 	bl		sleep_robot				/* Scheduler Wait Loop */
 	b		main_loop				/* continue event loop execution */
 
