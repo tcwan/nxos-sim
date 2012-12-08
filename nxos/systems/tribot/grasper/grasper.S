@@ -24,6 +24,7 @@
 #include "base/lib/scaffolding/scaffolding.h"
 #include "armdebug/Debugger/debug_stub.h"
 #include "systems/tribot/include/tribot.h"
+#include "systems/tribot/include/macros.h"
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
 #undef ENABLE_BREAKPOINTS
@@ -70,19 +71,6 @@
 	.equ	CLOSE_SPEED, -10
 	.equ	TACHO_THRESH, 1						/* Need value of 1 for reliability of detecting limits */
 
-	.macro time_elapsed	curr_time, prev_time, interval
-	/*
-	 * Dealing with elapsed time timestamp rollover:
-	 * http://www.arduino.cc/playground/Code/TimingRollover
-	 * Return TRUE only if (long)( current time - (prev_time + interval) ) >= 0
-	 *    Note: This used signed compare to come up with the correct decision
-	 */
-	add		\prev_time, \prev_time, \interval
-	rsbs	\curr_time, \prev_time, \curr_time
-/*	cmp		\curr_time, #0 */
-	movlt	r0, #FALSE
-	movge	r0, #TRUE
-	.endm
 
 /** @name Claw Movement State Enums
  *
@@ -179,42 +167,6 @@ actuator_oldbrakeC:      .byte FALSE
 .code 32
 .text
 .align 	4
-
-/*	Min-Max Routine
- * R0: Temporary value storage
- * R1: counter
- * R2: readings Array Pointer
- * R3: min value
- * R4: max value
- */
-
-	.type   min_max, %function
-	.global min_max
-min_max:
-	push	{r4, lr}
-    MOV  	R4, #0         /* Initialize max to smallest 8-bit value */
-    MOV  	R3, #255       /* Initialize min to largest 8-bit value */
-    MOV  	R1, #n         /* Initialize counter */
-    LDR  	R2, =readings  /* Array Address Pointer, setup outside loop */
-min_max_loop:
-    SUB  	R1, R1, #1     /* counter = counter - 1 */
-    /* If */
-    LDRB 	R0, [R2, R1]   /* Retrieve readings[counter] into R0 */
-check_min:
-    CMP  	R0, R3         /* check readings[counter] (in R0) < min */
-    MOVLO  	R3, R0       /* Min = readings[counter] */
-check_max:
-    CMP  	R0, R4         /* check readings[counter] (in R0) > max */
-    MOVHI  	R4, R0       /* Max = readings[counter] */
-next_iter:
-    TEQ  	R1, #0         /* Compare R1 against zero */
-    BNE  	min_max_loop   /* NE: R1 is non-zero */
-exit_min_max_loop:
-    LDR  	R2, =min
-    STRB 	R3, [R2], #1   /* Store min into memory location */
-    STRB 	R4, [R2]       /* Store max into memory location */
-done_min_max:
-	pop		{r4, pc}
 
 
 /** print_claw_state
@@ -453,6 +405,10 @@ light_loop:
 	bhi		light_loop		/* Perform Min-Max calculation when we have enough samples */
 
 calc_min_max:
+	mov		r0, #n
+	ldr		r1, =readings
+	ldr		r2, =min
+	ldr		r3, =max
 	bl		min_max
 	pop		{r5, r6, pc}
 
