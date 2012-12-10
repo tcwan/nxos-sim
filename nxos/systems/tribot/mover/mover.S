@@ -377,7 +377,7 @@ fast_cwrotate_motion:
 1:
 	pop		{pc}
 
-slow_cwrotate_motion:
+slow_ccwrotate_motion:
 	push	{lr}
 /*	bl		plap */
 	ldr		r0, =edge
@@ -697,7 +697,7 @@ check_edge:
 	blo		found_unknown
 	cmp		r1, #EDGE_MAX
 	bhi		check_black
-	bl		slow_cwrotate_motion
+	bl		slow_ccwrotate_motion
 	b		activate_bbr_line_follower
 check_black:
 	cmp		r0, #BLACK_MIN
