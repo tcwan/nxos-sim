@@ -148,7 +148,14 @@ claw_oldpos:    .word 0
 claw_closed:    .byte 0
 claw_movement:  .byte 0
 
-
+#if 0
+////// FIXME: Do we need this? //////
+/* Bitmasks for Suppression */
+#define suppress_portA 0x80
+#define suppress_portB 0x40
+#define suppress_portC 0x20
+#define suppress_tone  0x10
+#endif
 
 /* Signal Inhibition Values */
 #define MOTOR_INHIBITED 0xFFFFFF80
