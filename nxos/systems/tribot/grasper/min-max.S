@@ -28,7 +28,7 @@
 .text
 .align 	4
 
-/*	Min-Max Routine
+/*	Min-Max Unsigned Byte Routine
  *    Parameters:
  *      R0: n, number of items in byte array
  *      R1: *array, pointer to unsigned byte array
@@ -50,7 +50,7 @@
  * R4: max value
  */
 
-    arm_interwork min_max
+    arm_interwork min_max_ubyte
     push	{r4-r6, lr}
     teq		r0, #0               /* Sanity check, don't process n == 0 */
     beq		done_min_max         /* Leave things unchanged */

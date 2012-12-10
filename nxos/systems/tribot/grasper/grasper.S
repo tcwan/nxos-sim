@@ -409,7 +409,7 @@ calc_min_max:
 	ldr		r1, =readings
 	ldr		r2, =min
 	ldr		r3, =max
-	bl		min_max
+	bl		min_max_ubyte
 	pop		{r5, r6, pc}
 
 /* get_touch_status
