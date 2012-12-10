@@ -1,12 +1,13 @@
-/** @file grasper.S
- *  @brief Tribot Grasper Test Program
+/** @file mover.S
+ *  @brief Tribot Mover Test Program
  *  Test Basic Tribot Functionality
  *
  * The following behaviors have been implemented
  * - Idle
- * - Line following
+ * - Follow Line
  * - Open Claws
  * - Grasp Object
+ * - Move Object
  *
  * This file must be processed using cpp before assembly.
  */
@@ -35,7 +36,7 @@
 
 	.equ	MAX_ITERATIONS, 0x0FFFF
 	.equ	CLAWPOS_CHECK_INTERVAL, SYSTICK_100MS		/* Keep CLAWPOS_CHECK_INTERVAL <= ROBOT_SCHED_DURATION to avoid going out of sync */
-	.equ	ROBOT_SCHED_DURATION,	SYSTICK_100MS		/* 50 ms per robot scheduler loop */
+	.equ	ROBOT_SCHED_DURATION,	SYSTICK_100MS		/* 100 ms per robot scheduler loop */
 
 	/* LCD Display Constants */
 	.equ	TOUCH_ROW, 3				/* Touch Display Row Index */
@@ -70,6 +71,11 @@
 	.equ	OPEN_SPEED, 10
 	.equ	CLOSE_SPEED, -10
 	.equ	TACHO_THRESH, 1						/* Need value of 1 for reliability of detecting limits */
+
+	/* Tone Control Constants
+	 */
+	.equ	TONE_ENABLED_FREQ, 2500				/* Hz */
+	.equ	TONE_ENABLED_DUR, 500				/* ms */
 
 
 /** @name Claw Movement State Enums
@@ -147,6 +153,8 @@ claw_movement:  .byte 0
 /* Signal Inhibition Values */
 #define MOTOR_INHIBITED 0xFFFFFF80
 #define MOTOR_INHIBITED_BYTE (MOTOR_INHIBITED & 0xFF)		/* For data initialization use */
+#define TONE_INHIBITED 0x00
+
 
 /* Current Actuator Settings */
 actuator_speedA:         .byte MOTOR_INHIBITED_BYTE
@@ -156,6 +164,9 @@ actuator_brakeA:         .byte FALSE
 actuator_brakeB:         .byte FALSE
 actuator_brakeC:         .byte FALSE
 
+actuator_tone_freq:      .word TONE_INHIBITED
+actuator_tone_dur:       .word TONE_INHIBITED
+
 /* Previous Actuator Settings */
 actuator_oldspeedA:      .byte MOTOR_INHIBITED_BYTE
 actuator_oldspeedB:      .byte MOTOR_INHIBITED_BYTE
@@ -163,6 +174,10 @@ actuator_oldspeedC:      .byte MOTOR_INHIBITED_BYTE
 actuator_oldbrakeA:      .byte FALSE
 actuator_oldbrakeB:      .byte FALSE
 actuator_oldbrakeC:      .byte FALSE
+
+actuator_oldtone_freq:   .word TONE_INHIBITED
+actuator_oldtone_dur:    .word TONE_INHIBITED
+
 
 .code 32
 .text
@@ -247,6 +262,30 @@ light_led_disable:
 	pop		{pc}
 
 /* Actuator Primitives */
+
+/* Enable Tone
+ *    Play a Tone via Speaker
+ */
+enable_tone:
+	push	{lr}
+	ldr		r2, =actuator_tone_freq	/* Pointer to Tone Variables */
+	ldr		r0, =TONE_ENABLED_FREQ
+	str		r0, [r2]			/* Frequency */
+	mov		r0, #TONE_ENABLED_DUR
+	str		r0, [r2, #4]		/* Duration */
+	pop		{pc}
+
+/* Disable Tone
+ *    Silence Speaker
+ */
+disable_tone:
+	push	{lr}
+	ldr		r2, =actuator_tone_freq	/* Pointer to Tone Variables */
+	mov		r0, #TONE_INHIBITED
+	str		r0, [r2]			/* Frequency */
+	str		r0, [r2, #4]		/* Duration */
+	pop		{pc}
+
 
 /* Update Actuator State
  *    Program Actuator State into Array
@@ -409,7 +448,7 @@ calc_min_max:
 	ldr		r1, =readings
 	ldr		r2, =min
 	ldr		r3, =max
-	bl		min_max
+	bl		min_max_ubyte
 	pop		{r5, r6, pc}
 
 /* get_touch_status
@@ -592,11 +631,13 @@ exit_has_claw_fully_stopped:
 
 /* Line Follower Behavior
  *    Always Activated
+ *    Play a Tone while Active
  *
  */
 bbr_idle:
 	push	{lr}
 	bl		brake_wheels
+	bl		enable_tone
 	pop		{pc}
 
 /* Line Follower Behavior
@@ -664,6 +705,7 @@ found_unknown:
 	bl		stop_motion
 
 activate_bbr_line_follower:
+	bl		disable_tone				/* Suppress Tone generation */
 	mov		r0, #TRUE					/* Always activated */
 exit_bbr_line_follower:
 	pop		{pc}
@@ -754,6 +796,7 @@ bbr_claw_opening_stopped:
 	bl		lock_claw				/* Keep Behavior Active for one more iteration */
 
 bbr_open_claws_active:
+	bl		disable_tone			/* Suppress Tone generation */
 	mov		r0, #TRUE				/* Activate Behavior */
 
 exit_bbr_open_claws:
@@ -846,10 +889,13 @@ bbr_claw_closing_stopped:
 	bl		lock_claw				/* Keep Behavior Active for one more iteration */
 
 bbr_grasp_object_active:
+	bl		disable_tone			/* Suppress Tone generation */
 	mov		r0, #TRUE				/* Activate Behavior */
 
 exit_bbr_grasp_object:
 	pop		{r4, r5, r6, pc}
+
+//////// FIXME: Replace Grasper Arbiter with generic Dispatcher ///////////
 
 /* Grasper Arbiter
  *	 The Arbiter implemented here is a strict priority arbiter
@@ -973,6 +1019,19 @@ controller_motor_cont:
 exit_grasper_controller:
 	pop		{r4-r8, pc}
 
+/* Speaker Actuator Controller
+ *
+ */
+speaker_controller:
+	push	{lr}
+	/* Speaker Actuation */
+	ldr		r2, =actuator_tone_freq
+	ldr		r0, [r2]			/* Frequency */
+	ldr		r1, [r2, #4]		/* Duration */
+	cmp		r0, #TONE_INHIBITED
+	blne	nx_sound_freq		/* Play Tone if Not TONE_INHIBITED */
+exit_speaker_controller:
+	pop		{pc}
 
 /** init_robot
  *    Robot Specific Initialization tasks
