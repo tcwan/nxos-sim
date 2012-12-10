@@ -4,7 +4,7 @@
  *
  * The following behaviors have been implemented
  * - Idle
- * - Line following
+ * - Follow Line
  * - Open Claws
  * - Grasp Object
  *
