@@ -77,6 +77,7 @@ exit_min_max_loop:
     mov		r0, #TRUE      /* Always activated */
 
 done_min_max:
-	pop		{r4-r6, pc}
+	pop		{r4-r6, lr}
+	bx		lr
 
 .end
