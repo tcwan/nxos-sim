@@ -126,12 +126,10 @@ robot_state: .byte	0
 touchval: .byte   0
 touched:  .byte   0
 
-.align 4
+.align
 /*
- * GNU Assembler BUG?
- * We need to redefine word alignment here, else the
- * Assembler treats the following word variables as
- * shorts
+ * Whenever we change data types, we need to reinvoke alignment,
+ * else the Assembler treats subsequent word variables as shorts
  */
 
 /* Claw Behavior Variables */
