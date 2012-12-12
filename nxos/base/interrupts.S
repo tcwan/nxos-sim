@@ -7,7 +7,7 @@
  */
 
 .data
-.align 4
+.align
 	.global irq_state
 irq_state:
 interrupts_count: .long 1
