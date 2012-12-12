@@ -132,14 +132,54 @@ robot_state: .byte	0
 touchval: .byte   0
 touched:  .byte   0
 
-.align 4
+.align
 /*
- * GNU Assembler BUG?
- * We need to redefine word alignment here, else the
- * Assembler treats the following word variables as
- * shorts
+ * Whenever we change data types, we need to reinvoke alignment,
+ * else the Assembler treats subsequent word variables as shorts
  */
 
+/* Actuator State Data Structure
+ *	typedef struct {
+ *		SBYTE    speedA;
+ *		UBYTE    brakeA;
+ *		SBYTE    speedB;
+ *		UBYTE    brakeB;
+ *		SBYTE    speedC;
+ *		UBYTE    brakeC;
+ *		// 2-byte padding inserted by Compiler
+ *		ULONG    tone_freq;
+ *		ULONG    tone_dur;
+ *	} actuator_state;         // sizeof (actuator_state) = 16 bytes
+ */
+
+actuator_state:
+speedA:		.byte	0
+brakeA:		.byte	0
+speedB:		.byte	0
+brakeB:		.byte	0
+speedC:		.byte	0
+brakeC:		.byte	0
+.align			/* Needed to force word alignment padding */
+tone_freq:	.word	0
+tone_dur:	.word	0
+	.equ	SIZEOF_ACTUATOR_STATE, (. - actuator_state)
+	.equ	SPEEDA, (speedA - actuator_state)
+	.equ	BRAKEA, (brakeA - actuator_state)
+	.equ	SPEEDB, (speedB - actuator_state)
+	.equ	BRAKEB, (brakeB - actuator_state)
+	.equ	SPEEDC, (speedC - actuator_state)
+	.equ	BRAKEC, (brakeC - actuator_state)
+	.equ	TONE_FREQ, (tone_freq - actuator_state)
+	.equ	TONE_DUR, (tone_dur - actuator_state)
+
+#if 0
+/* Debug offset calculations */
+offsets: .byte SPEEDA, BRAKEA, SPEEDB, BRAKEB
+		 .byte SPEEDC, BRAKEC, TONE_FREQ, TONE_DUR
+		 .byte SIZEOF_ACTUATOR_STATE
+#endif
+
+.align
 /* Claw Behavior Variables */
 claw_timestamp: .word 0
 claw_oldtstamp: .word 0
