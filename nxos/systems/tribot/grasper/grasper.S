@@ -68,7 +68,7 @@
 	 *    Using too high a speed may pop the claw assembly!
 	 */
 	.equ	OPEN_SPEED, 10
-	.equ	CLOSE_SPEED, -10
+	.equ	CLOSE_SPEED, -20
 	.equ	TACHO_THRESH, 1						/* Need value of 1 for reliability of detecting limits */
 
 
