@@ -69,8 +69,8 @@
 	 *    Using too high a speed may pop the claw assembly!
 	 */
 	.equ	OPEN_SPEED, 10
-	.equ	CLOSE_SPEED, -10
-	.equ	TACHO_THRESH, 1						/* Need value of 1 for reliability of detecting limits */
+	.equ	CLOSE_SPEED, -20
+	.equ	TACHO_THRESH, 0						/* Need value of <= 1 for reliability of detecting limits */
 
 	/* Tone Control Constants
 	 */
@@ -90,6 +90,23 @@ ENUM_VAL(CLAW_OPENING)            /**< Claw Opening. */
 ENUM_VAL(CLAW_CLOSING)        	  /**< Clow Closing. */
 ENUM_END(claw_movement_state_t)
 /*@}*/
+
+/** @name Behavior Enums
+ *
+ * Behaviors.
+ * The enums must be consecutive, starting from 0
+ */
+/*@{*/
+ENUM_BEGIN
+ENUM_VALASSIGN(BBR_IDLE, 0)     	/**< Initial State. */
+ENUM_VAL(BBR_FOLLOW_LINE)       	/**< Follow Line. */
+ENUM_VAL(BBR_OPEN_CLAWS)        	/**< Open Claws. */
+ENUM_VAL(BBR_GRASP_OBJECT)       	/**< Grasp Object. */
+ENUM_VAL(BBR_MOVE_OBJECT)        	/**< Move Object. */
+ENUM_END(bbr_behavior_t)
+/*@}*/
+
+	.equ	BBR_LAST_BEHAVIOR, BBR_MOVE_OBJECT		/* Need to update this if behavior list changes */
 
 .text
 .align 4
@@ -153,6 +170,7 @@ touched:  .byte   0
  */
 
 actuator_state:
+/* Common Structure used by Controllers to keep latest actuation values */
 speedA:		.byte	0
 brakeA:		.byte	0
 speedB:		.byte	0
@@ -174,12 +192,19 @@ tone_dur:	.word	0
 
 #if 0
 /* Debug offset calculations */
-offsets: .byte SPEEDA, BRAKEA, SPEEDB, BRAKEB
-		 .byte SPEEDC, BRAKEC, TONE_FREQ, TONE_DUR
-		 .byte SIZEOF_ACTUATOR_STATE
+actuator_state_offsets:
+	.byte SPEEDA, BRAKEA, SPEEDB, BRAKEB
+	.byte SPEEDC, BRAKEC, TONE_FREQ, TONE_DUR
+	.byte SIZEOF_ACTUATOR_STATE
 #endif
 
 .align
+
+prev_actuator_state: .space	SIZEOF_ACTUATOR_STATE, 0x0
+behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * (BBR_LAST_BEHAVIOR+1)), 0x0
+
+
+///////// REPLACE /////////
 /* Claw Behavior Variables */
 claw_timestamp: .word 0
 claw_oldtstamp: .word 0
@@ -200,7 +225,7 @@ claw_movement:  .byte 0
 /* Signal Inhibition Values */
 #define MOTOR_INHIBITED 0xFFFFFF80
 #define MOTOR_INHIBITED_BYTE (MOTOR_INHIBITED & 0xFF)		/* For data initialization use */
-#define TONE_INHIBITED 0x00
+#define TONE_INHIBITED 0x0
 
 
 /* Current Actuator Settings */
