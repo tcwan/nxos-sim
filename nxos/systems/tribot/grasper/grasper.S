@@ -69,7 +69,7 @@
 	 */
 	.equ	OPEN_SPEED, 10
 	.equ	CLOSE_SPEED, -20
-	.equ	TACHO_THRESH, 1						/* Need value of 1 for reliability of detecting limits */
+	.equ	TACHO_THRESH, 0						/* Need value of 1 for reliability of detecting limits */
 
 
 /** @name Claw Movement State Enums
