@@ -181,22 +181,28 @@ touched:  .byte   0
 	/* Common Structure used to keep latest actuation values */
 .align			/* Start structure on an aligned address */
 \state_label:
-speedA:		.byte	\speedA
-brakeA:		.byte	\brakeA
-speedB:		.byte	\speedB
-brakeB:		.byte	\brakeB
-speedC:		.byte	\speedC
-brakeC:		.byte	\brakeC
+		.byte	\speedA
+		.byte	\brakeA
+		.byte	\speedB
+		.byte	\brakeB
+		.byte	\speedC
+		.byte	\brakeC
 .align			/* Needed to force word alignment padding */
-tone_freq:	.word	\tone_freq
-tone_dur:	.word	\tone_dur
+		.word	\tone_freq
+		.word	\tone_dur
 	.endm
 
-	init_actuator_state actuator_state, \
-			MOTOR_INHIBITED_BYTE, FALSE, \
-			MOTOR_INHIBITED_BYTE, FALSE, \
-			MOTOR_INHIBITED_BYTE, FALSE, \
-			TONE_INHIBITED, TONE_INHIBITED
+actuator_state:
+.align
+speedA:		.byte	MOTOR_INHIBITED_BYTE
+brakeA:		.byte	FALSE
+speedB:		.byte	MOTOR_INHIBITED_BYTE
+brakeB:		.byte	FALSE
+speedC:		.byte	MOTOR_INHIBITED_BYTE
+brakeC:		.byte	FALSE
+.align			/* Needed to force word alignment padding */
+tone_freq:	.word	TONE_INHIBITED
+tone_dur:	.word	TONE_INHIBITED
 
 	.equ	SIZEOF_ACTUATOR_STATE, (. - actuator_state)
 	.equ	SPEEDA, (speedA - actuator_state)
@@ -234,30 +240,14 @@ claw_movement:  .byte 0
 .align 4
 	/* Predefined Actuator Outputs for various behaviors */
 	/* Follow-Line Behavior Actuation Outputs for Line Types */
-	init_actuator_state line_black, \
-			MOTOR_INHIBITED_BYTE, FALSE, \
-			FWD_SPEED, FALSE, \
-			FWD_SPEED, FALSE, \				/* Forward motion */
-			TONE_INHIBITED, TONE_INHIBITED
-
-	init_actuator_state line_edge, \
-			MOTOR_INHIBITED_BYTE, FALSE, \
-			SLOWROT_SPEED, FALSE, \
-			STOP_SPEED, FALSE, \			/* CCW slow rotation */
-			TONE_INHIBITED, TONE_INHIBITED
-
-	init_actuator_state line_white, \
-			MOTOR_INHIBITED_BYTE, FALSE, \
-			STOP_SPEED, FALSE, \
-			FASTROT_SPEED, FALSE, \			/* CW fast rotation */
-			TONE_INHIBITED, TONE_INHIBITED
-
-	init_actuator_state line_unknown, \
-			MOTOR_INHIBITED_BYTE, FALSE, \
-			STOP_SPEED, FALSE, \
-			STOP_SPEED, FALSE, \			/* Stop motion (cruise) */
-			TONE_INHIBITED, TONE_INHIBITED
-
+	init_actuator_state line_black,	MOTOR_INHIBITED_BYTE, FALSE, FWD_SPEED, FALSE, FWD_SPEED, FALSE, TONE_INHIBITED, TONE_INHIBITED
+			/* Forward motion */
+	init_actuator_state line_edge, MOTOR_INHIBITED_BYTE, FALSE, SLOWROT_SPEED, FALSE, STOP_SPEED, FALSE, TONE_INHIBITED, TONE_INHIBITED
+			/* CCW slow rotation */
+	init_actuator_state line_white, MOTOR_INHIBITED_BYTE, FALSE, STOP_SPEED, FALSE, FASTROT_SPEED, FALSE, TONE_INHIBITED, TONE_INHIBITED
+			/* CW fast rotation */
+	init_actuator_state line_unknown, MOTOR_INHIBITED_BYTE, FALSE, STOP_SPEED, FALSE, STOP_SPEED, FALSE, TONE_INHIBITED, TONE_INHIBITED
+			/* Stop motion (cruise) */
 .code 32
 .text
 .align 	4
