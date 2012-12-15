@@ -107,6 +107,7 @@ ENUM_END(bbr_behavior_t)
 /*@}*/
 
 	.equ	BBR_LAST_BEHAVIOR, BBR_MOVE_OBJECT		/* Need to update this if behavior list changes */
+	.equ	NUM_BEHAVIORS, (BBR_LAST_BEHAVIOR+1)
 
 .text
 .align 4
@@ -149,7 +150,12 @@ robot_state: .byte	0
 touchval: .byte   0
 touched:  .byte   0
 
-.align
+
+/* Signal Inhibition Values */
+#define MOTOR_INHIBITED 0xFFFFFF80
+#define MOTOR_INHIBITED_BYTE (MOTOR_INHIBITED & 0xFF)		/* For data initialization use */
+#define TONE_INHIBITED 0x0
+
 /*
  * Whenever we change data types, we need to reinvoke alignment,
  * else the Assembler treats subsequent word variables as shorts
@@ -169,17 +175,29 @@ touched:  .byte   0
  *	} actuator_state;         // sizeof (actuator_state) = 16 bytes
  */
 
-actuator_state:
-/* Common Structure used by Controllers to keep latest actuation values */
-speedA:		.byte	0
-brakeA:		.byte	0
-speedB:		.byte	0
-brakeB:		.byte	0
-speedC:		.byte	0
-brakeC:		.byte	0
+	.macro	init_actuator_state state_label, \
+			speedA, brakeA, speedB, brakeB, \
+			speedC, brakeC, tone_freq, tone_dur
+	/* Common Structure used to keep latest actuation values */
+.align			/* Start structure on an aligned address */
+\state_label:
+speedA:		.byte	\speedA
+brakeA:		.byte	\brakeA
+speedB:		.byte	\speedB
+brakeB:		.byte	\brakeB
+speedC:		.byte	\speedC
+brakeC:		.byte	\brakeC
 .align			/* Needed to force word alignment padding */
-tone_freq:	.word	0
-tone_dur:	.word	0
+tone_freq:	.word	\tone_freq
+tone_dur:	.word	\tone_dur
+	.endm
+
+	init_actuator_state actuator_state, \
+			MOTOR_INHIBITED_BYTE, FALSE, \
+			MOTOR_INHIBITED_BYTE, FALSE, \
+			MOTOR_INHIBITED_BYTE, FALSE, \
+			TONE_INHIBITED, TONE_INHIBITED
+
 	.equ	SIZEOF_ACTUATOR_STATE, (. - actuator_state)
 	.equ	SPEEDA, (speedA - actuator_state)
 	.equ	BRAKEA, (brakeA - actuator_state)
@@ -199,12 +217,10 @@ actuator_state_offsets:
 #endif
 
 .align
-
 prev_actuator_state: .space	SIZEOF_ACTUATOR_STATE, 0x0
-behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * (BBR_LAST_BEHAVIOR+1)), 0x0
+.align
+behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
 
-
-///////// REPLACE /////////
 /* Claw Behavior Variables */
 claw_timestamp: .word 0
 claw_oldtstamp: .word 0
@@ -213,43 +229,34 @@ claw_oldpos:    .word 0
 claw_closed:    .byte 0
 claw_movement:  .byte 0
 
-#if 0
-////// FIXME: Do we need this? //////
-/* Bitmasks for Suppression */
-#define suppress_portA 0x80
-#define suppress_portB 0x40
-#define suppress_portC 0x20
-#define suppress_tone  0x10
-#endif
 
-/* Signal Inhibition Values */
-#define MOTOR_INHIBITED 0xFFFFFF80
-#define MOTOR_INHIBITED_BYTE (MOTOR_INHIBITED & 0xFF)		/* For data initialization use */
-#define TONE_INHIBITED 0x0
+.text
+.align 4
+	/* Predefined Actuator Outputs for various behaviors */
+	/* Follow-Line Behavior Actuation Outputs for Line Types */
+	init_actuator_state line_black, \
+			MOTOR_INHIBITED_BYTE, FALSE, \
+			FWD_SPEED, FALSE, \
+			FWD_SPEED, FALSE, \				/* Forward motion */
+			TONE_INHIBITED, TONE_INHIBITED
 
+	init_actuator_state line_edge, \
+			MOTOR_INHIBITED_BYTE, FALSE, \
+			SLOWROT_SPEED, FALSE, \
+			STOP_SPEED, FALSE, \			/* CCW slow rotation */
+			TONE_INHIBITED, TONE_INHIBITED
 
-/* Current Actuator Settings */
-actuator_speedA:         .byte MOTOR_INHIBITED_BYTE
-actuator_speedB:         .byte MOTOR_INHIBITED_BYTE
-actuator_speedC:         .byte MOTOR_INHIBITED_BYTE
-actuator_brakeA:         .byte FALSE
-actuator_brakeB:         .byte FALSE
-actuator_brakeC:         .byte FALSE
+	init_actuator_state line_white, \
+			MOTOR_INHIBITED_BYTE, FALSE, \
+			STOP_SPEED, FALSE, \
+			FASTROT_SPEED, FALSE, \			/* CW fast rotation */
+			TONE_INHIBITED, TONE_INHIBITED
 
-actuator_tone_freq:      .word TONE_INHIBITED
-actuator_tone_dur:       .word TONE_INHIBITED
-
-/* Previous Actuator Settings */
-actuator_oldspeedA:      .byte MOTOR_INHIBITED_BYTE
-actuator_oldspeedB:      .byte MOTOR_INHIBITED_BYTE
-actuator_oldspeedC:      .byte MOTOR_INHIBITED_BYTE
-actuator_oldbrakeA:      .byte FALSE
-actuator_oldbrakeB:      .byte FALSE
-actuator_oldbrakeC:      .byte FALSE
-
-actuator_oldtone_freq:   .word TONE_INHIBITED
-actuator_oldtone_dur:    .word TONE_INHIBITED
-
+	init_actuator_state line_unknown, \
+			MOTOR_INHIBITED_BYTE, FALSE, \
+			STOP_SPEED, FALSE, \
+			STOP_SPEED, FALSE, \			/* Stop motion (cruise) */
+			TONE_INHIBITED, TONE_INHIBITED
 
 .code 32
 .text
