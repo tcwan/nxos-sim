@@ -192,8 +192,8 @@ touched:  .byte   0
 		.word	\tone_dur
 	.endm
 
-actuator_state:
 .align
+actuator_state:
 speedA:		.byte	MOTOR_INHIBITED_BYTE
 brakeA:		.byte	FALSE
 speedB:		.byte	MOTOR_INHIBITED_BYTE
