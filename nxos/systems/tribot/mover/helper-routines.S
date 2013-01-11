@@ -173,7 +173,7 @@ memmove_exit:
 memcmp:
     PUSH   {R4, LR}        @ Keep R4, LR
     /* Sanity Checks */
-    TEQ    R2
+    TEQ    R2, #0
     BEQ    memcmp_equal    @ Zero length comparisons are always equal
     CMP    R0, R1
     BEQ    memcmp_equal    @ Comparing buffer to itself will always be equal
