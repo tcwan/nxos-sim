@@ -239,15 +239,34 @@ claw_movement:  .byte 0
 .text
 .align 4
 	/* Predefined Actuator Outputs for various behaviors */
+
+	/* Open-Claws/Grasp-Object Behavior Actuation Outputs */
+	init_actuator_state bbr_claws_open, OPEN_SPEED, FALSE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, TONE_INHIBITED, TONE_INHIBITED
+			/* Open Claws */
+	init_actuator_state bbr_claws_close, CLOSE_SPEED, FALSE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, TONE_INHIBITED, TONE_INHIBITED
+			/* Close Claws (Grasp Object) */
+	init_actuator_state bbr_claws_unlock, STOP_SPEED, FALSE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, TONE_INHIBITED, TONE_INHIBITED
+			/* Unlock Claws */
+	init_actuator_state bbr_claws_lock, STOP_SPEED, TRUE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, TONE_INHIBITED, TONE_INHIBITED
+			/* Lock Claws */
+
 	/* Follow-Line Behavior Actuation Outputs for Line Types */
-	init_actuator_state line_black,	MOTOR_INHIBITED_BYTE, FALSE, FWD_SPEED, FALSE, FWD_SPEED, FALSE, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_follow_line_black,	MOTOR_INHIBITED_BYTE, FALSE, FWD_SPEED, FALSE, FWD_SPEED, FALSE, TONE_INHIBITED, TONE_INHIBITED
 			/* Forward motion */
-	init_actuator_state line_edge, MOTOR_INHIBITED_BYTE, FALSE, SLOWROT_SPEED, FALSE, STOP_SPEED, FALSE, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_follow_line_edge, MOTOR_INHIBITED_BYTE, FALSE, SLOWROT_SPEED, FALSE, STOP_SPEED, FALSE, TONE_INHIBITED, TONE_INHIBITED
 			/* CCW slow rotation */
-	init_actuator_state line_white, MOTOR_INHIBITED_BYTE, FALSE, STOP_SPEED, FALSE, FASTROT_SPEED, FALSE, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_follow_line_white, MOTOR_INHIBITED_BYTE, FALSE, STOP_SPEED, FALSE, FASTROT_SPEED, FALSE, TONE_INHIBITED, TONE_INHIBITED
 			/* CW fast rotation */
-	init_actuator_state line_unknown, MOTOR_INHIBITED_BYTE, FALSE, STOP_SPEED, FALSE, STOP_SPEED, FALSE, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_follow_line_unknown, MOTOR_INHIBITED_BYTE, FALSE, STOP_SPEED, FALSE, STOP_SPEED, FALSE, TONE_INHIBITED, TONE_INHIBITED
 			/* Stop motion (cruise) */
+
+	/* Idle Behavior Actuation Outputs */
+	init_actuator_state bbr_idle_on, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, TONE_ENABLED_FREQ, TONE_ENABLED_DUR
+			/* Idle Behavior (sound on) */
+	init_actuator_state bbr_idle_off, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, TONE_INHIBITED, TONE_ENABLED_DUR
+			/* Idle Behavior (sound off) */
+
+
 .code 32
 .text
 .align 	4
@@ -330,6 +349,7 @@ light_led_disable:
 	bl		nx_sensors_analog_digi_clear
 	pop		{pc}
 
+#if 0
 /* Actuator Primitives */
 
 /* Enable Tone
@@ -485,6 +505,8 @@ stop_motion:
 1:
 	pop		{pc}
 
+#endif
+
 /* Sensor Input Routine */
 
 /* get_light_readings
@@ -595,13 +617,6 @@ open_claw:
 	mov		r0, #CLAW_PORT
  	mov		r1, #OPEN_SPEED
 	mov		r2, #FALSE				/* Don't brake when opening claw */
-	bl		_update_actuator_state	/* Store in Actuator State Array */
-
-	mov		r0, #RWHEEL_PORT
- 	mov		r1, #STOP_SPEED
-	mov		r2, #TRUE				/* Brake Wheels when activating claw */
-	bl		_update_actuator_state	/* Store in Actuator State Array */
-	mov		r0, #LWHEEL_PORT
 	bl		_update_actuator_state	/* Store in Actuator State Array */
 
 	bl		brake_wheels
