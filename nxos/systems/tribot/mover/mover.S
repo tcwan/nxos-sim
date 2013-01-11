@@ -153,6 +153,20 @@ robot_state: .byte	0
 touchval: .byte   0
 touched:  .byte   0
 
+/* Idle Behavior Variables */
+tone_active:    .byte FALSE
+.align
+tone_timestamp: .word 0
+
+/* Claw Behavior Variables */
+claw_timestamp: .word 0
+claw_oldtstamp: .word 0
+claw_position:  .word 0
+claw_oldpos:    .word 0
+claw_closed:    .byte 0
+claw_movement:  .byte 0
+
+
 
 /* Signal Inhibition Values */
 #define MOTOR_INHIBITED 0xFFFFFF80
@@ -230,14 +244,6 @@ prev_actuator_state: .space	SIZEOF_ACTUATOR_STATE, 0x0
 .align
 behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
 
-/* Claw Behavior Variables */
-claw_timestamp: .word 0
-claw_oldtstamp: .word 0
-claw_position:  .word 0
-claw_oldpos:    .word 0
-claw_closed:    .byte 0
-claw_movement:  .byte 0
-
 
 .text
 .align 4
@@ -274,6 +280,37 @@ claw_movement:  .byte 0
 			/* Idle Behavior (sound on) */
 	init_actuator_state bbr_idle_off, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, TONE_INHIBITED, TONE_ENABLED_DUR
 			/* Idle Behavior (sound off) */
+
+@ Use macros to make line classification declaration consistent
+    .macro  line_classification_item entry_label, minval, maxval, action_routine
+.align
+\entry_label:
+    .byte   \minval, \maxval
+.align
+    .word   \action_routine
+    .endm
+
+@ Element Offsets for Table Lookup
+    .equ    MINVAL_OFFSET, 0
+    .equ    MAXVAL_OFFSET, 1
+    .equ    ACTION_ROUTINE_OFFSET, 4
+
+@ The execution clauses for each line_type enum are implemented
+@ as routines which do not need any input parameters
+@ Each row (item) in the Jump Table takes 8 bytes (with 2 bytes padding)
+
+.text
+.align 4
+line_classification_jumptable:
+    line_classification_item line_outside, WHITE_MIN, WHITE_MAX, fast_cw_rotate_motion
+    line_classification_item line_edge, EDGE_MIN, EDGE_MAX, slow_ccwrotate_motion
+    line_classification_item line_line, BLACK_MIN, BLACK_MAX, forward_motion
+    line_classification_item line_unknown, 0, 255, stop_motion
+
+@ End of Table address constant
+    .equ    line_classification_jumptable_end, .
+    .equ    SIZEOF_LINE_CLASSIFICATION_ITEM, 8
+
 
 
 .code 32
@@ -754,18 +791,105 @@ claw_update_pos:
 exit_has_claw_fully_stopped:
 	pop		{r4, pc}
 
+/*
+ * Line Classification Action Routine Dispatcher
+ *
+ *     Find Jump Table Item such that
+ *        ((MINVAL <= Light Sensor Min Value) &&
+ *         (Light Sensor Max Value <= MAXVAL))
+ *
+ * On Entry:
+ *     R0: Light Sensor Min Value (8-bit unsigned)
+ *     R1: Light Sensor Max Value (8-bit unsigned)
+ *     Assumes that R0 <= R1 (i.e., min <= max)
+ *
+ * On Exit:
+ *     R0: Line Classification Found (Boolean)
+ *
+ * Register Usage:
+ *     R0: Light Sensor Min Value / Action Routine Address Pointer (if matched)
+ *     R1: Light Sensor Max Value
+ *     R2: Item Min Value (scratch register)
+ *     R3: Item Max Value (scratch register)
+ *     R4: Line Classification Table Item Pointer
+ *     R5: Line Classification Table End Pointer
+ *
+ * Linear Search used, since number of cases are small
+ */
+line_classification_dispatcher:
+    PUSH    {R4, R5, LR}
+    LDR     R4, =line_classification_jumptable
+    LDR     R5, =line_classification_jumptable_end
+
+
+line_classification_loop:
+    CMP    R4, R5
+	MOVHS  R0, #FALSE
+    BHS    exit_line_classification_dispatcher	/* Traversed entire table, exit (not found) */
+
+    LDRB   R2, [R4, #MINVAL_OFFSET]         /* Retrieve Min & Max Bounds for Item */
+    LDRB   R3, [R4, #MAXVAL_OFFSET]
+
+check_bounds:
+    CMP    R0, R3
+    BLO    next_line_classification_item    /* R0 < MINVAL */
+    CMP    R1, R4
+    BHI    next_line_classification_item    /* R1 > MAXVAL */
+
+matched_classification_item:
+/* (MINVAL <= R0) && (R1 <= MAXVAL) */
+    LDR    R0, [R4, #ACTION_ROUTINE_OFFSET] /* R0 contains action routine address */
+    MOV    LR, PC                           /* LR = PC + 8 (pipeline) == done_execution */
+    MOV    PC, R0                           /* Call Action Routines */
+done_execution:
+	MOV		R0, #TRUE					/* Return Line Classification Found (TRUE) */
+    B       exit_line_classification_dispatcher
+
+next_line_classification_item:
+    ADD    R4, R4, #SIZEOF_LINE_CLASSIFICATION_ITEM
+    B      line_classification_loop         /* Repeat for next item */
+
+exit_line_classification_dispatcher:
+    POP   {R4, R5, PC}
+
 /* Behavior Routines */
 
 /* Line Follower Behavior
  *    Always Activated
  *    Play a Tone while Active
+ *      This is accomplished by switching between Tone generation and Silence
+ *      to give a punctuated tone output (Beep....Beep....Beep...)
  *
  */
 bbr_idle:
-	push	{lr}
-	bl		brake_wheels
-	bl		enable_tone
-	pop		{pc}
+	push	{r4, r5, lr}
+	/* Check time of last claw_position update */
+	ldr		r4, =tone_timestamp		/* pointer to tone_timestamp */
+	bl		nx_systick_get_ms		/* R0 has current timestamp */
+	mov		r5, r0					/* Store current timestamp in R5 for later use */
+
+	ldr		r1, [r4]			    /* retrieve previous tone_timestamp */
+	time_elapsed r0, r1, #TONE_ENABLED_DUR
+	cmp		r0, #FALSE
+	beq		exit_bbr_idle			/* Has not reached target update time interval yet, exit */
+
+idle_switch_state:
+	str		r5, [r4]				/* Store current timestamp in tone_timestamp */
+
+	ldr		r2, =tone_active
+	ldrb	r0, [r2]					/* Get Tone Active status */
+	teq		r0, #FALSE					/* Check Tone Active status */
+	moveq	r0, #TRUE
+	ldreq	r1, =bbr_idle_on			/* False, enable tone */
+	movne	r0, #fALSE
+	ldrne	r1, =bbr_idle_off			/* True, disable tone */
+	strb	r0, [r2]					/* Toggle Tone Active Status */
+
+	mov		r0, #BBR_IDLE
+	bl		bbr_copy_actuator_outputs
+exit_bbr_idle:
+    mov     r0, #TRUE					/* Always activated */
+	pop		{r4, r5, pc}
 
 /* Line Follower Behavior
  *
@@ -796,11 +920,12 @@ bbr_line_follower:
 	bne		exit_bbr_line_follower
 
 line_follower_check_line:
-	/* Get Light Sensor min and max values */
+	/* Retrieve current min / max values */
 	ldr		r2, =min
 	ldrb	r0, [r2]			/* min */
 	ldrb	r1, [r2, #1]		/* max */
 
+#if 0
 	/* Line Determination:
 	 * The checks must be ordered from lower range to higher range
 	 * so the sequence is opposite of that given in the algorithm pseudocode
@@ -830,10 +955,10 @@ check_black:
 found_unknown:
 	/* If we can't determine the color, stop moving */
 	bl		stop_motion
+#endif
 
-activate_bbr_line_follower:
-	bl		disable_tone				/* Suppress Tone generation */
-	mov		r0, #TRUE					/* Always activated */
+	bl		line_classification_dispatcher
+
 exit_bbr_line_follower:
 	pop		{pc}
 
