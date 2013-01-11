@@ -487,13 +487,6 @@ open_claw:
 	mov		r2, #FALSE				/* Don't brake when opening claw */
 	bl		_update_actuator_state	/* Store in Actuator State Array */
 
-	mov		r0, #RWHEEL_PORT
- 	mov		r1, #STOP_SPEED
-	mov		r2, #TRUE				/* Brake Wheels when activating claw */
-	bl		_update_actuator_state	/* Store in Actuator State Array */
-	mov		r0, #LWHEEL_PORT
-	bl		_update_actuator_state	/* Store in Actuator State Array */
-
 	bl		brake_wheels
 	pop		{pc}
 
