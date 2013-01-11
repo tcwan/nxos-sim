@@ -40,6 +40,7 @@
 
 	/* LCD Display Constants */
 	.equ	TOUCH_ROW, 3				/* Touch Display Row Index */
+	.equ	SOUND_ROW, 4				/* Sound Display Row Index */
 	.equ	BEHAVIOR_ROW, 6				/* Behavior Display Row Index */
 
 	/* Light Sensor Color Detection Intensity (0-100) ranges */
@@ -114,6 +115,8 @@ ENUM_END(bbr_behavior_t)
 title:	  .asciz "Grasper Bot"
 pressed:  .asciz "Touch: Pressed "
 released: .asciz "Touch: Released"
+sound:    .asciz "Sound: Detected"
+nosound:  .asciz "Sound: No Sound"
 opened:   .asciz " Claw: Opened"
 closed:   .asciz " Claw: Closed"
 white:	  .asciz " Line: White  "
@@ -240,6 +243,12 @@ claw_movement:  .byte 0
 .align 4
 	/* Predefined Actuator Outputs for various behaviors */
 
+	/* Move-Object Behavior Actuation Outputs */
+	init_actuator_state bbr_move_object_seek, CLOSE_SPEED, TRUE, SLOWROT_SPEED, TRUE, STOP_SPEED, TRUE, TONE_INHIBITED, TONE_INHIBITED
+			/* Seeking */
+	init_actuator_state bbr_move_object_follow, CLOSE_SPEED, TRUE, FWD_SPEED, TRUE, FWD_SPEED, TRUE, TONE_INHIBITED, TONE_INHIBITED
+			/* Follow */
+
 	/* Open-Claws/Grasp-Object Behavior Actuation Outputs */
 	init_actuator_state bbr_claws_open, OPEN_SPEED, FALSE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, TONE_INHIBITED, TONE_INHIBITED
 			/* Open Claws */
@@ -332,6 +341,20 @@ touch_lost:
 	bl		plop
 	ldr		r0, =released
 	mov		r1, #TOUCH_ROW
+	bl		nx_progcontentX
+	pop		{pc}
+
+sound_detected:
+	push	{lr}
+	ldr		r0, =sound
+	mov		r1, #SOUND_ROW
+	bl		nx_progcontentX
+	pop		{pc}
+
+sound_absent:
+	push	{lr}
+	ldr		r0, =nosound
+	mov		r1, #SOUND_ROW
 	bl		nx_progcontentX
 	pop		{pc}
 
@@ -587,6 +610,26 @@ exit_get_touch_status:
 	mov		r0, #SYSTICK_3MS
 	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
  	pop		{r4, pc}
+
+/* get_sound_status
+ *    Retrieve Sound Sensor value and store in variable soundval,
+ *
+ *		R4: Address Pointer to Sound variables
+ *	FIXME: Currently we force a 3 ms delay in this routine.
+ *			It should be handled using timestamps similar to Claw Position Detection
+ */
+ get_sound_status:
+ 	push	{r4, lr}
+	mov		r0, #SOUND_PORT
+	bl		nx_sensors_analog_get
+	ldr		r4, =soundval
+	strb	r0, [r4]		/* Store Sound Value */
+
+exit_get_sound_status:
+	mov		r0, #SYSTICK_3MS
+	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
+ 	pop		{r4, pc}
+
 
 /* get_claw_status
  *    Retrieve Claw Motor Tachometer value and store in variable claw_position.
