@@ -165,7 +165,7 @@ memmove_exit:
  *      R4: Byte in Second Buffer to be compared
  *
  *    Returns:
- *      R0: 0 if identical, different between first non-identical byte in buffers
+ *      R0: 0 if identical, else difference between first non-identical byte in buffers
  *
  */
 
