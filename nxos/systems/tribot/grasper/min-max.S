@@ -44,10 +44,6 @@
  *    Returns:
  *      R0: Boolean: TRUE if algorithm ran, FALSE otherwise (n == 0)
  *
- * R1: counter
- * R2: readings Array Pointer
- * R3: min value
- * R4: max value
  */
 
     arm_interwork min_max_ubyte
