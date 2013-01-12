@@ -54,6 +54,7 @@ ENUM_VALASSIGN(ROBOT_STOP, 0)   /**< Initial State. */
 ENUM_VAL(ROBOT_FWD)             /**< Robot Moving Forward. */
 ENUM_VAL(ROBOT_CW)        	/**< Robot Rotating Clockwise */
 ENUM_VAL(ROBOT_CCW)        	/**< Robot Rotating Counter-Clockwise */
+ENUM_VAL(ROBOT_SEEK)		/**< Robot Seeking Motion (mover, tribot only) */
 ENUM_END(robot_state_t)
 /*@}*/
 
