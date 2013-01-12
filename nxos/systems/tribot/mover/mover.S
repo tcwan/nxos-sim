@@ -57,6 +57,9 @@
 	/* Touch Sensor Raw Readings: Pressed: 183; Released: 1023 */
 	.equ	TOUCH_THRESH, 256
 
+	/* Sound Sensor Threshold (0-100) range */
+	.equ	SOUND_THRESH, 50			/* FIXME: Needs calibration */
+
 	/* Wheel Control Constants */
 	.equ	STOP_SPEED, 0
 	.equ	FWD_SPEED, 30
@@ -146,8 +149,13 @@ readings: .space  n, 0x0
 min:      .byte   0
 max:      .byte   0
 
+#if 0
 /* Line Following Behavior Variables */
 robot_state: .byte	0
+#endif
+
+/* Sound Sensor Variables */
+soundval: .byte   0
 
 /* Touch Sensor Variables */
 touchval: .byte   0
@@ -186,7 +194,8 @@ claw_movement:  .byte 0
  *		UBYTE    brakeB;
  *		SBYTE    speedC;
  *		UBYTE    brakeC;
- *		// 2-byte padding inserted by Compiler
+ *      UBYTE    curr_state;
+ *		// 1-byte padding inserted by Compiler
  *		ULONG    tone_freq;
  *		ULONG    tone_dur;
  *	} actuator_state;         // sizeof (actuator_state) = 16 bytes
@@ -194,7 +203,7 @@ claw_movement:  .byte 0
 
 	.macro	init_actuator_state state_label, \
 			speedA, brakeA, speedB, brakeB, \
-			speedC, brakeC, tone_freq, tone_dur
+			speedC, brakeC, curr_state, tone_freq, tone_dur
 	/* Common Structure used to keep latest actuation values */
 .align			/* Start structure on an aligned address */
 \state_label:
@@ -204,6 +213,7 @@ claw_movement:  .byte 0
 		.byte	\brakeB
 		.byte	\speedC
 		.byte	\brakeC
+		.byte   \curr_state
 .align			/* Needed to force word alignment padding */
 		.word	\tone_freq
 		.word	\tone_dur
@@ -217,6 +227,7 @@ speedB:		.byte	MOTOR_INHIBITED_BYTE
 brakeB:		.byte	FALSE
 speedC:		.byte	MOTOR_INHIBITED_BYTE
 brakeC:		.byte	FALSE
+curr_state: .byte	ROBOT_STOP
 .align			/* Needed to force word alignment padding */
 tone_freq:	.word	TONE_INHIBITED
 tone_dur:	.word	TONE_INHIBITED
@@ -228,6 +239,7 @@ tone_dur:	.word	TONE_INHIBITED
 	.equ	BRAKEB, (brakeB - actuator_state)
 	.equ	SPEEDC, (speedC - actuator_state)
 	.equ	BRAKEC, (brakeC - actuator_state)
+	.equ	CURR_STATE, (curr_state - actuator_state)
 	.equ	TONE_FREQ, (tone_freq - actuator_state)
 	.equ	TONE_DUR, (tone_dur - actuator_state)
 
@@ -235,7 +247,7 @@ tone_dur:	.word	TONE_INHIBITED
 /* Debug offset calculations */
 actuator_state_offsets:
 	.byte SPEEDA, BRAKEA, SPEEDB, BRAKEB
-	.byte SPEEDC, BRAKEC, TONE_FREQ, TONE_DUR
+	.byte SPEEDC, BRAKEC, CURR_STATE, TONE_FREQ, TONE_DUR
 	.byte SIZEOF_ACTUATOR_STATE
 #endif
 
@@ -244,44 +256,49 @@ prev_actuator_state: .space	SIZEOF_ACTUATOR_STATE, 0x0
 .align
 behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
 
+/* Sensor/Motor Offset Assignments */
+	.equ	CLAW_SPEED, SPEEDA
+	.equ	RIGHT_WHEEL_SPEED, SPEEDB
+	.equ	LEFT_WHEEL_SPEED, SPEEDC
 
 .text
 .align 4
 	/* Predefined Actuator Outputs for various behaviors */
 
 	/* Move-Object Behavior Actuation Outputs */
-	init_actuator_state bbr_move_object_seek, CLOSE_SPEED, TRUE, SLOWROT_SPEED, TRUE, STOP_SPEED, TRUE, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_move_object_seek, CLOSE_SPEED, TRUE, SLOWROT_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_SEEK, TONE_INHIBITED, TONE_INHIBITED
 			/* Seeking */
-	init_actuator_state bbr_move_object_follow, CLOSE_SPEED, TRUE, FWD_SPEED, TRUE, FWD_SPEED, TRUE, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_move_object_follow, CLOSE_SPEED, TRUE, FWD_SPEED, TRUE, FWD_SPEED, TRUE, ROBOT_FWD, TONE_INHIBITED, TONE_INHIBITED
 			/* Follow */
 
 	/* Open-Claws/Grasp-Object Behavior Actuation Outputs */
-	init_actuator_state bbr_claws_open, OPEN_SPEED, FALSE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_claws_open, OPEN_SPEED, FALSE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
 			/* Open Claws */
-	init_actuator_state bbr_claws_close, CLOSE_SPEED, FALSE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_claws_close, CLOSE_SPEED, FALSE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
 			/* Close Claws (Grasp Object) */
-	init_actuator_state bbr_claws_unlock, STOP_SPEED, FALSE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_claws_unlock, STOP_SPEED, FALSE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
 			/* Unlock Claws */
-	init_actuator_state bbr_claws_lock, STOP_SPEED, TRUE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_claws_lock, STOP_SPEED, TRUE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
 			/* Lock Claws */
 
 	/* Follow-Line Behavior Actuation Outputs for Line Types */
-	init_actuator_state bbr_follow_line_black,	MOTOR_INHIBITED_BYTE, FALSE, FWD_SPEED, FALSE, FWD_SPEED, FALSE, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_follow_line_black,	MOTOR_INHIBITED_BYTE, FALSE, FWD_SPEED, FALSE, FWD_SPEED, FALSE, ROBOT_FWD, TONE_INHIBITED, TONE_INHIBITED
 			/* Forward motion */
-	init_actuator_state bbr_follow_line_edge, MOTOR_INHIBITED_BYTE, FALSE, SLOWROT_SPEED, FALSE, STOP_SPEED, FALSE, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_follow_line_edge, MOTOR_INHIBITED_BYTE, FALSE, SLOWROT_SPEED, FALSE, STOP_SPEED, FALSE, ROBOT_CCW, TONE_INHIBITED, TONE_INHIBITED
 			/* CCW slow rotation */
-	init_actuator_state bbr_follow_line_white, MOTOR_INHIBITED_BYTE, FALSE, STOP_SPEED, FALSE, FASTROT_SPEED, FALSE, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_follow_line_white, MOTOR_INHIBITED_BYTE, FALSE, STOP_SPEED, FALSE, FASTROT_SPEED, FALSE, ROBOT_CW, TONE_INHIBITED, TONE_INHIBITED
 			/* CW fast rotation */
-	init_actuator_state bbr_follow_line_unknown, MOTOR_INHIBITED_BYTE, FALSE, STOP_SPEED, FALSE, STOP_SPEED, FALSE, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_follow_line_unknown, MOTOR_INHIBITED_BYTE, FALSE, STOP_SPEED, FALSE, STOP_SPEED, FALSE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
 			/* Stop motion (cruise) */
 
 	/* Idle Behavior Actuation Outputs */
-	init_actuator_state bbr_idle_on, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, TONE_ENABLED_FREQ, TONE_ENABLED_DUR
+	init_actuator_state bbr_idle_on, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, ROBOT_STOP, TONE_ENABLED_FREQ, TONE_ENABLED_DUR
 			/* Idle Behavior (sound on) */
-	init_actuator_state bbr_idle_off, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, TONE_INHIBITED, TONE_ENABLED_DUR
+	init_actuator_state bbr_idle_off, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, ROBOT_STOP, TONE_INHIBITED, TONE_ENABLED_DUR
 			/* Idle Behavior (sound off) */
 
-@ Use macros to make line classification declaration consistent
+/* Line Classification Advanced Jump Table */
+/* Use macros to make line classification declaration consistent */
     .macro  line_classification_item entry_label, minval, maxval, action_routine
 .align
 \entry_label:
@@ -290,28 +307,40 @@ behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
     .word   \action_routine
     .endm
 
-@ Element Offsets for Table Lookup
+/* Element Offsets for Table Lookup */
     .equ    MINVAL_OFFSET, 0
     .equ    MAXVAL_OFFSET, 1
     .equ    ACTION_ROUTINE_OFFSET, 4
 
-@ The execution clauses for each line_type enum are implemented
-@ as routines which do not need any input parameters
-@ Each row (item) in the Jump Table takes 8 bytes (with 2 bytes padding)
+/* The execution clauses for each line_type enum are implemented
+ * as routines which do not need any input parameters
+ * Each row (item) in the Jump Table takes 8 bytes (with 2 bytes padding)
+ */
 
 .text
 .align 4
 line_classification_jumptable:
-    line_classification_item line_outside, WHITE_MIN, WHITE_MAX, fast_cw_rotate_motion
+    line_classification_item line_outside, WHITE_MIN, WHITE_MAX, fast_cwrotate_motion
     line_classification_item line_edge, EDGE_MIN, EDGE_MAX, slow_ccwrotate_motion
     line_classification_item line_line, BLACK_MIN, BLACK_MAX, forward_motion
     line_classification_item line_unknown, 0, 255, stop_motion
 
-@ End of Table address constant
+/* End of Table address constant */
     .equ    line_classification_jumptable_end, .
     .equ    SIZEOF_LINE_CLASSIFICATION_ITEM, 8
 
+/* BBR Dispatcher Jump Table Definition */
+.text
+.align
 
+dispatcher_behavior_jumptable:
+	.word	bbr_idle
+	.word	bbr_follow_line
+	.word	bbr_open_claws
+	.word	bbr_grasp_object
+	.word	bbr_move_object
+
+	.equ	NUM_DISPATCHER_ENTRIES, (. - dispatcher_behavior_jumptable)/4
 
 .code 32
 .text
@@ -434,8 +463,26 @@ disable_tone:
 	str		r0, [r2]			/* Frequency */
 	str		r0, [r2, #4]		/* Duration */
 	pop		{pc}
+#endif
 
+/* BBR Copy Actuator Outputs
+ *    Copy Activated Behavior Outputs to Arbiter behavior_actuations array
+ *	  Inputs:
+ *		R0: behavior_actuations Index
+ *		R1: Pointer to Predefined Actuator Outputs for Behavior
+ *
+ *    Note: This is an internal routine shared by various functions
+ */
 
+bbr_copy_actuator_outputs:
+	push	{lr}
+	ldr		r3, =behavior_actuations			/* candidate actuations array start address */
+	mov		r2, #SIZEOF_ACTUATOR_STATE			/* number of bytes per actuator_state struct */
+	mla		r0, r2, r0, r3						/* r0 = (sizeof(actuator_state) (r2) * index (r0)) + behavior_actuations start (r3) */
+	bl		memmove								/* r0: destination pointer, r1: source pointer, r2: number of bytes to copy */
+	pop		{pc}
+
+#if 0
 /* Update Actuator State
  *    Program Actuator State into Array
  *	  Inputs:
@@ -470,6 +517,7 @@ brake_wheels:
 	bl		_update_actuator_state	/* Does not modify R0, R1, R2 */
 
 	pop		{pc}
+#endif
 
 forward_motion:
 	push	{lr}
@@ -477,21 +525,9 @@ forward_motion:
 	ldr		r0, =black
 	bl		nx_progcontent
 
-	ldr		r2, =robot_state
-	mov		r1, #ROBOT_FWD
-	ldrb	r0, [r2]
-	teq		r0, r1
-	beq		1f						/* Already in given state */
-	strb	r1, [r2]				/* State Change: Update new state */
-
-	mov		r1, #FWD_SPEED
-	mov		r2, #FALSE				/* Don't brake */
-	mov		r0, #RWHEEL_PORT
-	bl		_update_actuator_state	/* Does not destroy R0, R1, R2 */
-	mov		r0, #LWHEEL_PORT
-	bl		_update_actuator_state	/* Does not destroy R0, R1, R2 */
-
-1:
+	mov		r0, #BBR_FOLLOW_LINE
+	ldr		r1, =bbr_follow_line_black
+	bl		bbr_copy_actuator_outputs
 	pop		{pc}
 
 fast_cwrotate_motion:
@@ -500,23 +536,9 @@ fast_cwrotate_motion:
 	ldr		r0, =white
 	bl		nx_progcontent
 
-	ldr		r2, =robot_state
-	mov		r1, #ROBOT_CW
-	ldrb	r0, [r2]
-	teq		r0, r1
-	beq		1f						/* Already in given state */
-	strb	r1, [r2]				/* State Change: Update new state */
-
-
-	mov		r1, #STOP_SPEED
-	mov		r2, #FALSE				/* Don't brake */
-	mov		r0, #RWHEEL_PORT
-	bl		_update_actuator_state	/* Does not destroy R0, R1, R2 */
-
-	mov		r1, #FASTROT_SPEED
-	mov		r0, #LWHEEL_PORT
-	bl		_update_actuator_state	/* Does not destroy R0, R1, R2 */
-1:
+	mov		r0, #BBR_FOLLOW_LINE
+	ldr		r1, =bbr_follow_line_white
+	bl		bbr_copy_actuator_outputs
 	pop		{pc}
 
 slow_ccwrotate_motion:
@@ -525,22 +547,9 @@ slow_ccwrotate_motion:
 	ldr		r0, =edge
 	bl		nx_progcontent
 
-	ldr		r2, =robot_state
-	mov		r1, #ROBOT_CCW
-	ldrb	r0, [r2]
-	teq		r0, r1
-	beq		1f						/* Already in given state */
-	strb	r1, [r2]				/* State Change: Update new state */
-
-	mov		r1, #STOP_SPEED
-	mov		r2, #FALSE				/* Don't brake */
-	mov		r0, #LWHEEL_PORT
-	bl		_update_actuator_state	/* Does not destroy R0, R1, R2 */
-
-	mov		r1, #SLOWROT_SPEED
-	mov		r0, #RWHEEL_PORT
-	bl		_update_actuator_state	/* Does not destroy R0, R1, R2 */
-1:
+	mov		r0, #BBR_FOLLOW_LINE
+	ldr		r1, =bbr_follow_line_edge
+	bl		bbr_copy_actuator_outputs
 	pop		{pc}
 
 stop_motion:
@@ -548,24 +557,11 @@ stop_motion:
 	ldr		r0, =unknown
 	bl		nx_progcontent
 
-	ldr		r2, =robot_state
-	mov		r1, #ROBOT_STOP
-	ldrb	r0, [r2]
-	teq		r0, r1
-	beq		1f						/* Already in given state */
-	strb	r1, [r2]				/* State Change: Update new state */
-
-	mov		r1, #STOP_SPEED
-	mov		r2, #FALSE				/* Don't brake */
-	mov		r0, #LWHEEL_PORT
-	bl		_update_actuator_state	/* Does not destroy R0, R1, R2 */
-
-	mov		r0, #RWHEEL_PORT
-	bl		_update_actuator_state	/* Does not destroy R0, R1, R2 */
-1:
+	mov		r0, #BBR_FOLLOW_LINE
+	ldr		r1, =bbr_follow_line_unknown
+	bl		bbr_copy_actuator_outputs
 	pop		{pc}
 
-#endif
 
 /* Sensor Input Routine */
 
@@ -588,8 +584,11 @@ light_loop:
 	bl		nx_sensors_analog_get_normalized	/* returned value in range 0-100% */
 	strb	r0, [r5, r6]
 
+#if 0
+	/* We don't need to delay since the main_loop spaces out the frequency of the A/D call */
 	mov		r0, #SYSTICK_3MS
 	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
+#endif
 
 	cmp		r6, #0
 	bhi		light_loop		/* Perform Min-Max calculation when we have enough samples */
@@ -612,10 +611,8 @@ calc_min_max:
  *          and reenables the Light Sensor LED output when not active.
  *
  *		R4: Address Pointer to Touch variables
- *	FIXME: Currently we force a 3 ms delay in this routine.
- *			It should be handled using timestamps similar to Claw Position Detection
  */
- get_touch_status:
+get_touch_status:
  	push	{r4, lr}
 	mov		r0, #TOUCH_PORT
 	bl		nx_sensors_analog_get
@@ -644,27 +641,31 @@ no_touch:
 	bl		touch_lost
 
 exit_get_touch_status:
+#if 0
+	/* We don't need to delay since the main_loop spaces out the frequency of the A/D call */
 	mov		r0, #SYSTICK_3MS
 	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
+#endif
  	pop		{r4, pc}
 
-/* get_sound_status
- *    Retrieve Sound Sensor value and store in variable soundval,
+/* get_sound_level
+ *    Retrieve Sound Sensor level and store in variable soundval
  *
  *		R4: Address Pointer to Sound variables
- *	FIXME: Currently we force a 3 ms delay in this routine.
- *			It should be handled using timestamps similar to Claw Position Detection
  */
- get_sound_status:
+get_sound_level:
  	push	{r4, lr}
 	mov		r0, #SOUND_PORT
-	bl		nx_sensors_analog_get
+	bl		nx_sensors_analog_get_normalized	/* returned value in range 0-100% */
 	ldr		r4, =soundval
-	strb	r0, [r4]		/* Store Sound Value */
+	strb	r0, [r4]							/* Store Sound Value */
 
 exit_get_sound_status:
+#if 0
+	/* We don't need to delay since the main_loop spaces out the frequency of the A/D call */
 	mov		r0, #SYSTICK_3MS
 	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
+#endif
  	pop		{r4, pc}
 
 
@@ -691,52 +692,50 @@ exit_get_claw_status:
 
 /* Open Claw
  *    Activate Claw Motor (Open), Don't Brake
+ *
+ *	  Input:
+ *		R0: behavior_actuations Index
  */
 open_claw:
 	push	{lr}
-	mov		r0, #CLAW_PORT
- 	mov		r1, #OPEN_SPEED
-	mov		r2, #FALSE				/* Don't brake when opening claw */
-	bl		_update_actuator_state	/* Store in Actuator State Array */
-
-	bl		brake_wheels
+	ldr		r1, =bbr_claws_open
+	bl		bbr_copy_actuator_outputs
 	pop		{pc}
 
 /* Close Claw
  *    Activate Claw Motor (Close), Don't Brake
+ *
+ *	  Input:
+ *		R0: behavior_actuations Index
  */
 close_claw:
 	push	{lr}
-	mov		r0, #CLAW_PORT
- 	mov		r1, #CLOSE_SPEED
-	mov		r2, #FALSE				/* Don't brake when closing claw */
-	bl		_update_actuator_state	/* Store in Actuator State Array */
-
-	bl		brake_wheels
+	ldr		r1, =bbr_claws_close
+	bl		bbr_copy_actuator_outputs
 	pop		{pc}
 
 /* Lock Claw
  *    Stop Claw Motor, Brake
+ *
+ *	  Input:
+ *		R0: behavior_actuations Index
  */
 lock_claw:
 	push	{lr}
-	mov		r0, #CLAW_PORT
- 	mov		r1, #STOP_SPEED
-	mov		r2, #TRUE				/* Brake when locking claw */
-	bl		_update_actuator_state	/* Store in Actuator State Array */
-
-	bl		brake_wheels
+	ldr		r1, =bbr_claws_lock
+	bl		bbr_copy_actuator_outputs
 	pop		{pc}
 
 /* Unlock Claw
  *    Stop Motor, Brake
+ *
+ *	  Input:
+ *		R0: behavior_actuations Index
  */
 unlock_claw:
 	push	{lr}
-	mov		r0, #CLAW_PORT
- 	mov		r1, #STOP_SPEED
-	mov		r2, #FALSE				/* Don't Brake when unlocking claw */
-	bl		_update_actuator_state	/* Store in Actuator State Array */
+	ldr		r1, =bbr_claws_unlock
+	bl		bbr_copy_actuator_outputs
 	pop		{pc}
 
 /* Has Claw Started Moving
@@ -746,9 +745,9 @@ unlock_claw:
  */
 has_claw_started_moving:
 	push	{r4, lr}
-	ldr		r4, =actuator_speedA
+	ldr		r4, =actuator_state
 	ldr		r2, =MOTOR_INHIBITED
-	ldrb	r0, [r4, #CLAW_PORT]	/* Retrieve currently programmed claw actuator speed */
+	ldrb	r0, [r4, #CLAW_SPEED]	/* Retrieve currently programmed claw actuator speed */
 	teq		r0, r2
 	beq		claw_is_stopped			/* If Motor Inhibited, it is equivalent to Stopped */
 	teq		r0, #STOP_SPEED
@@ -881,7 +880,7 @@ idle_switch_state:
 	teq		r0, #FALSE					/* Check Tone Active status */
 	moveq	r0, #TRUE
 	ldreq	r1, =bbr_idle_on			/* False, enable tone */
-	movne	r0, #fALSE
+	movne	r0, #FALSE
 	ldrne	r1, =bbr_idle_off			/* True, disable tone */
 	strb	r0, [r2]					/* Toggle Tone Active Status */
 
@@ -1020,6 +1019,7 @@ bbr_start_opening_claws:
 	mov		r0, #CLAW_OPENING
 	strb	r0, [r4]				/* Claw Movement = OPENING */
 
+	mov		r0, #BBR_OPEN_CLAWS
 	bl		unlock_claw				/* start opening claw */
 	b		bbr_open_claws_active	/* let controller do its work */
 
@@ -1031,6 +1031,8 @@ bbr_claw_check_still_opening:
 bbr_claw_still_opening:
 	bl		has_claw_started_moving
 	teq		r0, #FALSE				/* Check if claw motor is moving (non-zero speed) */
+
+	moveq		r0, #BBR_OPEN_CLAWS
 	bleq	open_claw				/* Keep opening claw */
 	beq		bbr_open_claws_active	/* No, still Opening, keep Behavior active */
 
@@ -1045,10 +1047,10 @@ bbr_claw_opening_stopped:
 	mov		r0, #CLAW_STOPPED
 	strb	r0, [r4]				/* Update Claw Movement Status */
 
+	mov		r0, #BBR_OPEN_CLAWS
 	bl		lock_claw				/* Keep Behavior Active for one more iteration */
 
 bbr_open_claws_active:
-	bl		disable_tone			/* Suppress Tone generation */
 	mov		r0, #TRUE				/* Activate Behavior */
 
 exit_bbr_open_claws:
@@ -1113,6 +1115,7 @@ bbr_start_grasp_object:
 	mov		r0, #CLAW_CLOSING
 	strb	r0, [r4]				/* Claw Movement = CLOSING */
 
+	mov		r0, #BBR_GRASP_OBJECT
 	bl		unlock_claw				/* start closing claw */
 	b		bbr_grasp_object_active	/* let controller do its work */
 
@@ -1124,6 +1127,7 @@ bbr_claw_check_still_closing:
 bbr_claw_still_closing:
 	bl		has_claw_started_moving
 	teq		r0, #FALSE				/* Check if claw motor is moving (non-zero speed) */
+	moveq	r0, #BBR_GRASP_OBJECT
 	bleq	close_claw				/* No, Keep closing claw */
 	beq		bbr_grasp_object_active	/* No, still Closing, keep Behavior active */
 
@@ -1138,14 +1142,32 @@ bbr_claw_closing_stopped:
 	mov		r0, #CLAW_STOPPED
 	strb	r0, [r4]				/* Update Claw Movement Status */
 
+	mov		r0, #BBR_GRASP_OBJECT
 	bl		lock_claw				/* Keep Behavior Active for one more iteration */
 
 bbr_grasp_object_active:
-	bl		disable_tone			/* Suppress Tone generation */
 	mov		r0, #TRUE				/* Activate Behavior */
 
 exit_bbr_grasp_object:
 	pop		{r4, r5, r6, pc}
+
+/* Mover Dispatcher
+ *
+ *   In this implementation, we iterate from lowest priority to highest priority behaviors
+ */
+mover_dispatcher:
+	push	{r4, r5, lr}
+	ldr		r5, =dispatcher_behavior_jumptable
+	mov		r4, #NUM_DISPATCHER_ENTRIES
+dispatcher_loop:
+	ldr		r0, [r5], #4			/* Post-increment function pointer R5 to next dispatcher entry */
+    mov		lr, pc					/* LR = PC + 8 (pipeline) == done_dispatch */
+    mov		pc, r0					/* Dispatch Behavior */
+done_dispatch:
+	subs	r4, r4, #1
+	bne		dispatcher_loop
+exit_mover_dispatcher:
+	pop		{r4, r5, pc}
 
 //////// FIXME: Replace Grasper Arbiter with generic Dispatcher ///////////
 
@@ -1297,6 +1319,8 @@ init_robot:
 	mov		r0, #LIGHT_PORT
 	bl		nx_sensors_analog_enable
 	mov		r0, #TOUCH_PORT
+	bl		nx_sensors_analog_enable
+	mov		r0, #SOUND_PORT
 	bl		nx_sensors_analog_enable
 
 
@@ -1493,6 +1517,7 @@ main_loop:
 
 	/* Perform Sensor Readings */
 	bl		get_light_readings
+	bl		get_sound_level
 	bl		get_touch_status
 	bl		get_claw_status
 
@@ -1507,11 +1532,14 @@ main_loop:
 
 #else
 
+main_dispatch:
+	bl		mover_dispatcher
+
 main_arbitration:
-	bl		grasper_arbiter			/* Behavior Arbiter */
+	bl		mover_arbiter			/* Behavior Arbiter */
 
 main_actuation:
-	bl		grasper_controller		/* Actuator Controller */
+	bl		mover_controller		/* Actuator Controller */
 
 #endif
 
