@@ -396,8 +396,11 @@ light_loop:
 	bl		nx_sensors_analog_get_normalized	/* returned value in range 0-100% */
 	strb	r0, [r5, r6]
 
+#if 0
+	/* We don't need to delay since the main_loop spaces out the frequency of the A/D call */
 	mov		r0, #SYSTICK_3MS
 	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
+#endif
 
 	cmp		r6, #0
 	bhi		light_loop		/* Perform Min-Max calculation when we have enough samples */
@@ -420,8 +423,6 @@ calc_min_max:
  *          and reenables the Light Sensor LED output when not active.
  *
  *		R4: Address Pointer to Touch variables
- *	FIXME: Currently we force a 3 ms delay in this routine.
- *			It should be handled using timestamps similar to Claw Position Detection
  */
  get_touch_status:
  	push	{r4, lr}
@@ -452,8 +453,11 @@ no_touch:
 	bl		touch_lost
 
 exit_get_touch_status:
+#if 0
+	/* We don't need to delay since the main_loop spaces out the frequency of the A/D call */
 	mov		r0, #SYSTICK_3MS
 	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
+#endif
  	pop		{r4, pc}
 
 /* get_claw_status
