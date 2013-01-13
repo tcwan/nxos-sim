@@ -38,6 +38,8 @@
 	.equ	CLAWPOS_CHECK_INTERVAL, SYSTICK_100MS		/* Keep CLAWPOS_CHECK_INTERVAL <= ROBOT_SCHED_DURATION to avoid going out of sync */
 	.equ	ROBOT_SCHED_DURATION,	SYSTICK_100MS		/* 100 ms per robot scheduler loop */
 
+	.equ	IDLE_TONE_INTERVAL, SYSTICK_500MS			/* FIXME: May need to be > TONE_ENABLED_DUR to be safe */
+
 	/* LCD Display Constants */
 	.equ	TOUCH_ROW, 3				/* Touch Display Row Index */
 	.equ	SOUND_ROW, 4				/* Sound Display Row Index */
@@ -138,6 +140,9 @@ idle_behavior:        .asciz "BBR:Idle        "
 
 /* Scheduler Timeout value */
 sched_tick:	.word	0
+
+/* Speaker Tone Timeout value */
+speaker_timestamp: .word	0
 
 #ifdef DEBUG_MIN_MAX
 minstring: .asciz "min: "
@@ -862,13 +867,13 @@ exit_line_classification_dispatcher:
  */
 bbr_idle:
 	push	{r4, r5, lr}
-	/* Check time of last claw_position update */
+	/* Check time of last tone change */
 	ldr		r4, =tone_timestamp		/* pointer to tone_timestamp */
 	bl		nx_systick_get_ms		/* R0 has current timestamp */
 	mov		r5, r0					/* Store current timestamp in R5 for later use */
 
 	ldr		r1, [r4]			    /* retrieve previous tone_timestamp */
-	time_elapsed r0, r1, #TONE_ENABLED_DUR
+	time_elapsed r0, r1, #IDLE_TONE_INTERVAL
 	cmp		r0, #FALSE
 	beq		exit_bbr_idle			/* Has not reached target update time interval yet, exit */
 
@@ -1293,19 +1298,143 @@ controller_motor_cont:
 exit_grasper_controller:
 	pop		{r4-r8, pc}
 
+
+/* Motor Actuator
+ *    Internal routine to program motor if it has a new setting
+ *
+ * On Entry:
+ *     R0: Motor Index
+ *
+ * Scratch Registers:
+ *		R1: Current Speed Settings
+ *		R2: Current Brake Settings
+ *		R3: Previous Speed Settings
+ *		R4: Previous Brake settings
+ *      R5: Pointer to Actuator State variables
+ *      R6: Pointer to Previous Actuator State variables
+ */
+motor_actuator:
+	push	{r4, r5, r6, lr}
+
+	/* Motor Actuation */
+	ldr		r5, =actuator_state
+	ldr		r6, =prev_actuator_state
+	add		r5, r5, r0, lsl #1				/* Point to Current Motor Speed (offset = index x 2) */
+	add		r6, r6, r0, lsl #1				/* Point to Previous Motor Speed (offset = index x 2) */
+
+	/* Check against Previous Settings */
+	/* Note: We need to use LDR Signed Byte to make sure that negative Speed values are loaded correctly */
+	ldrsb	r1, [r5]				/* Current Motor Speed */
+	ldrb	r2, [r5, #1]			/* Current Brake (bool) */
+	ldrsb	r3, [r6]				/* Previous Motor Speed */
+	ldrb	r4, [r6, #1]			/* Previous Brake (bool) */
+
+	teq		r1, r3
+	bne		motor_update_settings	/* Different settings, so process it */
+	teq		r2, r4
+	beq		exit_motor_actuator		/* All settings unchanged, just skip to next entry */
+
+motor_update_settings:
+	strb	r1, [r6]
+	strb	r2, [r6, #1]			/* Copy Current Settings to Previous Settings */
+
+/*		(Scratch)
+ *		R0: Motor Index for calling nx_motors_* routines
+ *		R1: Speed or Brake settings for calling nx_motors_* routines
+ *		R3: MOTOR_INHIBITED Constant for comparisons
+ */
+
+check_new_motor_speed:
+	ldr		r3, =MOTOR_INHIBITED	/* Explicit load into R2. We can't use MOTOR_INHIBITED as an Operand 2 constant value */
+	teq		r1, r3					/* If Inhibited or Stopped, Stop Motor */
+	beq		motor_stop
+	teq		r1, #STOP_SPEED
+	beq		motor_stop
+
+motor_rotate:
+ 	bl		nx_motors_rotate		/* R1 contains Current Speed Settings */
+	b		exit_motor_actuator		/* Done */
+
+motor_stop:
+	mov		r1, r2					/* Copy Brake settings into Param 2 register (R1) */
+	bl		nx_motors_stop			/* R1 contains Current Brake Settings */
+
+exit_motor_actuator:
+	pop		{r4, r5, r6, lr}
+
+/* Motor Controller
+ *
+ *    Used to drive tribot wheels
+ */
+motor_controller:
+	push	{r4, r5, r6, lr}
+	pop		{r4, r5, r6, lr}
+
+
 /* Speaker Actuator Controller
  *
+ *    If Tone_Parameters(actuator_state) == Tone_Parameters(prev_actuator_state)
+ *       Check for tone duration expiry
+ *           If tone duration expired, inhibit Tone by updating prev_actuator_state
+ *    Else
+ *       Update prev_actuator_state with new tone parameters
+ *       Activate Speaker if not Tone Inhibited
+ *       Save timestamp for tone expiry
+ *    Endif
+ *
+ * Registers:
+ *    R0: Current Tone Freq
+ *    R1: Current Tone Duration
+ *    R2: Previous Tone Freq
+ *    R3: Previous Tone Duration
+ *    R4: Actuator State Struct Pointer
+ *    R5: Previous Actuator State Struct Pointer
+ *    R6: Speaker Timestamp Pointer
  */
 speaker_controller:
-	push	{lr}
+	push	{r4, r5, r6, lr}
 	/* Speaker Actuation */
-	ldr		r2, =actuator_tone_freq
-	ldr		r0, [r2]			/* Frequency */
-	ldr		r1, [r2, #4]		/* Duration */
+	ldr		r4, =actuator_state
+	ldr		r5, =prev_actuator_state
+	ldr		r6, =speaker_timestamp	/* Setup Pointer to speaker_timestamp */
+
+	ldr		r0, [r4, #TONE_FREQ]
+	ldr		r1, [r4, #TONE_DUR]
+	ldr		r2, [r5, #TONE_FREQ]
+	ldr		r3, [r5, #TONE_DUR]
+
+	cmp		r0, r2
+	bne		update_speaker_outputs
+	cmp		r1, r3
+	bne		update_speaker_outputs	/* If different, do the update */
+
+speaker_outputs_unchanged:
+	/* Assume that the freq and duration are both TONE_INHIBITED if any one is TONE_INHIBITED */
+	cmp		r2, #TONE_INHIBITED
+	beq		exit_speaker_controller
+	cmp		r3, #TONE_INHIBITED
+	beq		exit_speaker_controller	/* Skip update since we're already inhibited */
+
+	bl		nx_systick_get_ms		/* Current systick in R0 */
+	ldr		r1, [r6]				/* Prev speaker_timestamp in R1 */
+	time_elapsed r0, r1, r3			/* Returns TRUE if timer exceeded duration TONE_DUR (R3) */
+	cmp		r0, #FALSE				/* If Timer reached, return value is TRUE */
+	beq		exit_speaker_controller	/* Elapsed Duration < TONE_DUR, so exit */
+	mov		r0, #TONE_INHIBITED
+	mov		r1, #TONE_INHIBITED		/* Force update of Speaker Output */
+
+update_speaker_outputs:
+	str		r0, [r5, #TONE_FREQ]
+	str		r1, [r5, #TONE_DUR]		/* Store new tone in previous actuator state */
 	cmp		r0, #TONE_INHIBITED
-	blne	nx_sound_freq		/* Play Tone if Not TONE_INHIBITED */
+	blne	nx_sound_freq_async		/* Play Tone if Not TONE_INHIBITED */
+
+update_speaker_timestamp:
+	bl		nx_systick_get_ms		/* Current systick in R0 */
+	str		r0, [r6]				/* Store current systick in speaker_timestamp */
+
 exit_speaker_controller:
-	pop		{pc}
+	pop		{r4, r5, r6, pc}
 
 /** init_robot
  *    Robot Specific Initialization tasks
