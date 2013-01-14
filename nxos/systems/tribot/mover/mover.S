@@ -348,8 +348,9 @@ dispatcher_behavior_jumptable:
 	.word	bbr_follow_line
 	.word	bbr_open_claws
 	.word	bbr_grasp_object
+#if 0		/* FIXME: Undefined Behavior */
 	.word	bbr_move_object
-
+#endif
 	.equ	NUM_DISPATCHER_ENTRIES, (. - dispatcher_behavior_jumptable)/4
 
 actuation_controller_jumptable:
@@ -1026,7 +1027,7 @@ exit_speaker_controller:
 
 /* Behavior Routines */
 
-/* Line Follower Behavior
+/* Idle Behavior
  *    Always Activated
  *    Play a Tone while Active
  *      This is accomplished by switching between Tone generation and Silence
@@ -1068,7 +1069,7 @@ exit_bbr_idle:
  * Returns:
  *    Activated : Boolean
  */
-bbr_line_follower:
+bbr_follow_line:
 	/* Line Follower Algorithm:
 	 *    If Not Touched
 	 * 	     1. Determine if we're:
@@ -1089,49 +1090,17 @@ bbr_line_follower:
 	ldrb	r0, [r2]
 	teq		r0, #FALSE				/* Touched Activated returns 255, not equal to #TRUE */
 	movne	r0, #FALSE				/* Touched (TRUE), deactivate Behavior and exit */
-	bne		exit_bbr_line_follower
+	bne		exit_bbr_follow_line
 
-line_follower_check_line:
+follow_line_check_line:
 	/* Retrieve current min / max values */
 	ldr		r2, =min
 	ldrb	r0, [r2]			/* min */
 	ldrb	r1, [r2, #1]		/* max */
 
-#if 0
-	/* Line Determination:
-	 * The checks must be ordered from lower range to higher range
-	 * so the sequence is opposite of that given in the algorithm pseudocode
-	 */
-check_white:
-	cmp		r0, #WHITE_MIN
-	blo		found_unknown
-	cmp		r1, #WHITE_MAX
-	bhi		check_edge
-	bl		fast_cwrotate_motion
-	b		activate_bbr_line_follower
-check_edge:
-	cmp		r0, #EDGE_MIN
-	blo		found_unknown
-	cmp		r1, #EDGE_MAX
-	bhi		check_black
-	bl		slow_ccwrotate_motion
-	b		activate_bbr_line_follower
-check_black:
-	cmp		r0, #BLACK_MIN
-	blo		found_unknown
-	cmp		r1, #BLACK_MAX
-	bhi		found_unknown
-	bl		forward_motion
-	b		activate_bbr_line_follower
-
-found_unknown:
-	/* If we can't determine the color, stop moving */
-	bl		stop_motion
-#endif
-
 	bl		line_classification_dispatcher
 
-exit_bbr_line_follower:
+exit_bbr_follow_line:
 	pop		{pc}
 
 /* Open Claws Behavior
@@ -1338,6 +1307,7 @@ mover_dispatcher:
 exit_mover_dispatcher:
 	pop		{pc}
 
+#if 0
 //////// FIXME: Replace Grasper Arbiter with generic Dispatcher ///////////
 
 /* Grasper Arbiter
@@ -1381,6 +1351,17 @@ arbiter_idle:
 
 exit_grasper_arbiter:
 	bl		print_behavior_state
+	pop		{pc}
+#endif
+
+/* Mover Behavior Output Arbiter
+ *	FIXME: Description
+ *
+ *
+ */
+mover_arbiter:
+	push	{lr}
+exit_mover_arbiter:
 	pop		{pc}
 
 /* Mover Actuator Controller
