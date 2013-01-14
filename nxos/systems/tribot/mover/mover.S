@@ -353,6 +353,14 @@ dispatcher_behavior_jumptable:
 #endif
 	.equ	NUM_DISPATCHER_ENTRIES, (. - dispatcher_behavior_jumptable)/4
 
+output_arbiter_jumptable:
+	.word	tone_generator_arbiter
+	.word	grasping_arbiter
+	.word	movement_arbiter
+
+	.equ	NUM_ARBITER_ENTRIES, (. - output_arbiter_jumptable)/4
+
+
 actuation_controller_jumptable:
 	.word	speaker_controller
 	.word	claw_controller
@@ -871,6 +879,46 @@ next_line_classification_item:
 exit_line_classification_dispatcher:
     POP   {R4, R5, PC}
 
+/* Arbiter Routines */
+
+/* Actuation Element Retrieval
+ *	FIXME: Description
+ *
+ * Inputs:
+ *    R0: behavior_actuations array index
+ *    R1: element offset (for item)
+ *    R2: element type (byte = 0, word = 1) FIXME
+ *
+ * Returns:
+ *    R0: element value
+ *
+ * Register Usage:
+ *    R4: item pointer
+ *    R5: element offset (for item)
+ *    R6: behavior_actuations array pointer
+ *    R7: index counter
+ *
+ */
+actuation_element_retrieval:
+	push	{r4-r7, lr}
+	ldr		r6, =behavior_actuations
+
+retriever_outer_loop:
+	mov		r7, #NUM_BEHAVIORS
+
+retriever_inner_loop:
+	subs	r7, r7, #1						/* Convert behavior count to array index */
+	blt		exit_mover_arbiter
+
+retrieve_signed_byte_at_offset:
+	ldrsb	r0, [r4, r5]
+
+retrieve_word_at_offset:
+	ldr		r0, [r4, r5]
+
+exit_actuation_element_retrieval:
+	pop		{r4-r7, pc}
+
 /* Actuator Routines */
 
 /* Motor Actuator
@@ -1354,13 +1402,19 @@ exit_grasper_arbiter:
 	pop		{pc}
 #endif
 
-/* Mover Behavior Output Arbiter
- *	FIXME: Description
+
+
+/* Mover Arbiter
+ *	This is just a dispatch routine used to call the respective arbiters.
  *
- *
+ *   In this implementation, we iterate from last entry to first entry
  */
 mover_arbiter:
 	push	{lr}
+	ldr		r0, =output_arbiter_jumptable
+	mov		r1, #NUM_ARBITER_ENTRIES
+	bl		jumptable_dispatcher
+
 exit_mover_arbiter:
 	pop		{pc}
 
