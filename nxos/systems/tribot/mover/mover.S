@@ -462,131 +462,6 @@ light_led_disable:
 	bl		nx_sensors_analog_digi_clear
 	pop		{pc}
 
-#if 0
-/* Actuator Primitives */
-
-/* Enable Tone
- *    Play a Tone via Speaker
- */
-enable_tone:
-	push	{lr}
-	ldr		r2, =actuator_tone_freq	/* Pointer to Tone Variables */
-	ldr		r0, =TONE_ENABLED_FREQ
-	str		r0, [r2]			/* Frequency */
-	mov		r0, #TONE_ENABLED_DUR
-	str		r0, [r2, #4]		/* Duration */
-	pop		{pc}
-
-/* Disable Tone
- *    Silence Speaker
- */
-disable_tone:
-	push	{lr}
-	ldr		r2, =actuator_tone_freq	/* Pointer to Tone Variables */
-	mov		r0, #TONE_INHIBITED
-	str		r0, [r2]			/* Frequency */
-	str		r0, [r2, #4]		/* Duration */
-	pop		{pc}
-#endif
-
-
-/* BBR Copy Actuator Outputs
- *    Copy Activated Behavior Outputs to Arbiter behavior_actuations array
- *	  Inputs:
- *		R0: behavior_actuations Index
- *		R1: Pointer to Predefined Actuator Outputs for Behavior
- *
- *    Note: This is an internal routine shared by various functions
- */
-
-bbr_copy_actuator_outputs:
-	push	{lr}
-	ldr		r3, =behavior_actuations			/* candidate actuations array start address */
-	mov		r2, #SIZEOF_ACTUATOR_STATE			/* number of bytes per actuator_state struct */
-	mla		r0, r2, r0, r3						/* r0 = (sizeof(actuator_state) (r2) * index (r0)) + behavior_actuations start (r3) */
-	bl		memmove								/* r0: destination pointer, r1: source pointer, r2: number of bytes to copy */
-	pop		{pc}
-
-
-#if 0
-/* Update Actuator State
- *    Program Actuator State into Array
- *	  Inputs:
- *		R0: Port Index
- *		R1: Motor Speed
- *		R2: Brake (Boolean)
- *
- *    Note: This is an internal routine shared by various functions
- */
-_update_actuator_state:
-	push	{lr}
-	ldr		r3, =actuator_speedA	/* start address of actuator speed array */
-	strb	r1, [r3, r0]			/* store OPEN_SPEED into speed[CLAW_PORT] */
-	ldr		r3, =actuator_brakeA	/* start address of actuator brake array */
-	strb	r2, [r3, r0]			/* store Brake status into brake[CLAW_PORT] */
-	pop		{pc}
-
-/* Brake Wheels
- *    Stop and Brake Wheel Motors
- */
-brake_wheels:
-	push	{lr}
-	ldr		r2, =robot_state
-	mov		r1, #ROBOT_STOP
-	strb	r1, [r2]				/* State Change: Update new state */
-
-	mov		r0, #RWHEEL_PORT
- 	mov		r1, #STOP_SPEED
-	mov		r2, #TRUE				/* Brake Wheels when activating claw */
-	bl		_update_actuator_state	/* Does not modify R0, R1, R2 */
-	mov		r0, #LWHEEL_PORT
-	bl		_update_actuator_state	/* Does not modify R0, R1, R2 */
-
-	pop		{pc}
-#endif
-
-forward_motion:
-	push	{lr}
-/*	bl		plip */
-	ldr		r0, =black
-	bl		nx_progcontent
-
-	mov		r0, #BBR_FOLLOW_LINE
-	ldr		r1, =bbr_follow_line_black
-	bl		bbr_copy_actuator_outputs
-	pop		{pc}
-
-fast_cwrotate_motion:
-	push	{lr}
-/*	bl		plop */
-	ldr		r0, =white
-	bl		nx_progcontent
-
-	mov		r0, #BBR_FOLLOW_LINE
-	ldr		r1, =bbr_follow_line_white
-	bl		bbr_copy_actuator_outputs
-	pop		{pc}
-
-slow_ccwrotate_motion:
-	push	{lr}
-/*	bl		plap */
-	ldr		r0, =edge
-	bl		nx_progcontent
-
-	mov		r0, #BBR_FOLLOW_LINE
-	ldr		r1, =bbr_follow_line_edge
-	bl		bbr_copy_actuator_outputs
-	pop		{pc}
-
-stop_motion:
-	push	{lr}
-	ldr		r0, =unknown
-	bl		nx_progcontent
-
-	mov		r0, #BBR_FOLLOW_LINE
-	ldr		r1, =bbr_follow_line_unknown
-	bl		bbr_copy_actuator_outputs
-	pop		{pc}
 
 
 /* Sensor Input Routine */
@@ -611,7 +486,7 @@ light_loop:
 	strb	r0, [r5, r6]
 
 #if 0
-	/* We don't need to delay since the main_loop spaces out the frequency of the A/D call */
+	/* We do not need to delay since the main_loop spaces out the frequency of the A/D call */
 	mov		r0, #SYSTICK_3MS
 	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
 #endif
@@ -668,7 +543,7 @@ no_touch:
 
 exit_get_touch_status:
 #if 0
-	/* We don't need to delay since the main_loop spaces out the frequency of the A/D call */
+	/* We do not need to delay since the main_loop spaces out the frequency of the A/D call */
 	mov		r0, #SYSTICK_3MS
 	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
 #endif
@@ -686,9 +561,9 @@ get_sound_level:
 	ldr		r4, =soundval
 	strb	r0, [r4]							/* Store Sound Value */
 
-exit_get_sound_status:
+exit_get_sound_level:
 #if 0
-	/* We don't need to delay since the main_loop spaces out the frequency of the A/D call */
+	/* We do not need to delay since the main_loop spaces out the frequency of the A/D call */
 	mov		r0, #SYSTICK_3MS
 	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
 #endif
@@ -715,6 +590,83 @@ exit_get_claw_status:
 	pop		{r4, pc}
 
 /* Behavior Support Routines */
+
+/* BBR Copy Actuator Outputs
+ *    Copy Activated Behavior Outputs to Arbiter behavior_actuations array
+ *	  Inputs:
+ *		R0: behavior_actuations Index
+ *		R1: Pointer to Predefined Actuator Outputs for Behavior
+ *
+ *    Note: This is an internal routine shared by various functions
+ */
+
+bbr_copy_actuator_outputs:
+	push	{lr}
+	ldr		r3, =behavior_actuations			/* candidate actuations array start address */
+	mov		r2, #SIZEOF_ACTUATOR_STATE			/* number of bytes per actuator_state struct */
+	mla		r0, r2, r0, r3						/* r0 = (sizeof(actuator_state) (r2) * index (r0)) + behavior_actuations start (r3) */
+	bl		memmove								/* r0: destination pointer, r1: source pointer, r2: number of bytes to copy */
+	pop		{pc}
+
+/* Forward Motion
+ *    Move Forward, Don't Brake
+ *
+ */
+forward_motion:
+	push	{lr}
+/*	bl		plip */
+	ldr		r0, =black
+	bl		nx_progcontent
+
+	mov		r0, #BBR_FOLLOW_LINE
+	ldr		r1, =bbr_follow_line_black
+	bl		bbr_copy_actuator_outputs
+	pop		{pc}
+
+/* Fast Clockwise Rotation
+ *    Rotate CW, Don't Brake
+ *
+ */
+fast_cwrotate_motion:
+	push	{lr}
+/*	bl		plop */
+	ldr		r0, =white
+	bl		nx_progcontent
+
+	mov		r0, #BBR_FOLLOW_LINE
+	ldr		r1, =bbr_follow_line_white
+	bl		bbr_copy_actuator_outputs
+	pop		{pc}
+
+/* Slow Counter Clockwise Rotation
+ *    Rotate CCW, Don't Brake
+ *
+ */
+slow_ccwrotate_motion:
+	push	{lr}
+/*	bl		plap */
+	ldr		r0, =edge
+	bl		nx_progcontent
+
+	mov		r0, #BBR_FOLLOW_LINE
+	ldr		r1, =bbr_follow_line_edge
+	bl		bbr_copy_actuator_outputs
+	pop		{pc}
+
+/* Stop Motion
+ *    Stop Wheels, Don't Brake
+ *
+ */
+stop_motion:
+	push	{lr}
+	ldr		r0, =unknown
+	bl		nx_progcontent
+
+	mov		r0, #BBR_FOLLOW_LINE
+	ldr		r1, =bbr_follow_line_unknown
+	bl		bbr_copy_actuator_outputs
+	pop		{pc}
+
 
 /* Open Claw
  *    Activate Claw Motor (Open), Don't Brake
@@ -1148,6 +1100,14 @@ motor_controller:
 	bl		motor_actuator
 	mov		r0, #MOTOR_LWHEEL_OFFSET
 	bl		motor_actuator
+
+	/* Update Robot State */
+	ldr		r2, =actuator_state
+	ldr		r3, =prev_actuator_state
+	ldrb	r0, [r2, #MOTOR_STATE_OFFSET]
+	ldrb	r1, [r2, #(MOTOR_STATE_OFFSET+1)]
+	strb	r0, [r3, #MOTOR_STATE_OFFSET]
+	strb	r1, [r3, #(MOTOR_STATE_OFFSET+1)]
 	pop		{lr}
 
 /* Claw Controller
@@ -1508,54 +1468,6 @@ mover_dispatcher:
 exit_mover_dispatcher:
 	pop		{pc}
 
-#if 0
-//////// FIXME: Replace Grasper Arbiter with generic Dispatcher ///////////
-
-/* Grasper Arbiter
- *	 The Arbiter implemented here is a strict priority arbiter
- *   with lazy evaluation. i.e., behaviors are evaluated from highest
- *   priority to lowest priority. As soon as the evaluated behavior
- *   is active, it will ignore all lower priority behaviors and
- *   proceed to actuation. Otherwise, if the evaluated behavior is
- *   not active, the behavior with the next highest priority will be
- *   evaluated.
- *
- *   The lowest priority behavior will always be active as long as
- *   all other behaviors are not activated.
- *
- *   This is accomplished using a if-then-elseif-else control structure.
- *   All defined behaviors will be accessed via direct subroutine calls.
- */
-
-grasper_arbiter:
-	push	{lr}
-	/* Evaluate Behaviors */
-eval_grasp_object:
-	bl		bbr_grasp_object
-	teq		r0, #FALSE
-	ldrne	r0, =graspobject_behavior
-	bne		exit_grasper_arbiter		/* Activated, skip other behaviors */
-eval_open_claws:
-	bl		bbr_open_claws
-	teq		r0, #FALSE
-	ldrne	r0, =openclaws_behavior
-	bne		exit_grasper_arbiter		/* Activated, skip other behaviors */
-eval_line_follower:
-	bl		bbr_line_follower
-	teq		r0, #FALSE
-	ldrne	r0, =followline_behavior
-	bne		exit_grasper_arbiter		/* Activated, skip other behaviors */
-
-arbiter_idle:
-	bl		bbr_idle
-	ldr		r0, =idle_behavior
-
-exit_grasper_arbiter:
-	bl		print_behavior_state
-	pop		{pc}
-#endif
-
-
 
 /* Mover Arbiter
  *	This is just a dispatch routine used to call the respective arbiters.
@@ -1578,6 +1490,13 @@ exit_mover_arbiter:
  */
 mover_controller:
 	push	{lr}
+	ldr		r0, =actuator_state
+	ldr		r1, =prev_actuator_state
+	mov		r2, #SIZEOF_ACTUATOR_STATE
+	bl		memcmp						/* returns 0 if identical */
+	teq		r0, #0
+	beq		exit_mover_controller		/* Nothing has changed, skip controller update */
+
 	ldr		r0, =actuation_controller_jumptable
 	mov		r1, #NUM_CONTROLLER_ENTRIES
 	bl		jumptable_dispatcher
