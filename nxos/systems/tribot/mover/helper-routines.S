@@ -76,6 +76,7 @@ done_min_max:
 	pop		{r4-r6, lr}
 	bx		lr
 
+#if 0
 /*	MemMove Byte Copy Routine
  *     Finds the minimum and maximum values in an unsigned byte (char) array.
  *
@@ -121,7 +122,7 @@ done_min_max:
  */
 
 
-memmove:
+    arm_interwork memmove
     PUSH   {R0, R4, LR}    @ Keep s1, R4
     ADD    R3, R1, R2      @ R3: Source End := Source Begin (s2) + n
     CMP    R0, R1          @ Compare Dest Begin (s1) vs. Source Begin (s2)
@@ -145,7 +146,9 @@ memmove_loop:
     BNE    memmove_loop
 
 memmove_exit:
-    POP    {R0, R4, PC}    @ Restore R0, R4, retrieve LR to PC, exit
+    POP    {R0, R4, LR}    @ Restore R0, R4, retrieve LR to PC, exit
+    BX     LR
+#endif
 
 /*	MemCmp Buffer Compare Routine
  *     Determines whether the two buffers have identical unsigned byte contents.
@@ -170,7 +173,7 @@ memmove_exit:
  */
 
 
-memcmp:
+    arm_interwork memcmp
     PUSH   {R4, LR}        @ Keep R4, LR
     /* Sanity Checks */
     TEQ    R2, #0
@@ -189,7 +192,36 @@ memcmp_loop:
 memcmp_equal:
 	MOV    R0, #0          @ Flag as equal
 memcmp_exit:
-    POP    {R4, PC}        @ Restore R4, Retrieve LR to PC, exit
+    POP    {R4, LR}        @ Restore R4, Retrieve LR to PC, exit
+    BX     LR
 
+/* Jump Table Dispatcher
+ *
+ *   Internal routine used by various Dispatchers.
+ *
+ * On Entry:
+ *     R0: Jump Table Start Address
+ *     R1: Number of Jump Table entries
+ *
+ * Register Usage:
+ *	   R4: Jump Table Start Address
+ *	   R5: Number of Jump Table entries
+ *
+ *   In this implementation, we iterate from last entry to first entry
+ */
+    arm_interwork jumptable_dispatcher
+	push	{r4, r5, lr}
+	mov		r5, r0
+	mov		r4, r1					/* Use R4 and R5 to keep input parameters since R0 & R1 will be destroyed */
+dispatcher_loop:
+	ldr		r0, [r5], #4			/* Post-increment function pointer R5 to next dispatcher entry */
+    mov		lr, pc					/* LR = PC + 8 (pipeline) == done_dispatch */
+    mov		pc, r0					/* Dispatch Behavior */
+done_dispatch:
+	subs	r4, r4, #1
+	bne		dispatcher_loop
+exit_jumptable_dispatcher:
+	pop		{r4, r5, lr}
+	bx		lr
 
 .end

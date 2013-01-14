@@ -248,6 +248,11 @@ tone_dur:	.word	TONE_INHIBITED
 	.equ	TONE_FREQ, (tone_freq - actuator_state)
 	.equ	TONE_DUR, (tone_dur - actuator_state)
 
+/* NXT Motor Port to Actuator State variable Mapping */
+	.equ	MOTOR_CLAW_INDEX, (CLAW_PORT * 2)
+	.equ	MOTOR_RWHEEL_INDEX, (RWHEEL_PORT * 2)
+	.equ	MOTOR_LWHEEL_INDEX, (LWHEEL_PORT * 2)
+
 #if 0
 /* Debug offset calculations */
 actuator_state_offsets:
@@ -346,6 +351,13 @@ dispatcher_behavior_jumptable:
 	.word	bbr_move_object
 
 	.equ	NUM_DISPATCHER_ENTRIES, (. - dispatcher_behavior_jumptable)/4
+
+actuation_controller_jumptable:
+	.word	speaker_controller
+	.word	claw_controller
+	.word	motor_controller
+
+	.equ	NUM_CONTROLLER_ENTRIES, (. - actuation_controller_jumptable)/4
 
 .code 32
 .text
@@ -470,6 +482,7 @@ disable_tone:
 	pop		{pc}
 #endif
 
+
 /* BBR Copy Actuator Outputs
  *    Copy Activated Behavior Outputs to Arbiter behavior_actuations array
  *	  Inputs:
@@ -486,6 +499,7 @@ bbr_copy_actuator_outputs:
 	mla		r0, r2, r0, r3						/* r0 = (sizeof(actuator_state) (r2) * index (r0)) + behavior_actuations start (r3) */
 	bl		memmove								/* r0: destination pointer, r1: source pointer, r2: number of bytes to copy */
 	pop		{pc}
+
 
 #if 0
 /* Update Actuator State
@@ -856,6 +870,160 @@ next_line_classification_item:
 exit_line_classification_dispatcher:
     POP   {R4, R5, PC}
 
+/* Actuator Routines */
+
+/* Motor Actuator
+ *    Internal routine to program motor if it has a new setting
+ *
+ * On Entry:
+ *     R0: Motor Index
+ *
+ * Scratch Registers:
+ *		R1: Current Speed Settings
+ *		R2: Current Brake Settings
+ *		R3: Previous Speed Settings
+ *		R4: Previous Brake settings
+ *      R5: Pointer to Actuator State variables
+ *      R6: Pointer to Previous Actuator State variables
+ */
+motor_actuator:
+	push	{r4, r5, r6, lr}
+
+	/* Motor Actuation */
+	ldr		r5, =actuator_state
+	ldr		r6, =prev_actuator_state
+	add		r5, r5, r0, lsl #1				/* Point to Current Motor Speed (offset = index x 2) */
+	add		r6, r6, r0, lsl #1				/* Point to Previous Motor Speed (offset = index x 2) */
+
+	/* Check against Previous Settings */
+	/* Note: We need to use LDR Signed Byte to make sure that negative Speed values are loaded correctly */
+	ldrsb	r1, [r5]				/* Current Motor Speed */
+	ldrb	r2, [r5, #1]			/* Current Brake (bool) */
+	ldrsb	r3, [r6]				/* Previous Motor Speed */
+	ldrb	r4, [r6, #1]			/* Previous Brake (bool) */
+
+	teq		r1, r3
+	bne		motor_update_settings	/* Different settings, so process it */
+	teq		r2, r4
+	beq		exit_motor_actuator		/* All settings unchanged, just skip to next entry */
+
+motor_update_settings:
+	strb	r1, [r6]
+	strb	r2, [r6, #1]			/* Copy Current Settings to Previous Settings */
+
+/*		(Scratch)
+ *		R0: Motor Index for calling nx_motors_* routines
+ *		R1: Speed or Brake settings for calling nx_motors_* routines
+ *		R3: MOTOR_INHIBITED Constant for comparisons
+ */
+
+motor_check_new_speed:
+	ldr		r3, =MOTOR_INHIBITED	/* Explicit load into R2. We can't use MOTOR_INHIBITED as an Operand 2 constant value */
+	teq		r1, r3					/* If Inhibited or Stopped, Stop Motor */
+	beq		motor_stop
+	teq		r1, #STOP_SPEED
+	beq		motor_stop
+
+motor_rotate:
+ 	bl		nx_motors_rotate		/* R1 contains Current Speed Settings */
+	b		exit_motor_actuator		/* Done */
+
+motor_stop:
+	mov		r1, r2					/* Copy Brake settings into Param 2 register (R1) */
+	bl		nx_motors_stop			/* R1 contains Current Brake Settings */
+
+exit_motor_actuator:
+	pop		{r4, r5, r6, lr}
+
+/* Motor Controller
+ *
+ *    Used to drive tribot wheels
+ */
+motor_controller:
+	push	{lr}
+	/* FIXME: input checking, etc. */
+	mov		r0, #MOTOR_RWHEEL_INDEX
+	bl		motor_actuator
+	mov		r0, #MOTOR_LWHEEL_INDEX
+	bl		motor_actuator
+	pop		{lr}
+
+/* Claw Controller
+ *
+ *    Used to control tribot claws
+ */
+claw_controller:
+	push	{lr}
+	/* FIXME: input checking, etc. */
+	mov		r0, #MOTOR_CLAW_INDEX
+	bl		motor_actuator
+	pop		{lr}
+
+/* Speaker Actuator Controller
+ *
+ *    If Tone_Parameters(actuator_state) == Tone_Parameters(prev_actuator_state)
+ *       Check for tone duration expiry
+ *           If tone duration expired, inhibit Tone by updating prev_actuator_state
+ *    Else
+ *       Update prev_actuator_state with new tone parameters
+ *       Activate Speaker if not Tone Inhibited
+ *       Save timestamp for tone expiry
+ *    Endif
+ *
+ * Registers:
+ *    R0: Current Tone Freq
+ *    R1: Current Tone Duration
+ *    R2: Previous Tone Freq
+ *    R3: Previous Tone Duration
+ *    R4: Actuator State Struct Pointer
+ *    R5: Previous Actuator State Struct Pointer
+ *    R6: Speaker Timestamp Pointer
+ */
+speaker_controller:
+	push	{r4, r5, r6, lr}
+	/* Speaker Actuation */
+	ldr		r4, =actuator_state
+	ldr		r5, =prev_actuator_state
+	ldr		r6, =speaker_timestamp	/* Setup Pointer to speaker_timestamp */
+
+	ldr		r0, [r4, #TONE_FREQ]
+	ldr		r1, [r4, #TONE_DUR]
+	ldr		r2, [r5, #TONE_FREQ]
+	ldr		r3, [r5, #TONE_DUR]
+
+	cmp		r0, r2
+	bne		speaker_update_outputs
+	cmp		r1, r3
+	bne		speaker_update_outputs	/* If different, do the update */
+
+speaker_outputs_unchanged:
+	/* Assume that the freq and duration are both TONE_INHIBITED if any one is TONE_INHIBITED */
+	cmp		r2, #TONE_INHIBITED
+	beq		exit_speaker_controller
+	cmp		r3, #TONE_INHIBITED
+	beq		exit_speaker_controller	/* Skip update since we're already inhibited */
+
+	bl		nx_systick_get_ms		/* Current systick in R0 */
+	ldr		r1, [r6]				/* Prev speaker_timestamp in R1 */
+	time_elapsed r0, r1, r3			/* Returns TRUE if timer exceeded duration TONE_DUR (R3) */
+	cmp		r0, #FALSE				/* If Timer reached, return value is TRUE */
+	beq		exit_speaker_controller	/* Elapsed Duration < TONE_DUR, so exit */
+	mov		r0, #TONE_INHIBITED
+	mov		r1, #TONE_INHIBITED		/* Force update of Speaker Output */
+
+speaker_update_outputs:
+	str		r0, [r5, #TONE_FREQ]
+	str		r1, [r5, #TONE_DUR]		/* Store new tone in previous actuator state */
+	cmp		r0, #TONE_INHIBITED
+	blne	nx_sound_freq_async		/* Play Tone if Not TONE_INHIBITED */
+
+speaker_update_timestamp:
+	bl		nx_systick_get_ms		/* Current systick in R0 */
+	str		r0, [r6]				/* Store current systick in speaker_timestamp */
+
+exit_speaker_controller:
+	pop		{r4, r5, r6, pc}
+
 /* Behavior Routines */
 
 /* Line Follower Behavior
@@ -1156,23 +1324,19 @@ bbr_grasp_object_active:
 exit_bbr_grasp_object:
 	pop		{r4, r5, r6, pc}
 
+
 /* Mover Dispatcher
  *
  *   In this implementation, we iterate from lowest priority to highest priority behaviors
  */
 mover_dispatcher:
-	push	{r4, r5, lr}
-	ldr		r5, =dispatcher_behavior_jumptable
-	mov		r4, #NUM_DISPATCHER_ENTRIES
-dispatcher_loop:
-	ldr		r0, [r5], #4			/* Post-increment function pointer R5 to next dispatcher entry */
-    mov		lr, pc					/* LR = PC + 8 (pipeline) == done_dispatch */
-    mov		pc, r0					/* Dispatch Behavior */
-done_dispatch:
-	subs	r4, r4, #1
-	bne		dispatcher_loop
+	push	{lr}
+	ldr		r0, =dispatcher_behavior_jumptable
+	mov		r1, #NUM_DISPATCHER_ENTRIES
+	bl		jumptable_dispatcher
+
 exit_mover_dispatcher:
-	pop		{r4, r5, pc}
+	pop		{pc}
 
 //////// FIXME: Replace Grasper Arbiter with generic Dispatcher ///////////
 
@@ -1219,222 +1383,20 @@ exit_grasper_arbiter:
 	bl		print_behavior_state
 	pop		{pc}
 
-/* Grasper Actuator Controller
+/* Mover Actuator Controller
+ *	This is just a dispatch routine used to call the respective controllers.
  *
- *		(Scratch)
- *		R0: Motor Index for calling nx_motors_* routines
- *		R1: Speed or Brake settings for calling nx_motors_* routines
- *		R2: MOTOR_INHIBITED Constant for comparisons
- *
- *		(Preserved)
- *		R4: Address Pointer to Actuator Speed variables
- *		R5: Address Pointer to Actuator Brake variables
- *		R6: Address Pointer to Previous Actuator Speed variables
- *		R7: Address Pointer to Previous Actuator Brake variables
- *		R8: Motor Port Index
+ *   In this implementation, we iterate from last entry to first entry
  */
-grasper_controller:
-	push	{r4-r8, lr}
+mover_controller:
+	push	{lr}
+	ldr		r0, =actuation_controller_jumptable
+	mov		r1, #NUM_CONTROLLER_ENTRIES
+	bl		jumptable_dispatcher
 
-	/* Motor Actuation State Addresses
-	 */
-	ldr		r4, =actuator_oldspeedA	/* Previous Speed Base Address */
-	ldr		r5, =actuator_speedA	/* Speed Base Address */
-	ldr		r6, =actuator_oldbrakeA	/* Previous Brake Base Address */
-	ldr		r7, =actuator_brakeA	/* Brake Base Address */
-	mov		r8, #LWHEEL_PORT		/* Use Port Index as loop counter */
+exit_mover_controller:
+	pop		{pc}
 
-controller_motor_loop:
-
-/*		(Scratch)
- *		R0: Previous Speed Settings
- *		R1: Current Speed Settings
- *		R2: Previous Brake settings
- *		R3: Current Brake Settings
- */
-	/* Check against Previous Settings */
-	/* Note: We need to use LDR Signed Byte to make sure that negative Speed values are loaded correctly */
-
-	ldrsb	r0, [r4, r8]			/* Previous Motor Speed, retrieved from Speed Base Address + (Port Index) */
-	ldrsb	r1, [r5, r8]			/* Current: Motor Speed, retrieved from Speed Base Address + (Port Index) */
-	ldrb	r2, [r6, r8]			/* Previous Brake (bool), retrieved from Brake Base Address + (Port Index) */
-	ldrb	r3, [r7, r8]			/* Current Brake (bool), retrieved from Brake Base Address + (Port Index) */
-
-	teq		r0, r1
-	bne		controller_update_settings	/* Different settings, so process it */
-	teq		r2, r3
-	beq		controller_motor_cont	/* All settings unchanged, just skip to next entry */
-
-controller_update_settings:
-	strb	r1, [r4, r8]
-	strb	r3, [r6, r8]			/* Copy Current Settings to Previous Settings */
-
-/*		(Scratch)
- *		R0: Motor Index for calling nx_motors_* routines
- *		R1: Speed or Brake settings for calling nx_motors_* routines
- *		R2: MOTOR_INHIBITED Constant for comparisons
- */
-
-check_new_motor_speed:
-	mov		r0, r8					/* Copy to Param 1 register for calling nx_motors_* routines */
-	ldr		r2, =MOTOR_INHIBITED	/* Explicit load into R2. We can't use MOTOR_INHIBITED as an Operand 2 constant value */
-	teq		r1, r2					/* If Inhibited or Stopped, Stop Motor */
-	beq		controller_motor_stop
-	teq		r1, #STOP_SPEED
-	beq		controller_motor_stop
-
-controller_motor_rotate:
- 	bl		nx_motors_rotate
-	b		controller_motor_cont	/* Check next loop */
-
-controller_motor_stop:
-	mov		r1, r3					/* Copy Brake to Param 2 register (R1) for calling nx_motors_* routines */
-	bl		nx_motors_stop
-
-controller_motor_cont:
-	subs	r8, r8, #1				/* Decrement Port Index */
-	bpl		controller_motor_loop	/* Exit when Index is negative */
-
-exit_grasper_controller:
-	pop		{r4-r8, pc}
-
-
-/* Motor Actuator
- *    Internal routine to program motor if it has a new setting
- *
- * On Entry:
- *     R0: Motor Index
- *
- * Scratch Registers:
- *		R1: Current Speed Settings
- *		R2: Current Brake Settings
- *		R3: Previous Speed Settings
- *		R4: Previous Brake settings
- *      R5: Pointer to Actuator State variables
- *      R6: Pointer to Previous Actuator State variables
- */
-motor_actuator:
-	push	{r4, r5, r6, lr}
-
-	/* Motor Actuation */
-	ldr		r5, =actuator_state
-	ldr		r6, =prev_actuator_state
-	add		r5, r5, r0, lsl #1				/* Point to Current Motor Speed (offset = index x 2) */
-	add		r6, r6, r0, lsl #1				/* Point to Previous Motor Speed (offset = index x 2) */
-
-	/* Check against Previous Settings */
-	/* Note: We need to use LDR Signed Byte to make sure that negative Speed values are loaded correctly */
-	ldrsb	r1, [r5]				/* Current Motor Speed */
-	ldrb	r2, [r5, #1]			/* Current Brake (bool) */
-	ldrsb	r3, [r6]				/* Previous Motor Speed */
-	ldrb	r4, [r6, #1]			/* Previous Brake (bool) */
-
-	teq		r1, r3
-	bne		motor_update_settings	/* Different settings, so process it */
-	teq		r2, r4
-	beq		exit_motor_actuator		/* All settings unchanged, just skip to next entry */
-
-motor_update_settings:
-	strb	r1, [r6]
-	strb	r2, [r6, #1]			/* Copy Current Settings to Previous Settings */
-
-/*		(Scratch)
- *		R0: Motor Index for calling nx_motors_* routines
- *		R1: Speed or Brake settings for calling nx_motors_* routines
- *		R3: MOTOR_INHIBITED Constant for comparisons
- */
-
-check_new_motor_speed:
-	ldr		r3, =MOTOR_INHIBITED	/* Explicit load into R2. We can't use MOTOR_INHIBITED as an Operand 2 constant value */
-	teq		r1, r3					/* If Inhibited or Stopped, Stop Motor */
-	beq		motor_stop
-	teq		r1, #STOP_SPEED
-	beq		motor_stop
-
-motor_rotate:
- 	bl		nx_motors_rotate		/* R1 contains Current Speed Settings */
-	b		exit_motor_actuator		/* Done */
-
-motor_stop:
-	mov		r1, r2					/* Copy Brake settings into Param 2 register (R1) */
-	bl		nx_motors_stop			/* R1 contains Current Brake Settings */
-
-exit_motor_actuator:
-	pop		{r4, r5, r6, lr}
-
-/* Motor Controller
- *
- *    Used to drive tribot wheels
- */
-motor_controller:
-	push	{r4, r5, r6, lr}
-	pop		{r4, r5, r6, lr}
-
-
-/* Speaker Actuator Controller
- *
- *    If Tone_Parameters(actuator_state) == Tone_Parameters(prev_actuator_state)
- *       Check for tone duration expiry
- *           If tone duration expired, inhibit Tone by updating prev_actuator_state
- *    Else
- *       Update prev_actuator_state with new tone parameters
- *       Activate Speaker if not Tone Inhibited
- *       Save timestamp for tone expiry
- *    Endif
- *
- * Registers:
- *    R0: Current Tone Freq
- *    R1: Current Tone Duration
- *    R2: Previous Tone Freq
- *    R3: Previous Tone Duration
- *    R4: Actuator State Struct Pointer
- *    R5: Previous Actuator State Struct Pointer
- *    R6: Speaker Timestamp Pointer
- */
-speaker_controller:
-	push	{r4, r5, r6, lr}
-	/* Speaker Actuation */
-	ldr		r4, =actuator_state
-	ldr		r5, =prev_actuator_state
-	ldr		r6, =speaker_timestamp	/* Setup Pointer to speaker_timestamp */
-
-	ldr		r0, [r4, #TONE_FREQ]
-	ldr		r1, [r4, #TONE_DUR]
-	ldr		r2, [r5, #TONE_FREQ]
-	ldr		r3, [r5, #TONE_DUR]
-
-	cmp		r0, r2
-	bne		update_speaker_outputs
-	cmp		r1, r3
-	bne		update_speaker_outputs	/* If different, do the update */
-
-speaker_outputs_unchanged:
-	/* Assume that the freq and duration are both TONE_INHIBITED if any one is TONE_INHIBITED */
-	cmp		r2, #TONE_INHIBITED
-	beq		exit_speaker_controller
-	cmp		r3, #TONE_INHIBITED
-	beq		exit_speaker_controller	/* Skip update since we're already inhibited */
-
-	bl		nx_systick_get_ms		/* Current systick in R0 */
-	ldr		r1, [r6]				/* Prev speaker_timestamp in R1 */
-	time_elapsed r0, r1, r3			/* Returns TRUE if timer exceeded duration TONE_DUR (R3) */
-	cmp		r0, #FALSE				/* If Timer reached, return value is TRUE */
-	beq		exit_speaker_controller	/* Elapsed Duration < TONE_DUR, so exit */
-	mov		r0, #TONE_INHIBITED
-	mov		r1, #TONE_INHIBITED		/* Force update of Speaker Output */
-
-update_speaker_outputs:
-	str		r0, [r5, #TONE_FREQ]
-	str		r1, [r5, #TONE_DUR]		/* Store new tone in previous actuator state */
-	cmp		r0, #TONE_INHIBITED
-	blne	nx_sound_freq_async		/* Play Tone if Not TONE_INHIBITED */
-
-update_speaker_timestamp:
-	bl		nx_systick_get_ms		/* Current systick in R0 */
-	str		r0, [r6]				/* Store current systick in speaker_timestamp */
-
-exit_speaker_controller:
-	pop		{r4, r5, r6, pc}
 
 /** init_robot
  *    Robot Specific Initialization tasks
