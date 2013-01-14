@@ -184,7 +184,7 @@ claw_movement:  .byte 0
 /* Signal Inhibition Values */
 #define MOTOR_INHIBITED 0xFFFFFF80
 #define MOTOR_INHIBITED_BYTE (MOTOR_INHIBITED & 0xFF)		/* For data initialization use */
-#define TONE_INHIBITED 0x0
+#define TONE_INHIBITED 0x80000000
 
 /*
  * Whenever we change data types, we need to reinvoke alignment,
@@ -249,9 +249,12 @@ tone_dur:	.word	TONE_INHIBITED
 	.equ	TONE_DUR, (tone_dur - actuator_state)
 
 /* NXT Motor Port to Actuator State variable Mapping */
-	.equ	MOTOR_CLAW_INDEX, (CLAW_PORT * 2)
-	.equ	MOTOR_RWHEEL_INDEX, (RWHEEL_PORT * 2)
-	.equ	MOTOR_LWHEEL_INDEX, (LWHEEL_PORT * 2)
+	.equ	MOTOR_CLAW_OFFSET, (CLAW_PORT * 2)
+	.equ	MOTOR_RWHEEL_OFFSET, (RWHEEL_PORT * 2)
+	.equ	MOTOR_LWHEEL_OFFSET, (LWHEEL_PORT * 2)
+	.equ	MOTOR_STATE_OFFSET, CURR_STATE
+	.equ	SPEAKER_TONE_OFFSET, TONE_FREQ
+	.equ	SPEAKER_DURATION_OFFSET, TONE_DUR
 
 #if 0
 /* Debug offset calculations */
@@ -265,11 +268,6 @@ actuator_state_offsets:
 prev_actuator_state: .space	SIZEOF_ACTUATOR_STATE, 0x0
 .align
 behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
-
-/* Sensor/Motor Offset Assignments */
-	.equ	CLAW_SPEED, SPEEDA
-	.equ	RIGHT_WHEEL_SPEED, SPEEDB
-	.equ	LEFT_WHEEL_SPEED, SPEEDC
 
 .text
 .align 4
@@ -304,7 +302,7 @@ behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
 	/* Idle Behavior Actuation Outputs */
 	init_actuator_state bbr_idle_on, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, ROBOT_STOP, TONE_ENABLED_FREQ, TONE_ENABLED_DUR
 			/* Idle Behavior (sound on) */
-	init_actuator_state bbr_idle_off, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, ROBOT_STOP, TONE_INHIBITED, TONE_ENABLED_DUR
+	init_actuator_state bbr_idle_off, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, ROBOT_STOP, 0x0, TONE_ENABLED_DUR
 			/* Idle Behavior (sound off) */
 
 /* Line Classification Advanced Jump Table */
@@ -775,7 +773,7 @@ has_claw_started_moving:
 	push	{r4, lr}
 	ldr		r4, =actuator_state
 	ldr		r2, =MOTOR_INHIBITED
-	ldrb	r0, [r4, #CLAW_SPEED]	/* Retrieve currently programmed claw actuator speed */
+	ldrb	r0, [r4, #MOTOR_CLAW_OFFSET]	/* Retrieve currently programmed claw actuator speed */
 	teq		r0, r2
 	beq		claw_is_stopped			/* If Motor Inhibited, it is equivalent to Stopped */
 	teq		r0, #STOP_SPEED
@@ -881,43 +879,198 @@ exit_line_classification_dispatcher:
 
 /* Arbiter Routines */
 
-/* Actuation Element Retrieval
- *	FIXME: Description
+/* Get Actuation Element Double Unsigned Byte Macro
+ *	Retrieve the Double Unsigned Byte at memory address given by:
+ *    R0 = behavior_actuations_ptr_reg[array_index_reg] + element1_offset
+ *    R1 = behavior_actuations_ptr_reg[array_index_reg] + element2_offset
  *
  * Inputs:
- *    R0: behavior_actuations array index
- *    R1: element offset (for item)
- *    R2: element type (byte = 0, word = 1) FIXME
+ *    behavior_actuations_ptr_reg: Register containing behavior_actuations pointer
+ *    array_index_reg: Register containing array index
+ *    element1_offset: Element 1 Offset
+ *    element2_offset: Element 2 Offset
  *
  * Returns:
- *    R0: element value
+ *    R0: signed byte1 element value
+ *    R1: signed byte2 element value
  *
  * Register Usage:
- *    R4: item pointer
- *    R5: element offset (for item)
- *    R6: behavior_actuations array pointer
- *    R7: index counter
+ *    R1: Pointer calculation register
  *
  */
-actuation_element_retrieval:
-	push	{r4-r7, lr}
-	ldr		r6, =behavior_actuations
+	.macro get_actuation_element_double_unsigned_byte behavior_actuations_ptr_reg, array_index_reg, element1_offset, element2_offset
+	mov		r1, #SIZEOF_ACTUATOR_STATE
+	mla		r1, \array_index_reg, r1, \behavior_actuations_ptr_reg	/* r1 = (index (array_index_reg) * sizeof(actuator_state) (r1)) + behavior_actuations_ptr_reg */
+	ldrb	r0, [r1, \element1_offset]
+	ldrb	r1, [r1, \element2_offset]
+	.endm
 
-retriever_outer_loop:
-	mov		r7, #NUM_BEHAVIORS
+/* Get Actuation Element Double Signed Byte Macro
+ *	Retrieve the Double Signed Byte at memory address given by:
+ *    R0 = behavior_actuations_ptr_reg[array_index_reg] + element1_offset
+ *    R1 = behavior_actuations_ptr_reg[array_index_reg] + element2_offset
+ *
+ * Inputs:
+ *    behavior_actuations_ptr_reg: Register containing behavior_actuations pointer
+ *    array_index_reg: Register containing array index
+ *    element1_offset: Element 1 Offset
+ *    element2_offset: Element 2 Offset
+ *
+ * Returns:
+ *    R0: signed byte1 element value
+ *    R1: signed byte2 element value
+ *
+ * Register Usage:
+ *    R1: Pointer calculation register
+ *
+ */
+	.macro get_actuation_element_double_signed_byte behavior_actuations_ptr_reg, array_index_reg, element1_offset, element2_offset
+	mov		r1, #SIZEOF_ACTUATOR_STATE
+	mla		r1, \array_index_reg, r1, \behavior_actuations_ptr_reg	/* r1 = (index (array_index_reg) * sizeof(actuator_state) (r1)) + behavior_actuations_ptr_reg */
+	ldrsb	r0, [r1, \element1_offset]
+	ldrsb	r1, [r1, \element2_offset]							/* Technically we want unsigned byte, but it doesn't make a difference since we store the byte without checking it */
+	.endm
 
-retriever_inner_loop:
-	subs	r7, r7, #1						/* Convert behavior count to array index */
-	blt		exit_mover_arbiter
+/* Get Actuation Element Double Word Macro
+ *	Retrieve the Double Word at memory address given by:
+ *    R0 = behavior_actuations_ptr_reg[array_index_reg] + element1_offset
+ *    R1 = behavior_actuations_ptr_reg[array_index_reg] + element2_offset
+ *
+ * Inputs:
+ *    behavior_actuations_ptr_reg: Register containing behavior_actuations pointer
+ *    array_index_reg: Register containing array index
+ *    element1_offset: Element 1 Offset
+ *    element2_offset: Element 2 Offset
+ *
+ * Returns:
+ *    R0: word1 element value
+ *    R1: word2 element value
+ *
+ * Register Usage:
+ *    R1: Pointer calculation register
+ *
+ */
+	.macro get_actuation_element_double_word behavior_actuations_ptr_reg, array_index_reg, element1_offset, element2_offset
+	mov		r1, #SIZEOF_ACTUATOR_STATE
+	mla		r1, \array_index_reg, r1, \behavior_actuations_ptr_reg	/* r1 = (index (array_index_reg) * sizeof(actuator_state) (r1)) + behavior_actuations_ptr_reg */
+	ldr		r0, [r1, \element1_offset]
+	ldr		r1, [r1, \element2_offset]
+	.endm
 
-retrieve_signed_byte_at_offset:
-	ldrsb	r0, [r4, r5]
+/* Movement Arbiter
+ *	Determine the Movement (Wheel) Actuation output values
+ *
+ * Register Usage:
+ *    R4: Pointer to behavior_actuations Array, actuator_state struct
+ *    R5: Number of Behaviors
+ *
+ */
 
-retrieve_word_at_offset:
-	ldr		r0, [r4, r5]
+movement_arbiter:
+	push	{r4-r9, lr}
+	ldr		r4, =behavior_actuations
+	mov		r5, #NUM_BEHAVIORS				/* Assume at least 1 */
+movement_arbiter_loop:
+	subs	r5, r5, #1						/* Convert behavior count to array index */
+	blt		movement_copy_output			/* Last entry is Inhibited, copy it over anyway */
 
-exit_actuation_element_retrieval:
-	pop		{r4-r7, pc}
+	/* Right Wheel Outputs */
+	get_actuation_element_double_signed_byte r4, r5, #MOTOR_RWHEEL_OFFSET, #(MOTOR_RWHEEL_OFFSET+1)
+	mov		r6, r0
+	mov		r7, r1
+
+	/* Left Wheel Outputs */
+	get_actuation_element_double_signed_byte r4, r5, #MOTOR_LWHEEL_OFFSET, #(MOTOR_LWHEEL_OFFSET+1)
+	mov		r8, r0
+	mov		r9, r1
+
+	/* Robot State value */
+	get_actuation_element_double_unsigned_byte r4, r5, #MOTOR_STATE_OFFSET, #(MOTOR_STATE_OFFSET+1) /* Padding offset */
+	/* R0: curr_state, R1: Padding */
+
+	/* Movement is Inhibited if either of the Movement Speed is MOTOR_INHIBITED */
+	cmp		r6, #MOTOR_INHIBITED
+	beq		movement_arbiter_loop			/* Movement output is Inhibited, skip to next Behavior */
+	cmp		r8, #MOTOR_INHIBITED
+	beq		movement_arbiter_loop			/* Movement output is Inhibited, skip to next Behavior */
+
+movement_copy_output:
+	ldr		r4, =actuator_state
+	strb	r6, [r4, #MOTOR_RWHEEL_OFFSET]
+	strb	r7, [r4, #(MOTOR_RWHEEL_OFFSET+1)]
+	strb	r8, [r4, #MOTOR_LWHEEL_OFFSET]
+	strb	r9, [r4, #(MOTOR_LWHEEL_OFFSET+1)]
+	strb	r0, [r4, #MOTOR_STATE_OFFSET]		/* Store activated Movement Speeds, Brake Statuses, and Motor State to actuator_state */
+	strb	r1, [r4, #(MOTOR_STATE_OFFSET+1)]
+
+exit_movement_arbiter:
+	pop		{r4-r9, pc}						/* and exit */
+
+/* Grasping Arbiter
+ *	Determine the Grasping Actuation output values
+ *
+ * Register Usage:
+ *    R4: Pointer to behavior_actuations Array, actuator_state struct
+ *    R5: Number of Behaviors
+ *
+ */
+
+grasping_arbiter:
+	push	{r4, r5, lr}
+	ldr		r4, =behavior_actuations
+	mov		r5, #NUM_BEHAVIORS				/* Assume at least 1 */
+grasping_arbiter_loop:
+	subs	r5, r5, #1						/* Convert behavior count to array index */
+	blt		grasping_copy_output			/* Last entry is Inhibited, copy it over anyway */
+
+	get_actuation_element_double_signed_byte r4, r5, #MOTOR_CLAW_OFFSET, #(MOTOR_CLAW_OFFSET+1)
+
+	/* Grasping is Inhibited if Grasping Speed is MOTOR_INHIBITED */
+	cmp		r0, #MOTOR_INHIBITED
+	beq		grasping_arbiter_loop			/* Actuator output is Inhibited, skip to next Behavior */
+
+grasping_copy_output:
+	ldr		r4, =actuator_state
+	strb	r0, [r4, #MOTOR_CLAW_OFFSET]	/* Store activated Grasping Speed and Brake Status to actuator_state */
+	strb	r1, [r4, #(MOTOR_CLAW_OFFSET+1)]
+
+exit_grasping_arbiter:
+	pop		{r4, r5, pc}						/* and exit */
+
+
+/* Tone Generator Arbiter
+ *	Determine the Tone Generator Actuation output values
+ *
+ * Register Usage:
+ *    R4: Pointer to behavior_actuations Array, actuator_state struct
+ *    R5: Number of Behaviors
+ *
+ */
+
+tone_generator_arbiter:
+	push	{r4, r5, lr}
+	ldr		r4, =behavior_actuations
+	mov		r5, #NUM_BEHAVIORS				/* Assume at least 1 */
+tone_generator_arbiter_loop:
+	subs	r5, r5, #1						/* Convert behavior count to array index */
+	blt		tone_generator_copy_output		/* Last entry is Inhibited, copy it over anyway */
+
+	get_actuation_element_double_word r4, r5, #SPEAKER_TONE_OFFSET, #SPEAKER_DURATION_OFFSET
+
+	/* Tone is Inhibited if both Tone and Duration are TONE_INHIBITED */
+	cmp		r0, #TONE_INHIBITED
+	bne		tone_generator_copy_output		/* Found a non-Inhibited entry, copy it over */
+
+	cmp		r1, #TONE_INHIBITED
+	beq		tone_generator_arbiter_loop		/* Actuator output is Inhibited, skip to next Behavior */
+
+tone_generator_copy_output:
+	ldr		r4, =actuator_state
+	str		r0, [r4, #SPEAKER_TONE_OFFSET]	/* Store activated Tone and Duration to actuator_state */
+	str		r1, [r4, #SPEAKER_DURATION_OFFSET]
+
+exit_tone_generator_arbiter:
+	pop		{r4, r5, pc}					/* and exit */
 
 /* Actuator Routines */
 
@@ -991,9 +1144,9 @@ exit_motor_actuator:
 motor_controller:
 	push	{lr}
 	/* FIXME: input checking, etc. */
-	mov		r0, #MOTOR_RWHEEL_INDEX
+	mov		r0, #MOTOR_RWHEEL_OFFSET
 	bl		motor_actuator
-	mov		r0, #MOTOR_LWHEEL_INDEX
+	mov		r0, #MOTOR_LWHEEL_OFFSET
 	bl		motor_actuator
 	pop		{lr}
 
@@ -1004,7 +1157,7 @@ motor_controller:
 claw_controller:
 	push	{lr}
 	/* FIXME: input checking, etc. */
-	mov		r0, #MOTOR_CLAW_INDEX
+	mov		r0, #MOTOR_CLAW_OFFSET
 	bl		motor_actuator
 	pop		{lr}
 
