@@ -205,21 +205,21 @@ memcmp_exit:
  *
  * Register Usage:
  *	   R4: Jump Table Start Address
- *	   R5: Number of Jump Table entries
+ *	   R5: Jump Table index
  *
  *   In this implementation, we iterate from last entry to first entry
  */
     arm_interwork jumptable_dispatcher
 	push	{r4, r5, lr}
-	mov		r5, r0
-	mov		r4, r1					/* Use R4 and R5 to keep input parameters since R0 & R1 will be destroyed */
+	mov		r4, r0					/* Use R4 and R5 to keep input parameters since R0 & R1 will be destroyed */
+	sub		r5, r1, #1				/* Convert jump table count to array index */
 dispatcher_loop:
-	ldr		r0, [r5], #4			/* Post-increment function pointer R5 to next dispatcher entry */
+	ldr		r0, [r4, r5, lsl #2]	/* Load dispatch routine address from table */
     mov		lr, pc					/* LR = PC + 8 (pipeline) == done_dispatch */
     mov		pc, r0					/* Dispatch Behavior */
 done_dispatch:
-	subs	r4, r4, #1
-	bne		dispatcher_loop
+	subs	r5, r5, #1
+	bge		dispatcher_loop			/* Continue if index is 0 or positive */
 exit_jumptable_dispatcher:
 	pop		{r4, r5, lr}
 	bx		lr
