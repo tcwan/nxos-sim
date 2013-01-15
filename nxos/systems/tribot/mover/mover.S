@@ -31,8 +31,8 @@
 #undef ENABLE_BREAKPOINTS
 /* To disable Claw Debugging, change the following to #undef DEBUG_CLAW */
 #undef DEBUG_CLAW
-/* To disable Min-Max Debugging, change the following to #undef DEBUG_MIN_MAX */
-#undef DEBUG_MIN_MAX
+/* To disable Sound Input Level Debugging, change the following to #undef DEBUG_SOUND */
+#define DEBUG_SOUND
 
 	.equ	MAX_ITERATIONS, 0x0FFFF
 	.equ	CLAWPOS_CHECK_INTERVAL, SYSTICK_100MS		/* Keep CLAWPOS_CHECK_INTERVAL <= ROBOT_SCHED_DURATION to avoid going out of sync */
@@ -43,6 +43,7 @@
 	/* LCD Display Constants */
 	.equ	TOUCH_ROW, 3				/* Touch Display Row Index */
 	.equ	SOUND_ROW, 4				/* Sound Display Row Index */
+	.equ	SNDLVL_ROW, 6				/* Sound Level Display Row Index */
 	.equ	BEHAVIOR_ROW, 6				/* Behavior Display Row Index */
 
 	/* Light Sensor Color Detection Intensity (0-100) ranges */
@@ -60,7 +61,9 @@
 	.equ	TOUCH_THRESH, 256
 
 	/* Sound Sensor Threshold (0-100) range */
-	.equ	SOUND_THRESH, 50			/* FIXME: Needs calibration */
+	/* Sound Sensor Readings: No Sound: 98+; Loud Sound: towards 0 */
+	.equ	SOUND_MAX, 70			/* FIXME: Needs calibration */
+	.equ	SOUND_MIN, 60			/* FIXME: Needs calibration */
 
 	/* Wheel Control Constants */
 	.equ	STOP_SPEED, 0
@@ -98,6 +101,19 @@ ENUM_VAL(CLAW_CLOSING)        	  /**< Clow Closing. */
 ENUM_END(claw_movement_state_t)
 /*@}*/
 
+/** @name Sound Following State Enums
+ *
+ * Sound Following State.
+ * The enums must be consecutive, starting from 0
+ */
+/*@{*/
+ENUM_BEGIN
+ENUM_VALASSIGN(SOUND_WAITING, 0)  /**< Initial State. */
+ENUM_VAL(SOUND_SEEKING)           /**< Seeking Sound Source. */
+ENUM_VAL(SOUND_FOLLOWING)         /**< Following Sound Source. */
+ENUM_END(sound_following_state_t)
+/*@}*/
+
 /** @name Behavior Enums
  *
  * Behaviors.
@@ -121,7 +137,8 @@ ENUM_END(bbr_behavior_t)
 title:	  .asciz "Mover Bot"
 pressed:  .asciz "Touch: Pressed "
 released: .asciz "Touch: Released"
-sound:    .asciz "Sound: Detected"
+maxsound: .asciz "Sound: Following"
+minsound: .asciz "Sound: Detected"
 nosound:  .asciz "Sound: No Sound"
 opened:   .asciz " Claw: Opened"
 closed:   .asciz " Claw: Closed"
@@ -135,6 +152,11 @@ openclaws_behavior:	  .asciz "BBR:Open-Claws  "
 followline_behavior:  .asciz "BBR:Follow-Line "
 idle_behavior:        .asciz "BBR:Idle        "
 
+#ifdef DEBUG_SOUND
+minstring: .asciz "min: "
+maxstring: .asciz "max: "
+blankspace: .asciz "    "
+#endif
 
 .data
 .align 4
@@ -145,23 +167,16 @@ sched_tick:	.word	0
 /* Speaker Tone Timeout value */
 speaker_timestamp: .word	0
 
-#ifdef DEBUG_MIN_MAX
-minstring: .asciz "min: "
-maxstring: .asciz "max: "
-#endif
 
 /* Light Sensor Variables */
-readings: .space  n, 0x0
-min:      .byte   0
-max:      .byte   0
-
-#if 0
-/* Line Following Behavior Variables */
-robot_state: .byte	0
-#endif
+light_readings: .space  n, 0x0
+light_min:      .byte   0
+light_max:      .byte   0
 
 /* Sound Sensor Variables */
-soundval: .byte   0
+sound_levels:	.space  n, 0x0
+sound_min:		.byte   0
+sound_max:		.byte	0
 
 /* Touch Sensor Variables */
 touchval: .byte   0
@@ -299,8 +314,6 @@ behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
 			/* CCW slow rotation */
 	init_actuator_state bbr_follow_line_white, MOTOR_INHIBITED_BYTE, FALSE, STOP_SPEED, FALSE, FASTROT_SPEED, FALSE, ROBOT_CW, TONE_SILENCED_FREQ, ROBOT_SCHED_DURATION
 			/* CW fast rotation */
-	init_actuator_state bbr_follow_line_unknown, MOTOR_INHIBITED_BYTE, FALSE, STOP_SPEED, FALSE, STOP_SPEED, FALSE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
-			/* Stop motion (cruise) */
 
 	/* Idle Behavior Actuation Outputs */
 	init_actuator_state bbr_idle_on, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, ROBOT_STOP, TONE_ENABLED_FREQ, TONE_ENABLED_DUR
@@ -310,7 +323,7 @@ behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
 
 /* Line Classification Advanced Jump Table */
 /* Use macros to make line classification declaration consistent */
-    .macro  line_classification_item entry_label, minval, maxval, action_routine
+    .macro  adv_jump_table_item entry_label, minval, maxval, action_routine
 .align
 \entry_label:
     .byte   \minval, \maxval
@@ -322,6 +335,7 @@ behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
     .equ    MINVAL_OFFSET, 0
     .equ    MAXVAL_OFFSET, 1
     .equ    ACTION_ROUTINE_OFFSET, 4
+    .equ    SIZEOF_ADV_JUMP_TABLE_ITEM, 8
 
 /* The execution clauses for each line_type enum are implemented
  * as routines which do not need any input parameters
@@ -331,14 +345,13 @@ behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
 .text
 .align 4
 line_classification_jumptable:
-    line_classification_item line_outside, WHITE_MIN, WHITE_MAX, fast_cwrotate_motion
-    line_classification_item line_edge, EDGE_MIN, EDGE_MAX, slow_ccwrotate_motion
-    line_classification_item line_line, BLACK_MIN, BLACK_MAX, forward_motion
-    line_classification_item line_unknown, 0, 255, stop_motion
+    adv_jump_table_item line_outside, WHITE_MIN, WHITE_MAX, fast_cwrotate_motion
+    adv_jump_table_item line_edge, EDGE_MIN, EDGE_MAX, slow_ccwrotate_motion
+    adv_jump_table_item line_line, BLACK_MIN, BLACK_MAX, forward_motion
+    adv_jump_table_item line_unknown, 0, 255, stop_motion
 
 /* End of Table address constant */
     .equ    line_classification_jumptable_end, .
-    .equ    SIZEOF_LINE_CLASSIFICATION_ITEM, 8
 
 /* BBR Dispatcher Jump Table Definition */
 .text
@@ -435,9 +448,16 @@ touch_lost:
 	bl		nx_progcontentX
 	pop		{pc}
 
+sound_following:
+	push	{lr}
+	ldr		r0, =maxsound
+	mov		r1, #SOUND_ROW
+	bl		nx_progcontentX
+	pop		{pc}
+
 sound_detected:
 	push	{lr}
-	ldr		r0, =sound
+	ldr		r0, =minsound
 	mov		r1, #SOUND_ROW
 	bl		nx_progcontentX
 	pop		{pc}
@@ -467,41 +487,112 @@ light_led_disable:
 
 /* Sensor Input Routine */
 
+/* collect_samples
+ *    Sensor Sample Collection Routine
+ *
+ * On Entry:
+ *     R0: Sensor Port Index
+ *     R1: Address of Sample Array
+ *     R2: Number of samples to collect
+ *     Assumes that R0 <= R1 (i.e., min <= max)
+ *
+ * Register Usage:
+ *      R4: Sensor Port Index
+ *		R5: Address Pointer to Light Sensor Readings Array
+ *		R6: Sensor Readings Array Index
+ */
+collect_samples:
+	push	{r4, r5, r6, lr}
+	mov		r4, r0				/* Keep Sensor Port Index in R4 */
+	mov		r5, r1				/* Keep Address of Sample Array in R5 */
+	subs	r6, r2, #1			/* Convert Number of readings to collect into Array Index */
+
+sample_loop:
+	mov		r0, r4
+	bl		nx_sensors_analog_get_normalized	/* returned value in range 0-100% */
+	strb	r0, [r5, r6]
+
+	mov		r0, #SYSTICK_3MS
+	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
+
+	subs	r6, r6, #1
+	bge		sample_loop			/* Continue if index is 0 or positive */
+
+	pop		{r4, r5, r6, pc}
+
+
 /* get_light_readings
  *    Light Sensor Input Routine
  *    Collect n readings, and obtain min and max values
  *    Note: This routine blocks until all samples have been collected
- *		R5: Address Pointer to Light Sensor Readings Array
- *		R6: Index of Light Sensor Readings
  */
 get_light_readings:
-	push	{r5, r6, lr}
-	ldr		r5, =readings
-	mov		r6, #n		/* Number of readings to collect */
+	push	{lr}
 
-light_loop:
-
-	sub		r6, r6, #1	/* Convert to Index */
 	mov		r0, #LIGHT_PORT
-	bl		nx_sensors_analog_get_normalized	/* returned value in range 0-100% */
-	strb	r0, [r5, r6]
+	ldr		r1, =light_readings
+	mov		r2, #n		/* Number of readings to collect */
+	bl		collect_samples
 
+calc_light_min_max:
+	mov		r0, #n
+	ldr		r1, =light_readings
+	ldr		r2, =light_min
+	ldr		r3, =light_max
+	bl		min_max_ubyte
+	pop		{pc}
+
+/* get_sound_levels
+ *    Sound Sensor Input Routine
+ *    Collect n readings, and obtain min and max values
+ *    Note: This routine blocks until all samples have been collected
+ */
+get_sound_levels:
+ 	push	{lr}
+	mov		r0, #SOUND_PORT
+	ldr		r1, =sound_levels
+	mov		r2, #n		/* Number of readings to collect */
+	bl		collect_samples
+
+calc_sound_min_max:
+	mov		r0, #n
+	ldr		r1, =sound_levels
+	ldr		r2, =sound_min
+	ldr		r3, =sound_max
+	bl		min_max_ubyte
+
+#ifdef DEBUG_SOUND
+
+	mov		r0, #0
+	mov		r1, #SNDLVL_ROW
+	bl 		nx_display_cursor_set_pos
+	ldr		r0, =minstring
+	bl		nx_display_string
+
+	ldr		r2, =sound_min
+	ldrb	r0, [r2]
+	bl		nx_display_int
+
+	mov		r0, #0
+	mov		r1, #SNDLVL_ROW+1
+	bl 		nx_display_cursor_set_pos
+	ldr		r0, =maxstring
+	bl		nx_display_string
+
+	ldr		r2, =sound_max
+	ldrb	r0, [r2]
+	bl		nx_display_int
 #if 0
-	/* We do not need to delay since the main_loop spaces out the frequency of the A/D call */
-	mov		r0, #SYSTICK_3MS
-	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
+	ldr		r0, =blankspace
+	bl		nx_display_string
 #endif
 
-	cmp		r6, #0
-	bhi		light_loop		/* Perform Min-Max calculation when we have enough samples */
+#endif
 
-calc_min_max:
-	mov		r0, #n
-	ldr		r1, =readings
-	ldr		r2, =min
-	ldr		r3, =max
-	bl		min_max_ubyte
-	pop		{r5, r6, pc}
+exit_get_sound_levels:
+ 	pop		{pc}
+
+
 
 /* get_touch_status
  *    Retrieve Touch Sensor value and store in variable touchval,
@@ -549,27 +640,6 @@ exit_get_touch_status:
 	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
 #endif
  	pop		{r4, pc}
-
-/* get_sound_level
- *    Retrieve Sound Sensor level and store in variable soundval
- *
- *		R4: Address Pointer to Sound variables
- */
-get_sound_level:
- 	push	{r4, lr}
-	mov		r0, #SOUND_PORT
-	bl		nx_sensors_analog_get_normalized	/* returned value in range 0-100% */
-	ldr		r4, =soundval
-	strb	r0, [r4]							/* Store Sound Value */
-
-exit_get_sound_level:
-#if 0
-	/* We do not need to delay since the main_loop spaces out the frequency of the A/D call */
-	mov		r0, #SYSTICK_3MS
-	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
-#endif
- 	pop		{r4, pc}
-
 
 /* get_claw_status
  *    Retrieve Claw Motor Tachometer value and store in variable claw_position.
@@ -655,7 +725,7 @@ slow_ccwrotate_motion:
 	pop		{pc}
 
 /* Stop Motion
- *    Stop Wheels, Don't Brake
+ *    Stop Wheels, Don't Brake (Inhibit Follow Line Behavior Outputs)
  *
  */
 stop_motion:
@@ -664,7 +734,7 @@ stop_motion:
 	bl		nx_progcontent
 
 	mov		r0, #BBR_FOLLOW_LINE
-	ldr		r1, =bbr_follow_line_unknown
+	ldr		r1, =bbr_behavior_inhibited
 	bl		bbr_copy_actuator_outputs
 	pop		{pc}
 
@@ -779,6 +849,8 @@ exit_has_claw_fully_stopped:
  * On Entry:
  *     R0: Light Sensor Min Value (8-bit unsigned)
  *     R1: Light Sensor Max Value (8-bit unsigned)
+ *     R2: Line Classification Table Item Pointer
+ *     R3: Line Classification Table End Pointer
  *     Assumes that R0 <= R1 (i.e., min <= max)
  *
  * On Exit:
@@ -794,25 +866,24 @@ exit_has_claw_fully_stopped:
  *
  * Linear Search used, since number of cases are small
  */
-line_classification_dispatcher:
+advanced_jump_table_dispatcher:
     PUSH    {R4, R5, LR}
-    LDR     R4, =line_classification_jumptable
-    LDR     R5, =line_classification_jumptable_end
+    MOV		R4, R2
+    MOV		R5, R3
 
-
-line_classification_loop:
+jump_table_loop:
     CMP    R4, R5
 	MOVHS  R0, #FALSE
-    BHS    exit_line_classification_dispatcher	/* Traversed entire table, exit (not found) */
+    BHS    exit_advanced_jump_table_dispatcher	/* Traversed entire table, exit (not found) */
 
     LDRB   R2, [R4, #MINVAL_OFFSET]         /* Retrieve Min & Max Bounds for Item */
     LDRB   R3, [R4, #MAXVAL_OFFSET]
 
 check_bounds:
     CMP    R0, R2
-    BLO    next_line_classification_item    /* R0 < MINVAL */
+    BLO    next_jump_table_item    /* R0 < MINVAL */
     CMP    R1, R3
-    BHI    next_line_classification_item    /* R1 > MAXVAL */
+    BHI    next_jump_table_item    /* R1 > MAXVAL */
 
 matched_classification_item:
 /* (MINVAL <= R0) && (R1 <= MAXVAL) */
@@ -821,13 +892,13 @@ matched_classification_item:
     MOV    PC, R0                           /* Call Action Routines */
 done_execution:
 	MOV		R0, #TRUE					/* Return Line Classification Found (TRUE) */
-    B       exit_line_classification_dispatcher
+    B       exit_advanced_jump_table_dispatcher
 
-next_line_classification_item:
-    ADD    R4, R4, #SIZEOF_LINE_CLASSIFICATION_ITEM
-    B      line_classification_loop         /* Repeat for next item */
+next_jump_table_item:
+    ADD    R4, R4, #SIZEOF_ADV_JUMP_TABLE_ITEM
+    B      jump_table_loop         /* Repeat for next item */
 
-exit_line_classification_dispatcher:
+exit_advanced_jump_table_dispatcher:
     POP   {R4, R5, PC}
 
 /* Arbiter Routines */
@@ -1256,11 +1327,13 @@ bbr_follow_line:
 
 follow_line_check_line:
 	/* Retrieve current min / max values */
-	ldr		r2, =min
+	ldr		r2, =light_min
 	ldrb	r0, [r2]			/* min */
 	ldrb	r1, [r2, #1]		/* max */
+	ldr		r2, =line_classification_jumptable
+	ldr		r3, =line_classification_jumptable_end
 
-	bl		line_classification_dispatcher
+	bl		advanced_jump_table_dispatcher
 
 exit_bbr_follow_line:
 	pop		{pc}
@@ -1741,7 +1814,7 @@ main_loop:
 
 	/* Perform Sensor Readings */
 	bl		get_light_readings
-	bl		get_sound_level
+	bl		get_sound_levels
 	bl		get_touch_status
 	bl		get_claw_status
 
