@@ -28,7 +28,7 @@
 #include "systems/tribot/include/macros.h"
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
-#define ENABLE_BREAKPOINTS
+#undef ENABLE_BREAKPOINTS
 /* To disable Claw Debugging, change the following to #undef DEBUG_CLAW */
 #undef DEBUG_CLAW
 /* To disable Min-Max Debugging, change the following to #undef DEBUG_MIN_MAX */
@@ -272,10 +272,11 @@ behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
 .text
 .align 4
 	/* Predefined Actuator Outputs for various behaviors */
+	init_actuator_state bbr_behavior_inhibited, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
+			/* Inhibit Behavior */
 
 	/* Move-Object Behavior Actuation Outputs */
 	init_actuator_state bbr_move_object_stub, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
-			/* Stub (All Inhibit) */
 	init_actuator_state bbr_move_object_seek, CLOSE_SPEED, TRUE, SLOWROT_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_SEEK, TONE_INHIBITED, TONE_INHIBITED
 			/* Seeking */
 	init_actuator_state bbr_move_object_follow, CLOSE_SPEED, TRUE, FWD_SPEED, TRUE, FWD_SPEED, TRUE, ROBOT_FWD, TONE_INHIBITED, TONE_INHIBITED
@@ -1328,14 +1329,21 @@ bbr_start_opening_claws:
 
 bbr_claw_check_still_opening:
 	teq		r0, #CLAW_OPENING
-	movne	r0, #FALSE				/* Not Claw Opening Movement, deactivate Behavior and exit */
-	bne		exit_bbr_open_claws
+	beq		bbr_claw_still_opening
+
+	/* Not Claw Opening Movement, deactivate Behavior and exit */
+	mov		r0, #BBR_OPEN_CLAWS
+	ldr		r1, =bbr_behavior_inhibited
+	bl		bbr_copy_actuator_outputs
+
+	mov		r0, #FALSE				/* Deactivate Behavior */
+	b		exit_bbr_grasp_object
 
 bbr_claw_still_opening:
 	bl		has_claw_started_moving
 	teq		r0, #FALSE				/* Check if claw motor is moving (non-zero speed) */
 
-	moveq		r0, #BBR_OPEN_CLAWS
+	moveq	r0, #BBR_OPEN_CLAWS
 	bleq	open_claw				/* Keep opening claw */
 	beq		bbr_open_claws_active	/* No, still Opening, keep Behavior active */
 
@@ -1424,8 +1432,15 @@ bbr_start_grasp_object:
 
 bbr_claw_check_still_closing:
 	teq		r0, #CLAW_CLOSING
-	movne	r0, #FALSE				/* Not Claw Closing Movement, deactivate Behavior and exit */
-	bne		exit_bbr_grasp_object
+	beq		bbr_claw_still_closing
+
+	/* Not Claw Closing Movement, deactivate Behavior and exit */
+	mov		r0, #BBR_GRASP_OBJECT
+	ldr		r1, =bbr_behavior_inhibited
+	bl		bbr_copy_actuator_outputs
+
+	mov		r0, #FALSE				/* Deactivate Behavior */
+	b		exit_bbr_grasp_object
 
 bbr_claw_still_closing:
 	bl		has_claw_started_moving
@@ -1461,7 +1476,7 @@ exit_bbr_grasp_object:
 bbr_move_object:
 	push	{r4, r5, lr}
 	mov		r0, #BBR_MOVE_OBJECT
-	ldr		r1, =bbr_move_object_stub
+	ldr		r1, =bbr_behavior_inhibited
 	bl		bbr_copy_actuator_outputs
 	mov		r0, #FALSE
 	pop		{r4, r5, pc}
