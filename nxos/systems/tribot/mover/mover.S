@@ -28,7 +28,7 @@
 #include "systems/tribot/include/macros.h"
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
-#undef ENABLE_BREAKPOINTS
+#define ENABLE_BREAKPOINTS
 /* To disable Claw Debugging, change the following to #undef DEBUG_CLAW */
 #undef DEBUG_CLAW
 /* To disable Min-Max Debugging, change the following to #undef DEBUG_MIN_MAX */
@@ -117,7 +117,7 @@ ENUM_END(bbr_behavior_t)
 
 .text
 .align 4
-title:	  .asciz "Grasper Bot"
+title:	  .asciz "Mover Bot"
 pressed:  .asciz "Touch: Pressed "
 released: .asciz "Touch: Released"
 sound:    .asciz "Sound: Detected"
@@ -252,15 +252,15 @@ tone_dur:	.word	TONE_INHIBITED
 	.equ	MOTOR_CLAW_OFFSET, (CLAW_PORT * 2)
 	.equ	MOTOR_RWHEEL_OFFSET, (RWHEEL_PORT * 2)
 	.equ	MOTOR_LWHEEL_OFFSET, (LWHEEL_PORT * 2)
-	.equ	MOTOR_STATE_OFFSET, CURR_STATE
-	.equ	SPEAKER_TONE_OFFSET, TONE_FREQ
-	.equ	SPEAKER_DURATION_OFFSET, TONE_DUR
+	/* GNU As BUG: DO NOT define equates based on TONE_FREQ and TONE_DUR,
+	 * the offsets come out incorrect, and TONE_FREQ and TONE_DUR are modified as well ??!! */
 
 #if 0
 /* Debug offset calculations */
 actuator_state_offsets:
 	.byte SPEEDA, BRAKEA, SPEEDB, BRAKEB
-	.byte SPEEDC, BRAKEC, CURR_STATE, TONE_FREQ, TONE_DUR
+	.byte SPEEDC, BRAKEC, CURR_STATE
+	.byte TONE_FREQ, TONE_DUR
 	.byte SIZEOF_ACTUATOR_STATE
 #endif
 
@@ -274,6 +274,8 @@ behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
 	/* Predefined Actuator Outputs for various behaviors */
 
 	/* Move-Object Behavior Actuation Outputs */
+	init_actuator_state bbr_move_object_stub, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
+			/* Stub (All Inhibit) */
 	init_actuator_state bbr_move_object_seek, CLOSE_SPEED, TRUE, SLOWROT_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_SEEK, TONE_INHIBITED, TONE_INHIBITED
 			/* Seeking */
 	init_actuator_state bbr_move_object_follow, CLOSE_SPEED, TRUE, FWD_SPEED, TRUE, FWD_SPEED, TRUE, ROBOT_FWD, TONE_INHIBITED, TONE_INHIBITED
@@ -346,9 +348,7 @@ dispatcher_behavior_jumptable:
 	.word	bbr_follow_line
 	.word	bbr_open_claws
 	.word	bbr_grasp_object
-#if 0		/* FIXME: Undefined Behavior */
 	.word	bbr_move_object
-#endif
 	.equ	NUM_DISPATCHER_ENTRIES, (. - dispatcher_behavior_jumptable)/4
 
 output_arbiter_jumptable:
@@ -937,7 +937,7 @@ movement_arbiter_loop:
 	mov		r9, r1
 
 	/* Robot State value */
-	get_actuation_element_double_unsigned_byte r4, r5, #MOTOR_STATE_OFFSET, #(MOTOR_STATE_OFFSET+1) /* Padding offset */
+	get_actuation_element_double_unsigned_byte r4, r5, #CURR_STATE, #(CURR_STATE+1) /* Padding offset */
 	/* R0: curr_state, R1: Padding */
 
 	/* Movement is Inhibited if either of the Movement Speed is MOTOR_INHIBITED */
@@ -952,8 +952,8 @@ movement_copy_output:
 	strb	r7, [r4, #(MOTOR_RWHEEL_OFFSET+1)]
 	strb	r8, [r4, #MOTOR_LWHEEL_OFFSET]
 	strb	r9, [r4, #(MOTOR_LWHEEL_OFFSET+1)]
-	strb	r0, [r4, #MOTOR_STATE_OFFSET]		/* Store activated Movement Speeds, Brake Statuses, and Motor State to actuator_state */
-	strb	r1, [r4, #(MOTOR_STATE_OFFSET+1)]
+	strb	r0, [r4, #CURR_STATE]		/* Store activated Movement Speeds, Brake Statuses, and Motor State to actuator_state */
+	strb	r1, [r4, #(CURR_STATE+1)]
 
 exit_movement_arbiter:
 	pop		{r4-r9, pc}						/* and exit */
@@ -1007,7 +1007,7 @@ tone_generator_arbiter_loop:
 	subs	r5, r5, #1						/* Convert behavior count to array index */
 	blt		tone_generator_copy_output		/* Last entry is Inhibited, copy it over anyway */
 
-	get_actuation_element_double_word r4, r5, #SPEAKER_TONE_OFFSET, #SPEAKER_DURATION_OFFSET
+	get_actuation_element_double_word r4, r5, #TONE_FREQ, #TONE_DUR
 
 	/* Tone is Inhibited if both Tone and Duration are TONE_INHIBITED */
 	cmp		r0, #TONE_INHIBITED
@@ -1018,8 +1018,8 @@ tone_generator_arbiter_loop:
 
 tone_generator_copy_output:
 	ldr		r4, =actuator_state
-	str		r0, [r4, #SPEAKER_TONE_OFFSET]	/* Store activated Tone and Duration to actuator_state */
-	str		r1, [r4, #SPEAKER_DURATION_OFFSET]
+	str		r0, [r4, #TONE_FREQ]	/* Store activated Tone and Duration to actuator_state */
+	str		r1, [r4, #TONE_DUR]
 
 exit_tone_generator_arbiter:
 	pop		{r4, r5, pc}					/* and exit */
@@ -1087,7 +1087,7 @@ motor_stop:
 	bl		nx_motors_stop			/* R1 contains Current Brake Settings */
 
 exit_motor_actuator:
-	pop		{r4, r5, r6, lr}
+	pop		{r4, r5, r6, pc}
 
 /* Motor Controller
  *
@@ -1096,19 +1096,19 @@ exit_motor_actuator:
 motor_controller:
 	push	{lr}
 	/* FIXME: input checking, etc. */
-	mov		r0, #MOTOR_RWHEEL_OFFSET
+	mov		r0, #RWHEEL_PORT
 	bl		motor_actuator
-	mov		r0, #MOTOR_LWHEEL_OFFSET
+	mov		r0, #LWHEEL_PORT
 	bl		motor_actuator
 
 	/* Update Robot State */
 	ldr		r2, =actuator_state
 	ldr		r3, =prev_actuator_state
-	ldrb	r0, [r2, #MOTOR_STATE_OFFSET]
-	ldrb	r1, [r2, #(MOTOR_STATE_OFFSET+1)]
-	strb	r0, [r3, #MOTOR_STATE_OFFSET]
-	strb	r1, [r3, #(MOTOR_STATE_OFFSET+1)]
-	pop		{lr}
+	ldrb	r0, [r2, #CURR_STATE]
+	ldrb	r1, [r2, #(CURR_STATE+1)]
+	strb	r0, [r3, #CURR_STATE]
+	strb	r1, [r3, #(CURR_STATE+1)]
+	pop		{pc}
 
 /* Claw Controller
  *
@@ -1117,9 +1117,9 @@ motor_controller:
 claw_controller:
 	push	{lr}
 	/* FIXME: input checking, etc. */
-	mov		r0, #MOTOR_CLAW_OFFSET
+	mov		r0, #CLAW_PORT
 	bl		motor_actuator
-	pop		{lr}
+	pop		{pc}
 
 /* Speaker Actuator Controller
  *
@@ -1454,6 +1454,17 @@ bbr_grasp_object_active:
 exit_bbr_grasp_object:
 	pop		{r4, r5, r6, pc}
 
+/* Move Object Behavior
+ *    Stub
+ *
+ */
+bbr_move_object:
+	push	{r4, r5, lr}
+	mov		r0, #BBR_MOVE_OBJECT
+	ldr		r1, =bbr_move_object_stub
+	bl		bbr_copy_actuator_outputs
+	mov		r0, #FALSE
+	pop		{r4, r5, pc}
 
 /* Mover Dispatcher
  *
