@@ -81,7 +81,8 @@
 	/* Tone Control Constants
 	 */
 	.equ	TONE_ENABLED_FREQ, 2500				/* Hz */
-	.equ	TONE_ENABLED_DUR, 500				/* ms */
+	.equ	TONE_SILENCED_FREQ, 0				/* Hz */
+	.equ	TONE_ENABLED_DUR, 250				/* ms */
 
 
 /** @name Claw Movement State Enums
@@ -276,28 +277,27 @@ behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
 			/* Inhibit Behavior */
 
 	/* Move-Object Behavior Actuation Outputs */
-	init_actuator_state bbr_move_object_stub, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
-	init_actuator_state bbr_move_object_seek, CLOSE_SPEED, TRUE, SLOWROT_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_SEEK, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_move_object_seek, CLOSE_SPEED, TRUE, SLOWROT_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_SEEK, TONE_SILENCED_FREQ, ROBOT_SCHED_DURATION
 			/* Seeking */
-	init_actuator_state bbr_move_object_follow, CLOSE_SPEED, TRUE, FWD_SPEED, TRUE, FWD_SPEED, TRUE, ROBOT_FWD, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_move_object_follow, CLOSE_SPEED, TRUE, FWD_SPEED, TRUE, FWD_SPEED, TRUE, ROBOT_FWD, TONE_SILENCED_FREQ, ROBOT_SCHED_DURATION
 			/* Follow */
 
 	/* Open-Claws/Grasp-Object Behavior Actuation Outputs */
-	init_actuator_state bbr_claws_open, OPEN_SPEED, FALSE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_claws_open, OPEN_SPEED, FALSE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_SILENCED_FREQ, ROBOT_SCHED_DURATION
 			/* Open Claws */
-	init_actuator_state bbr_claws_close, CLOSE_SPEED, FALSE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_claws_close, CLOSE_SPEED, FALSE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_SILENCED_FREQ, ROBOT_SCHED_DURATION
 			/* Close Claws (Grasp Object) */
-	init_actuator_state bbr_claws_unlock, STOP_SPEED, FALSE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_claws_unlock, STOP_SPEED, FALSE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_SILENCED_FREQ, ROBOT_SCHED_DURATION
 			/* Unlock Claws */
-	init_actuator_state bbr_claws_lock, STOP_SPEED, TRUE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_claws_lock, STOP_SPEED, TRUE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_SILENCED_FREQ, ROBOT_SCHED_DURATION
 			/* Lock Claws */
 
 	/* Follow-Line Behavior Actuation Outputs for Line Types */
-	init_actuator_state bbr_follow_line_black,	MOTOR_INHIBITED_BYTE, FALSE, FWD_SPEED, FALSE, FWD_SPEED, FALSE, ROBOT_FWD, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_follow_line_black,	MOTOR_INHIBITED_BYTE, FALSE, FWD_SPEED, FALSE, FWD_SPEED, FALSE, ROBOT_FWD, TONE_SILENCED_FREQ, ROBOT_SCHED_DURATION
 			/* Forward motion */
-	init_actuator_state bbr_follow_line_edge, MOTOR_INHIBITED_BYTE, FALSE, SLOWROT_SPEED, FALSE, STOP_SPEED, FALSE, ROBOT_CCW, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_follow_line_edge, MOTOR_INHIBITED_BYTE, FALSE, SLOWROT_SPEED, FALSE, STOP_SPEED, FALSE, ROBOT_CCW, TONE_SILENCED_FREQ, ROBOT_SCHED_DURATION
 			/* CCW slow rotation */
-	init_actuator_state bbr_follow_line_white, MOTOR_INHIBITED_BYTE, FALSE, STOP_SPEED, FALSE, FASTROT_SPEED, FALSE, ROBOT_CW, TONE_INHIBITED, TONE_INHIBITED
+	init_actuator_state bbr_follow_line_white, MOTOR_INHIBITED_BYTE, FALSE, STOP_SPEED, FALSE, FASTROT_SPEED, FALSE, ROBOT_CW, TONE_SILENCED_FREQ, ROBOT_SCHED_DURATION
 			/* CW fast rotation */
 	init_actuator_state bbr_follow_line_unknown, MOTOR_INHIBITED_BYTE, FALSE, STOP_SPEED, FALSE, STOP_SPEED, FALSE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
 			/* Stop motion (cruise) */
@@ -305,7 +305,7 @@ behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
 	/* Idle Behavior Actuation Outputs */
 	init_actuator_state bbr_idle_on, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, ROBOT_STOP, TONE_ENABLED_FREQ, TONE_ENABLED_DUR
 			/* Idle Behavior (sound on) */
-	init_actuator_state bbr_idle_off, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, ROBOT_STOP, 0x0, TONE_ENABLED_DUR
+	init_actuator_state bbr_idle_off, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, ROBOT_STOP, TONE_SILENCED_FREQ, TONE_ENABLED_DUR
 			/* Idle Behavior (sound off) */
 
 /* Line Classification Advanced Jump Table */
@@ -809,9 +809,9 @@ line_classification_loop:
     LDRB   R3, [R4, #MAXVAL_OFFSET]
 
 check_bounds:
-    CMP    R0, R3
+    CMP    R0, R2
     BLO    next_line_classification_item    /* R0 < MINVAL */
-    CMP    R1, R4
+    CMP    R1, R3
     BHI    next_line_classification_item    /* R1 > MAXVAL */
 
 matched_classification_item:
@@ -1311,13 +1311,12 @@ bbr_check_open_claws:
 	 */
 	ldrb	r0, [r5]
 	teq		r0, #FALSE				/* Touched Activated returns 255, not equal to #TRUE */
-	movne	r0, #FALSE				/* Touched (TRUE), deactivate Behavior and exit */
-	bne		exit_bbr_open_claws
+	bne		bbr_deactivate_open_claws	/* Touched (TRUE), deactivate Behavior Outputs and exit */
 
 	/* Check Claw Status */
 	ldrb	r0, [r6]				/* retrieve Claw Closed Status */
 	teq		r0, #FALSE
-	beq		exit_bbr_open_claws		/* If Opened (Claw Closed == False), deactivate Behavior and exit */
+	beq		bbr_deactivate_open_claws	/* If Opened (Claw Closed == False), deactivate Behavior Outputs and exit */
 
 bbr_start_opening_claws:
 	mov		r0, #CLAW_OPENING
@@ -1331,12 +1330,13 @@ bbr_claw_check_still_opening:
 	teq		r0, #CLAW_OPENING
 	beq		bbr_claw_still_opening
 
+bbr_deactivate_open_claws:
 	/* Not Claw Opening Movement, deactivate Behavior and exit */
 	mov		r0, #BBR_OPEN_CLAWS
 	ldr		r1, =bbr_behavior_inhibited
 	bl		bbr_copy_actuator_outputs
 
-	mov		r0, #FALSE				/* Deactivate Behavior */
+	mov		r0, #FALSE				/* Deactivate Behavior Outputs */
 	b		exit_bbr_grasp_object
 
 bbr_claw_still_opening:
@@ -1414,13 +1414,12 @@ bbr_check_grasp_object:
 	 */
 	ldrb	r0, [r5]
 	teq		r0, #FALSE				/* Touched Activated returns 255, not equal to #TRUE */
-	beq		exit_bbr_grasp_object	/* Touched (R0 == FALSE), deactivate Behavior and exit */
+	beq		bbr_deactivate_grasp_object	/* Not Touched (R0 == FALSE), deactivate Behavior Outputs and exit */
 
 	/* Check Claw Status */
 	ldrb	r0, [r6]				/* retrieve Claw Closed Status */
 	teq		r0, #FALSE
-	movne	r0, #FALSE				/* Claw Closed (TRUE), deactivate Behavior and exit */
-	bne		exit_bbr_grasp_object	/* If Claw Closed, deactivate Behavior and exit */
+	bne		bbr_deactivate_grasp_object	/* If Claw Closed, deactivate Behavior Outputs and exit */
 
 bbr_start_grasp_object:
 	mov		r0, #CLAW_CLOSING
@@ -1434,12 +1433,13 @@ bbr_claw_check_still_closing:
 	teq		r0, #CLAW_CLOSING
 	beq		bbr_claw_still_closing
 
+bbr_deactivate_grasp_object:
 	/* Not Claw Closing Movement, deactivate Behavior and exit */
 	mov		r0, #BBR_GRASP_OBJECT
 	ldr		r1, =bbr_behavior_inhibited
 	bl		bbr_copy_actuator_outputs
 
-	mov		r0, #FALSE				/* Deactivate Behavior */
+	mov		r0, #FALSE				/* Deactivate Behavior Outputs */
 	b		exit_bbr_grasp_object
 
 bbr_claw_still_closing:
