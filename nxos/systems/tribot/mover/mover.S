@@ -62,8 +62,13 @@
 
 	/* Sound Sensor Threshold (0-100) range */
 	/* Sound Sensor Readings: No Sound: 98+; Loud Sound: towards 0 */
-	.equ	SOUND_MAX, 70			/* FIXME: Needs calibration */
-	.equ	SOUND_MIN, 60			/* FIXME: Needs calibration */
+	/* FIXME: Needs calibration */
+	.equ	WAITING_MIN,   90
+	.equ	WAITING_MAX,   100
+	.equ	SEEKING_MIN,   80
+	.equ	SEEKING_MAX,   89
+	.equ	FOLLOWING_MIN, 0
+	.equ	FOLLOWING_MAX, 79
 
 	/* Wheel Control Constants */
 	.equ	STOP_SPEED, 0
@@ -344,6 +349,7 @@ behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
 
 .text
 .align 4
+/* The Line Classification bounds is sorted from low to high range */
 line_classification_jumptable:
     adv_jump_table_item line_outside, WHITE_MIN, WHITE_MAX, fast_cwrotate_motion
     adv_jump_table_item line_edge, EDGE_MIN, EDGE_MAX, slow_ccwrotate_motion
@@ -352,6 +358,16 @@ line_classification_jumptable:
 
 /* End of Table address constant */
     .equ    line_classification_jumptable_end, .
+
+/* The Sound Following boundsis sorted from low to high range. When sound is detected, the value is lower */
+sound_following_jumptable:
+    adv_jump_table_item sound_following, FOLLOWING_MIN, FOLLOWING_MAX, sound_forward_motion
+    adv_jump_table_item sound_seeking, SEEKING_MIN, SEEKING_MAX, sound_rotating_motion
+    adv_jump_table_item sound_waiting, WAITING_MIN, WAITING_MAX, sound_waiting_motion
+    adv_jump_table_item sound_unknown, 0, 255, stop_motion
+
+/* End of Table address constant */
+    .equ    sound_following_jumptable_end, .
 
 /* BBR Dispatcher Jump Table Definition */
 .text
@@ -448,7 +464,7 @@ touch_lost:
 	bl		nx_progcontentX
 	pop		{pc}
 
-sound_following:
+sound_activated:
 	push	{lr}
 	ldr		r0, =maxsound
 	mov		r1, #SOUND_ROW
@@ -1547,12 +1563,51 @@ exit_bbr_grasp_object:
  *
  */
 bbr_move_object:
-	push	{r4, r5, lr}
+	push	{r5, r6, lr}
+
+
+	ldr		r5, =touched
+	ldr		r6, =claw_closed
+
+bbr_check_move_object:
+	/* (touched && claw_closed)
+	 * Negate expression for branch to Else Clause
+	 * Using De-Morgan's Law, the Else trigger clause is:
+	 * (!touched || !claw_closed)
+	 */
+	ldrb	r0, [r5]
+	teq		r0, #FALSE				/* Touched Activated returns 255, not equal to #TRUE */
+	beq		bbr_deactivate_move_object	/* Not Touched (R0 == FALSE), deactivate Behavior Outputs and exit */
+
+	/* Check Claw Status */
+	ldrb	r0, [r6]				/* retrieve Claw Closed Status */
+	teq		r0, #FALSE
+	bne		move_object_check_soundlevel	/* If Claw Closed, check sound levels */
+
+/* If Not Claw Closed, deactivate Behavior Outputs and exit */
+bbr_deactivate_move_object:
 	mov		r0, #BBR_MOVE_OBJECT
 	ldr		r1, =bbr_behavior_inhibited
 	bl		bbr_copy_actuator_outputs
-	mov		r0, #FALSE
-	pop		{r4, r5, pc}
+
+	mov		r0, #FALSE				/* Deactivate Behavior Outputs */
+	b		exit_bbr_move_object
+
+move_object_check_soundlevel:
+	/* Retrieve current min / max values */
+	ldr		r2, =sound_min
+	ldrb	r0, [r2]			/* min */
+	ldrb	r1, [r2, #1]		/* max */
+	ldr		r2, =sound_following_jumptable
+	ldr		r3, =sound_following_jumptable_end
+
+	bl		advanced_jump_table_dispatcher
+
+bbr_move_object_active:
+	mov		r0, #TRUE				/* Activate Behavior */
+
+exit_bbr_move_object:
+	pop		{r5, r6, pc}
 
 /* Mover Dispatcher
  *
