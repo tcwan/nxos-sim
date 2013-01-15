@@ -184,7 +184,8 @@ memmove_exit:
 memcmp_loop:
     LDRB   R3, [R0], #1    @ Load byte, increment First Buffer Pointer
     LDRB   R4, [R1], #1    @ Load byte, increment Second Buffer Pointer
-    CMP    R3, R4
+    SUBS   R3, R3, R4      @ R3 = R3 - R4
+    MOVNE  R0, R3          @ Move difference to R0 as return value
     BNE    memcmp_exit     @ Bytes not equal, exit
     SUBS   R2, R2, #1
     BNE    memcmp_loop     @ While bytes remain, keep going
