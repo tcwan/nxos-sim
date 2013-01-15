@@ -30,8 +30,6 @@
 #undef ENABLE_BREAKPOINTS
 /* To disable Claw Debugging, change the following to #undef DEBUG_CLAW */
 #undef DEBUG_CLAW
-/* To disable Min-Max Debugging, change the following to #undef DEBUG_MIN_MAX */
-#undef DEBUG_MIN_MAX
 
 	.equ	MAX_ITERATIONS, 0x0FFFF
 	.equ	CLAWPOS_CHECK_INTERVAL, SYSTICK_100MS		/* Keep CLAWPOS_CHECK_INTERVAL <= ROBOT_SCHED_DURATION to avoid going out of sync */
@@ -108,11 +106,6 @@ idle_behavior:        .asciz "BBR:Idle        "
 
 /* Scheduler Timeout value */
 sched_tick:	.word	0
-
-#ifdef DEBUG_MIN_MAX
-minstring: .asciz "min: "
-maxstring: .asciz "max: "
-#endif
 
 /* Light Sensor Variables */
 readings: .space  n, 0x0
@@ -396,11 +389,8 @@ light_loop:
 	bl		nx_sensors_analog_get_normalized	/* returned value in range 0-100% */
 	strb	r0, [r5, r6]
 
-#if 0
-	/* We don't need to delay since the main_loop spaces out the frequency of the A/D call */
 	mov		r0, #SYSTICK_3MS
 	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
-#endif
 
 	cmp		r6, #0
 	bhi		light_loop		/* Perform Min-Max calculation when we have enough samples */
