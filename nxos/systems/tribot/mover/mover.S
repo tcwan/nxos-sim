@@ -754,6 +754,41 @@ stop_motion:
 	bl		bbr_copy_actuator_outputs
 	pop		{pc}
 
+/* Sound Forward Motion
+ *    Move Forward as long as Sound Level is met
+ *
+ */
+sound_forward_motion:
+	push	{lr}
+
+	mov		r0, #BBR_MOVE_OBJECT
+	ldr		r1, =bbr_move_object_follow
+	bl		bbr_copy_actuator_outputs
+	pop		{pc}
+
+/* Sound Rotating Motion
+ *    Rotate to determine highest Sound Level is met
+ *
+ */
+sound_rotating_motion:
+	push	{lr}
+
+	mov		r0, #BBR_MOVE_OBJECT
+	ldr		r1, =bbr_move_object_seek
+	bl		bbr_copy_actuator_outputs
+	pop		{pc}
+
+/* Sound Waiting Motion
+ *    Wait for timeout before disabling behavior
+ *
+ */
+sound_waiting_motion:
+	push	{lr}
+
+	mov		r0, #BBR_MOVE_OBJECT
+	ldr		r1, =bbr_behavior_inhibited	/* FIXME: Don't generate tone until we're truely idle */
+	bl		bbr_copy_actuator_outputs
+	pop		{pc}
 
 /* Open Claw
  *    Activate Claw Motor (Open), Don't Brake
@@ -856,29 +891,29 @@ exit_has_claw_fully_stopped:
 	pop		{r4, pc}
 
 /*
- * Line Classification Action Routine Dispatcher
+ * Advanced Jump Table Action Routine Dispatcher
  *
  *     Find Jump Table Item such that
- *        ((MINVAL <= Light Sensor Min Value) &&
- *         (Light Sensor Max Value <= MAXVAL))
+ *        ((MINVAL <= Input Min Value) &&
+ *         (Input Max Value <= MAXVAL))
  *
  * On Entry:
- *     R0: Light Sensor Min Value (8-bit unsigned)
- *     R1: Light Sensor Max Value (8-bit unsigned)
- *     R2: Line Classification Table Item Pointer
- *     R3: Line Classification Table End Pointer
+ *     R0: Input Min Value (8-bit unsigned)
+ *     R1: Input Max Value (8-bit unsigned)
+ *     R2: Jump Table Item Pointer
+ *     R3: Jump Table End Pointer
  *     Assumes that R0 <= R1 (i.e., min <= max)
  *
  * On Exit:
- *     R0: Line Classification Found (Boolean)
+ *     R0: Jump Table Entry Found (Boolean)
  *
  * Register Usage:
- *     R0: Light Sensor Min Value / Action Routine Address Pointer (if matched)
- *     R1: Light Sensor Max Value
+ *     R0: Input Min Value / Action Routine Address Pointer (if matched)
+ *     R1: Input Max Value
  *     R2: Item Min Value (scratch register)
  *     R3: Item Max Value (scratch register)
- *     R4: Line Classification Table Item Pointer
- *     R5: Line Classification Table End Pointer
+ *     R4: Jump Table Item Pointer
+ *     R5: Jump Table End Pointer
  *
  * Linear Search used, since number of cases are small
  */
