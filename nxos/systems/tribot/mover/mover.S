@@ -62,25 +62,35 @@
 
 	/* Sound Sensor Threshold (0-100) range */
 	/* Sound Sensor Readings: No Sound: 98+; Loud Sound: towards 0 */
-	/* FIXME: Needs calibration */
-	.equ	QUIET_MIN,   80
-	.equ	QUIET_MAX,   100
-	.equ	SOFT_MIN,   50
-	.equ	SOFT_MAX,   79
+	/* FIXME: Needs calibration based on ambient background noise, etc. */
 	.equ	LOUD_MIN, 0
-	.equ	LOUD_MAX, 49
+	.equ	LOUD_MAX, 69
+	.equ	SOFT_MIN,   70
+	.equ	SOFT_MAX,   84
+	.equ	QUIET_MIN,   85
+	.equ	QUIET_MAX,   100
 
-	/* Sound Following Constants (updated every ROBOT_SCHED_DURATION interval  */
-	.equ	SOUND_UNKNOWN_DECR, 10
+	/* Sound Following Constants
+	 *  (Sound Level Trigger is updated every ROBOT_SCHED_DURATION interval)
+	 *  The increments and decrements should have some relationship to the
+	 *  Sound Following Thresholds since the deltas are incremented every main loop.
+     */
+	.equ	SOUND_UNKNOWN_DECR, 1
 	.equ	SOUND_QUIET_NORMAL_DECR, 1
 	.equ	SOUND_QUIET_FOLLOWING_DECR, 5
 	.equ	SOUND_SOFT_INCR, 5
 	.equ	SOUND_LOUD_INCR, 10
 
-	/* Sound Following Thresholds */
-	.equ	WAITING_THRESHOLD, 5
-	.equ	SEEKING_THRESHOLD, 30
-	.equ	FOLLOWING_THRESHOLD, 50
+	/* Sound Following Thresholds
+	 *
+	 *    Hysterisis is implemented
+	 */
+	.equ	WAITING_THRESH_INCR, 5
+	.equ	WAITING_THRESH_DECR, 1
+	.equ	SEEKING_THRESH_INCR, 30
+	.equ	SEEKING_THRESH_DECR, 10
+	.equ	FOLLOWING_THRESH_INCR, 50
+	.equ	FOLLOWING_THRESH_DECR, 40
 
 	/* Wheel Control Constants */
 	.equ	STOP_SPEED, 0
@@ -103,7 +113,7 @@
 	 */
 	.equ	TONE_ENABLED_FREQ, 2500				/* Hz */
 	.equ	TONE_SILENCED_FREQ, 0				/* Hz */
-	.equ	TONE_ENABLED_DUR, 250				/* ms */
+	.equ	TONE_ENABLED_DUR, 100				/* ms */
 
 
 /** @name Claw Movement State Enums
@@ -132,6 +142,8 @@ ENUM_VAL(SOUND_SEEKING)           /**< Seeking Sound Source. */
 ENUM_VAL(SOUND_FOLLOWING)         /**< Following Sound Source. */
 ENUM_END(sound_following_state_t)
 /*@}*/
+
+	.equ	NUM_SOUND_STATES, (SOUND_FOLLOWING+1)
 
 /** @name Behavior Enums
  *
@@ -392,6 +404,28 @@ sound_following_jumptable:
 
 /* End of Table address constant */
     .equ    sound_following_jumptable_end, .
+
+/* Table has Lower Bounds, Next State */
+sound_state_hysterisis_incr:
+	.byte	WAITING_THRESH_INCR, SOUND_WAITING		/* Sound Idle State */
+	.byte	SEEKING_THRESH_INCR, SOUND_SEEKING		/* Sound Waiting State */
+	.byte	FOLLOWING_THRESH_INCR, SOUND_FOLLOWING	/* Sound Seeking State */
+	.byte	FOLLOWING_THRESH_INCR, SOUND_FOLLOWING	/* Sound Following State */
+
+/* Table has Upper Bounds, Next State */
+sound_state_hysterisis_decr:
+	.byte	WAITING_THRESH_DECR, SOUND_IDLE			/* Sound Idle State */
+	.byte	WAITING_THRESH_DECR, SOUND_IDLE			/* Sound Waiting State */
+	.byte	SEEKING_THRESH_DECR, SOUND_WAITING		/* Sound Seeking State */
+	.byte	FOLLOWING_THRESH_DECR, SOUND_SEEKING	/* Sound Following State */
+
+/* Table has Behavior Outputs, Behavior Display String */
+move_object_output_table:
+	.word	bbr_move_object_idle, moveobject_idle_behavior				/* Sound Idle State */
+	.word	bbr_move_object_waiting, moveobject_waiting_behavior		/* Sound Waiting State */
+	.word	bbr_move_object_seeking, moveobject_seeking_behavior		/* Sound Seeking State */
+	.word	bbr_move_object_following, moveobject_following_behavior	/* Sound Following State */
+
 
 /* BBR Dispatcher Jump Table Definition */
 .text
@@ -779,46 +813,56 @@ stop_motion:
 
 
 /* Sound Update State and Output
- *    Set Sound State depending on Sound Level Trigger
+ *    Update Sound State depending on Sound Level Trigger
+ *	  Implements Hysterisis in state transitions
  *	  Generate appropriate Behavior Outputs
+ *
+ *	  Inputs:
+ *		R0: Increasing (Boolean)
  *
  */
 sound_update_state_output:
 	push	{r4, lr}
 
 	ldr		r3, =sound_following_state
+	ldrb	r1, [r3]							/* Sound Following State */
+	cmp		r1, #NUM_SOUND_STATES
+	movhi	r1, #NUM_SOUND_STATES				/* Force to sane state value */
+
 	ldrb	r2, [r3, #1]						/* Sound Level Trigger */
 
-	cmp		r2, #WAITING_THRESHOLD
-	movlt	r0, #SOUND_IDLE						/* (sound_level_trigger < WAITING_THRESHOLD) */
-	ldrlt	r1, =bbr_move_object_idle			/* Set Idle State */
-	ldrlt	r4, =moveobject_idle_behavior		/* Display Behavior */
-	blt		sound_do_update
 
-	cmp		r2, #SEEKING_THRESHOLD
-	movlt	r0, #SOUND_WAITING					/* (sound_level_trigger < SEEKING_THRESHOLD) */
-	ldrlt	r1, =bbr_move_object_waiting		/* Set Waiting State */
-	ldrlt	r4, =moveobject_waiting_behavior	/* Display Behavior */
-	blt		sound_do_update
+	teq		r0, #FALSE
+	ldrne	r4, =sound_state_hysterisis_incr
+	bne		sound_increasing					/* If Sound Increasing (TRUE), check INCR thresholds */
 
-	cmp		r2, #FOLLOWING_THRESHOLD
-	movlt	r0, #SOUND_SEEKING					/* (sound_level_trigger < FOLLOWING_THRESHOLD) */
-	ldrlt	r1, =bbr_move_object_seeking		/* Set Seeking State */
-	ldrlt	r4, =moveobject_seeking_behavior	/* Display Behavior */
-	blt		sound_do_update
+	ldr		r4, =sound_state_hysterisis_decr
 
-	mov		r0, #SOUND_FOLLOWING				/* (sound_level_trigger >= FOLLOWING_THRESHOLD) */
-	ldr		r1, =bbr_move_object_following		/* Set Following State */
-	ldr		r4, =moveobject_following_behavior	/* Display Behavior */
+sound_decreasing:
+	add		r4, r4, r1, lsl #1					/* Point to Item Entry at sound_state_hysterisis + sound_following_state x 2 */
+	ldrb	r0, [r4]							/* Decreasing Threshold */
+	cmp		r2, r0								/* Trigger - Threshold */
+	ldrlob	r1, [r4, #1]						/* Next State */
+	strlob	r1, [r3]							/* Update Sound Following State  if (Trigger < Threshold) */
+	b		sound_process_state
+
+sound_increasing:
+	add		r4, r4, r1, lsl #1					/* Point to Item Entry at sound_state_hysterisis + sound_following_state x 2 */
+	ldrb	r0, [r4]							/* Decreasing Threshold */
+	cmp		r2, r0								/* Trigger - Threshold */
+	ldrhsb	r1, [r4, #1]						/* Next State */
+	strhsb	r1, [r3]							/* Update Sound Following State  if (Trigger > Threshold) */
+
+sound_process_state:
+	ldr		r4, =move_object_output_table
+	add		r4, r4, r1, lsl #3					/* Point to Item Entry at move_object_output_table + sound_following_state x 8 */
+	ldr		r1, [r4]							/* Idle State Behavior Output */
 
 sound_do_update:
-
-	strb	r0, [r3]							/* Update state */
-
 	mov		r0, #BBR_MOVE_OBJECT
 	bl		bbr_copy_actuator_outputs			/* Update behavior outputs */
 
-	mov		r0, r4								/* Copy to Param 1 */
+	ldr		r0, [r4, #4]						/* Display String */
 	bl		print_behavior_state
 	pop		{r4, pc}
 
@@ -838,6 +882,7 @@ sound_loud_handler:
 	movhi	r0, #255							/* Clamp to 255 if exceeded 8-bits */
 	strb	r0, [r1, #1]
 
+	mov		r0, #TRUE
 	bl		sound_update_state_output
 	pop		{pc}
 
@@ -857,6 +902,7 @@ sound_soft_handler:
 	movhi	r0, #255							/* Clamp to 255 if exceeded 8-bits */
 	strb	r0, [r1, #1]
 
+	mov		r0, #TRUE
 	bl		sound_update_state_output
 	pop		{pc}
 
@@ -883,6 +929,7 @@ sound_quiet_handler:
 	movlt	r0, #0								/* Clamp to 0 if negative */
 	strb	r0, [r1, #1]
 
+	mov		r0, #FALSE
 	bl		sound_update_state_output
 	pop		{pc}
 
@@ -894,9 +941,10 @@ sound_unknown_handler:
 	push	{lr}
 #if 0
 	ldr		r1, =sound_following_state
-	mov		r0, #(SEEKING_THRESHOLD-1)			/* Force to Waiting State */
+	mov		r0, #(SEEKING_THRESH_INCR-1)			/* Force to Waiting State */
 	strb	r0, [r1, #1]						/* Update Sound Level Trigger */
 
+	mov		r0, #FALSE
 	bl		sound_update_state_output
 #endif
 
@@ -907,6 +955,7 @@ sound_unknown_handler:
 	movlt	r0, #0								/* Clamp to 0 if negative */
 	strb	r0, [r1, #1]
 
+	mov		r0, #FALSE
 	bl		sound_update_state_output
 
 	pop		{pc}
