@@ -71,6 +71,7 @@
 	.equ	LOUD_MAX, 49
 
 	/* Sound Following Constants (updated every ROBOT_SCHED_DURATION interval  */
+	.equ	SOUND_UNKNOWN_DECR, 10
 	.equ	SOUND_QUIET_NORMAL_DECR, 1
 	.equ	SOUND_QUIET_FOLLOWING_DECR, 5
 	.equ	SOUND_SOFT_INCR, 5
@@ -891,10 +892,20 @@ sound_quiet_handler:
  */
 sound_unknown_handler:
 	push	{lr}
-
+#if 0
 	ldr		r1, =sound_following_state
 	mov		r0, #(SEEKING_THRESHOLD-1)			/* Force to Waiting State */
 	strb	r0, [r1, #1]						/* Update Sound Level Trigger */
+
+	bl		sound_update_state_output
+#endif
+
+	ldr		r1, =sound_following_state
+	ldrb	r0, [r1, #1]						/* Sound Level Trigger */
+
+	subs	r0, r0, #SOUND_UNKNOWN_DECR
+	movlt	r0, #0								/* Clamp to 0 if negative */
+	strb	r0, [r1, #1]
 
 	bl		sound_update_state_output
 
