@@ -43,8 +43,8 @@
 	/* LCD Display Constants */
 	.equ	TOUCH_ROW, 3				/* Touch Display Row Index */
 	.equ	SOUND_ROW, 4				/* Sound Display Row Index */
-	.equ	SNDLVL_ROW, 6				/* Sound Level Display Row Index */
 	.equ	BEHAVIOR_ROW, 6				/* Behavior Display Row Index */
+	.equ	SNDLVL_ROW, 7				/* Sound Level Display Row Index */
 
 	/* Light Sensor Color Detection Intensity (0-100) ranges */
 	/* Light Sensor Raw Readings: White: 470-520; Edge: 540-580; Black: 680-700 */
@@ -63,18 +63,30 @@
 	/* Sound Sensor Threshold (0-100) range */
 	/* Sound Sensor Readings: No Sound: 98+; Loud Sound: towards 0 */
 	/* FIXME: Needs calibration */
-	.equ	WAITING_MIN,   90
-	.equ	WAITING_MAX,   100
-	.equ	SEEKING_MIN,   80
-	.equ	SEEKING_MAX,   89
-	.equ	FOLLOWING_MIN, 0
-	.equ	FOLLOWING_MAX, 79
+	.equ	QUIET_MIN,   80
+	.equ	QUIET_MAX,   100
+	.equ	SOFT_MIN,   50
+	.equ	SOFT_MAX,   79
+	.equ	LOUD_MIN, 0
+	.equ	LOUD_MAX, 49
+
+	/* Sound Following Constants (updated every ROBOT_SCHED_DURATION interval  */
+	.equ	SOUND_QUIET_NORMAL_DECR, 1
+	.equ	SOUND_QUIET_FOLLOWING_DECR, 5
+	.equ	SOUND_SOFT_INCR, 5
+	.equ	SOUND_LOUD_INCR, 10
+
+	/* Sound Following Thresholds */
+	.equ	WAITING_THRESHOLD, 5
+	.equ	SEEKING_THRESHOLD, 30
+	.equ	FOLLOWING_THRESHOLD, 50
 
 	/* Wheel Control Constants */
 	.equ	STOP_SPEED, 0
 	.equ	FWD_SPEED, 30
 	.equ	FASTROT_SPEED, 40
 	.equ	SLOWROT_SPEED, 20
+	.equ	SEEK_SPEED, 30
 
 	/* Claw Control Constants
 	 *    Open and Close Speeds are directional (signed)
@@ -113,7 +125,8 @@ ENUM_END(claw_movement_state_t)
  */
 /*@{*/
 ENUM_BEGIN
-ENUM_VALASSIGN(SOUND_WAITING, 0)  /**< Initial State. */
+ENUM_VALASSIGN(SOUND_IDLE, 0)     /**< Initial State. */
+ENUM_VAL(SOUND_WAITING)           /**< Waiting for Sound Source. */
 ENUM_VAL(SOUND_SEEKING)           /**< Seeking Sound Source. */
 ENUM_VAL(SOUND_FOLLOWING)         /**< Following Sound Source. */
 ENUM_END(sound_following_state_t)
@@ -152,15 +165,19 @@ black:	  .asciz " Line: Black  "
 edge:	  .asciz " Line: Edge   "
 unknown:  .asciz " Line: Unknown"
 
-graspobject_behavior: .asciz "BBR:Grasp-Object"
-openclaws_behavior:	  .asciz "BBR:Open-Claws  "
-followline_behavior:  .asciz "BBR:Follow-Line "
-idle_behavior:        .asciz "BBR:Idle        "
+moveobject_idle_behavior:      .asciz "BBR:Move-Idle   "
+moveobject_waiting_behavior:   .asciz "BBR:Move-Waiting"
+moveobject_seeking_behavior:   .asciz "BBR:Move-Seeking"
+moveobject_following_behavior: .asciz "BBR:Move-Follow "
+graspobject_behavior:          .asciz "BBR:Grasp-Object"
+openclaws_behavior:	           .asciz "BBR:Open-Claws  "
+followline_behavior:           .asciz "BBR:Follow-Line "
+idle_behavior:                 .asciz "BBR:Idle        "
 
 #ifdef DEBUG_SOUND
-minstring: .asciz "min: "
-maxstring: .asciz "max: "
-blankspace: .asciz "    "
+minstring: .asciz "-: "
+maxstring: .asciz "+: "
+blankspace: .asciz "  "
 #endif
 
 .data
@@ -200,7 +217,9 @@ claw_oldpos:    .word 0
 claw_closed:    .byte 0
 claw_movement:  .byte 0
 
-
+/* Sound Following Behavior Variables */
+sound_following_state:	.byte 0
+sound_level_trigger:	.byte 0
 
 /* Signal Inhibition Values */
 #define MOTOR_INHIBITED 0xFFFFFF80
@@ -297,9 +316,13 @@ behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
 			/* Inhibit Behavior */
 
 	/* Move-Object Behavior Actuation Outputs */
-	init_actuator_state bbr_move_object_seek, CLOSE_SPEED, TRUE, SLOWROT_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_SEEK, TONE_SILENCED_FREQ, ROBOT_SCHED_DURATION
+	init_actuator_state bbr_move_object_idle, CLOSE_SPEED, TRUE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
+			/* Idle */
+	init_actuator_state bbr_move_object_waiting, CLOSE_SPEED, TRUE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_SILENCED_FREQ, ROBOT_SCHED_DURATION
+			/* Waiting */
+	init_actuator_state bbr_move_object_seeking, CLOSE_SPEED, TRUE, SEEK_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_SEEK, TONE_SILENCED_FREQ, ROBOT_SCHED_DURATION
 			/* Seeking */
-	init_actuator_state bbr_move_object_follow, CLOSE_SPEED, TRUE, FWD_SPEED, TRUE, FWD_SPEED, TRUE, ROBOT_FWD, TONE_SILENCED_FREQ, ROBOT_SCHED_DURATION
+	init_actuator_state bbr_move_object_following, CLOSE_SPEED, TRUE, FWD_SPEED, TRUE, FWD_SPEED, TRUE, ROBOT_FWD, TONE_SILENCED_FREQ, ROBOT_SCHED_DURATION
 			/* Follow */
 
 	/* Open-Claws/Grasp-Object Behavior Actuation Outputs */
@@ -361,10 +384,10 @@ line_classification_jumptable:
 
 /* The Sound Following boundsis sorted from low to high range. When sound is detected, the value is lower */
 sound_following_jumptable:
-    adv_jump_table_item sound_following, FOLLOWING_MIN, FOLLOWING_MAX, sound_forward_motion
-    adv_jump_table_item sound_seeking, SEEKING_MIN, SEEKING_MAX, sound_rotating_motion
-    adv_jump_table_item sound_waiting, WAITING_MIN, WAITING_MAX, sound_waiting_motion
-    adv_jump_table_item sound_unknown, 0, 255, stop_motion
+    adv_jump_table_item sound_loud, LOUD_MIN, LOUD_MAX, sound_loud_handler
+    adv_jump_table_item sound_soft, SOFT_MIN, SOFT_MAX, sound_soft_handler
+    adv_jump_table_item sound_quiet, QUIET_MIN, QUIET_MAX, sound_quiet_handler
+    adv_jump_table_item sound_unknown, 0, 255, sound_unknown_handler
 
 /* End of Table address constant */
     .equ    sound_following_jumptable_end, .
@@ -589,19 +612,18 @@ calc_sound_min_max:
 	ldrb	r0, [r2]
 	bl		nx_display_int
 
-	mov		r0, #0
-	mov		r1, #SNDLVL_ROW+1
-	bl 		nx_display_cursor_set_pos
+	ldr		r0, =blankspace
+	bl		nx_display_string
+
 	ldr		r0, =maxstring
 	bl		nx_display_string
 
 	ldr		r2, =sound_max
 	ldrb	r0, [r2]
 	bl		nx_display_int
-#if 0
+
 	ldr		r0, =blankspace
 	bl		nx_display_string
-#endif
 
 #endif
 
@@ -754,40 +776,128 @@ stop_motion:
 	bl		bbr_copy_actuator_outputs
 	pop		{pc}
 
-/* Sound Forward Motion
- *    Move Forward as long as Sound Level is met
+
+/* Sound Update State and Output
+ *    Set Sound State depending on Sound Level Trigger
+ *	  Generate appropriate Behavior Outputs
  *
  */
-sound_forward_motion:
-	push	{lr}
+sound_update_state_output:
+	push	{r4, lr}
+
+	ldr		r3, =sound_following_state
+	ldrb	r2, [r3, #1]						/* Sound Level Trigger */
+
+	cmp		r2, #WAITING_THRESHOLD
+	movlt	r0, #SOUND_IDLE						/* (sound_level_trigger < WAITING_THRESHOLD) */
+	ldrlt	r1, =bbr_move_object_idle			/* Set Idle State */
+	ldrlt	r4, =moveobject_idle_behavior		/* Display Behavior */
+	blt		sound_do_update
+
+	cmp		r2, #SEEKING_THRESHOLD
+	movlt	r0, #SOUND_WAITING					/* (sound_level_trigger < SEEKING_THRESHOLD) */
+	ldrlt	r1, =bbr_move_object_waiting		/* Set Waiting State */
+	ldrlt	r4, =moveobject_waiting_behavior	/* Display Behavior */
+	blt		sound_do_update
+
+	cmp		r2, #FOLLOWING_THRESHOLD
+	movlt	r0, #SOUND_SEEKING					/* (sound_level_trigger < FOLLOWING_THRESHOLD) */
+	ldrlt	r1, =bbr_move_object_seeking		/* Set Seeking State */
+	ldrlt	r4, =moveobject_seeking_behavior	/* Display Behavior */
+	blt		sound_do_update
+
+	mov		r0, #SOUND_FOLLOWING				/* (sound_level_trigger >= FOLLOWING_THRESHOLD) */
+	ldr		r1, =bbr_move_object_following		/* Set Following State */
+	ldr		r4, =moveobject_following_behavior	/* Display Behavior */
+
+sound_do_update:
+
+	strb	r0, [r3]							/* Update state */
 
 	mov		r0, #BBR_MOVE_OBJECT
-	ldr		r1, =bbr_move_object_follow
-	bl		bbr_copy_actuator_outputs
+	bl		bbr_copy_actuator_outputs			/* Update behavior outputs */
+
+	mov		r0, r4								/* Copy to Param 1 */
+	bl		print_behavior_state
+	pop		{r4, pc}
+
+/* Sound Loud Handler
+ *    Increment Sound Level Trigger quickly
+ *
+ *    Note: This routine uses unsigned arithmetic to detect unsigned byte overflow
+ *
+ */
+sound_loud_handler:
+	push	{lr}
+	ldr		r1, =sound_following_state
+	ldrb	r0, [r1, #1]						/* Sound Level Trigger */
+
+	add		r0, r0, #SOUND_LOUD_INCR
+	cmp		r0, #255
+	movhi	r0, #255							/* Clamp to 255 if exceeded 8-bits */
+	strb	r0, [r1, #1]
+
+	bl		sound_update_state_output
 	pop		{pc}
 
-/* Sound Rotating Motion
- *    Rotate to determine highest Sound Level is met
+/* Sound Soft Handler
+ *    Increment Sound Level Trigger moderately
+ *
+ *    Note: This routine uses unsigned arithmetic to detect unsigned byte overflow
  *
  */
-sound_rotating_motion:
+sound_soft_handler:
 	push	{lr}
+	ldr		r1, =sound_following_state
+	ldrb	r0, [r1, #1]						/* Sound Level Trigger */
 
-	mov		r0, #BBR_MOVE_OBJECT
-	ldr		r1, =bbr_move_object_seek
-	bl		bbr_copy_actuator_outputs
+	add		r0, r0, #SOUND_SOFT_INCR
+	cmp		r0, #255
+	movhi	r0, #255							/* Clamp to 255 if exceeded 8-bits */
+	strb	r0, [r1, #1]
+
+	bl		sound_update_state_output
 	pop		{pc}
 
-/* Sound Waiting Motion
- *    Wait for timeout before disabling behavior
+/* Sound Quiet Handler
+ *    Decrement Sound Level Trigger
+ *
+ *    Note: This routine uses signed arithmetic to detect underflow of unsigned byte value
  *
  */
-sound_waiting_motion:
+sound_quiet_handler:
 	push	{lr}
 
-	mov		r0, #BBR_MOVE_OBJECT
-	ldr		r1, =bbr_behavior_inhibited	/* FIXME: Don't generate tone until we're truely idle */
-	bl		bbr_copy_actuator_outputs
+
+	ldr		r1, =sound_following_state
+	ldrb	r0, [r1, #1]						/* Sound Level Trigger */
+
+	mov		r3, #SOUND_QUIET_NORMAL_DECR
+
+	ldrb	r2, [r1]							/* Sound Following State */
+	cmp		r2, #SOUND_FOLLOWING
+	moveq	r3, #SOUND_QUIET_FOLLOWING_DECR		/* Decrement faster if in Following State */
+
+	subs	r0, r0, r3
+	movlt	r0, #0								/* Clamp to 0 if negative */
+	strb	r0, [r1, #1]
+
+	bl		sound_update_state_output
+	pop		{pc}
+
+/* Sound Unknown Handler
+ *    Force Sound Idle state, allow Idle behavior to Play Tone
+ *
+ */
+sound_unknown_handler:
+	push	{lr}
+
+	ldr		r1, =sound_following_state
+	mov		r0, #(SEEKING_THRESHOLD-1)			/* Force to Waiting State */
+	strb	r0, [r1, #1]						/* Update Sound Level Trigger */
+
+	bl		sound_update_state_output
+
 	pop		{pc}
 
 /* Open Claw
@@ -1300,7 +1410,9 @@ speaker_update_outputs:
 	str		r0, [r5, #TONE_FREQ]
 	str		r1, [r5, #TONE_DUR]		/* Store new tone in previous actuator state */
 	cmp		r0, #TONE_INHIBITED
-	blne	nx_sound_freq_async		/* Play Tone if Not TONE_INHIBITED */
+	beq		speaker_update_timestamp
+	cmp		r0, #TONE_SILENCED_FREQ
+	blne	nx_sound_freq_async		/* Play Tone if Not TONE_INHIBITED or TONE_SILENCED_FREQ */
 
 speaker_update_timestamp:
 	bl		nx_systick_get_ms		/* Current systick in R0 */
@@ -1373,8 +1485,15 @@ bbr_follow_line:
 	ldr		r2, =touched
 	ldrb	r0, [r2]
 	teq		r0, #FALSE				/* Touched Activated returns 255, not equal to #TRUE */
-	movne	r0, #FALSE				/* Touched (TRUE), deactivate Behavior and exit */
-	bne		exit_bbr_follow_line
+	beq		follow_line_check_line	/* Not Touched, check Follow Line Behavior */
+
+	/* Touch active, deactivate Behavior and exit */
+	mov		r0, #BBR_FOLLOW_LINE
+	ldr		r1, =bbr_behavior_inhibited
+	bl		bbr_copy_actuator_outputs
+
+	mov		r0, #FALSE				/* Deactivate Behavior Outputs */
+	b		exit_bbr_follow_line
 
 follow_line_check_line:
 	/* Retrieve current min / max values */
@@ -1594,10 +1713,22 @@ exit_bbr_grasp_object:
 	pop		{r4, r5, r6, pc}
 
 /* Move Object Behavior
- *    Stub
+ *
+ * Returns:
+ *    Activated : Boolean
+ *
  *
  */
 bbr_move_object:
+	/* Move Object Algorithm
+	 *    If Touched AND Claw Closed (i.e., Claw Open)
+	 *		For each level increase, increment trigger exponentially
+	 *		For each level decrease, decrement trigger arithmetically
+	 *		Implement Hysterisis and Max threshold?
+	 *		Once trigger level reached, move forward
+	 *    Else
+	 *       Deactivate Behavior
+	 */
 	push	{r5, r6, lr}
 
 
@@ -1725,6 +1856,13 @@ init_robot:
 	str		r0, [r4]			/* Initialize Old Position = 0 (default initial position after nx__motors_init) */
 	ldr		r4, =claw_oldtstamp
 	str		r0, [r4]			/* Initialize Claw Position Old Timestamp = 0 */
+
+
+	ldr		r1, =sound_following_state
+	mov		r0, #SOUND_IDLE
+	strb	r0, [r1]
+	mov		r0, #0
+	strb	r0, [r1, #1]		/* Sound Level Trigger */
 
 #if 0
 	bl		claw_open_immediate			/* Disabled, use BBR Behavior Open-Claws instead */
