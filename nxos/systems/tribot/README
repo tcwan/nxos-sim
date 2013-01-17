@@ -1,9 +1,10 @@
 These are several basic programs to test different functions with the Tribot.
 The examples use the Behavior-Based Robotics Paradigm in its implementation.
 
-Currently, the following functions are available:
-- Line Following
-- Object Grasping (with Line Following)
-- Object Moving (with Object Grasping and Line Following)
+Currently, the following behaviors are implemented:
+linefollower - Line Following
+grasper - Object Grasping + linefollower behaviors
+mover - Object Moving + grasper behaviors
+tribot - Obstacle Avoidance + mover behaiors
 
 Build using appkernels=tribot/<projectname>
