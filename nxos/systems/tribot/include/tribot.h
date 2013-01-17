@@ -2,7 +2,7 @@
  *  @brief Definitions of common Tribot constants, etc.
  */
 
-/* Copyright (C) 2007-2012 the NxOS developers
+/* Copyright (C) 2007-2013 the NxOS developers
  *
  * See AUTHORS for a full list of the developers.
  *

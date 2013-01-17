@@ -2,7 +2,7 @@
  *  @brief Definitions of common Tribot macros.
  */
 
-/* Copyright (C) 2012 the NxOS developers
+/* Copyright (C) 2012-2013 the NxOS developers
  *
  * See AUTHORS for a full list of the developers.
  *
