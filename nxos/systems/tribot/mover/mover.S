@@ -561,54 +561,24 @@ light_led_disable:
 
 /* Sensor Input Routine */
 
-/* collect_samples
- *    Sensor Sample Collection Routine
- *
- * On Entry:
- *     R0: Sensor Port Index
- *     R1: Address of Sample Array
- *     R2: Number of samples to collect
- *     Assumes that R0 <= R1 (i.e., min <= max)
- *
- * Register Usage:
- *      R4: Sensor Port Index
- *		R5: Address Pointer to Light Sensor Readings Array
- *		R6: Sensor Readings Array Index
- */
-collect_samples:
-	push	{r4, r5, r6, lr}
-	mov		r4, r0				/* Keep Sensor Port Index in R4 */
-	mov		r5, r1				/* Keep Address of Sample Array in R5 */
-	subs	r6, r2, #1			/* Convert Number of readings to collect into Array Index */
-
-sample_loop:
-	mov		r0, r4
-	bl		nx_sensors_analog_get_normalized	/* returned value in range 0-100% */
-	strb	r0, [r5, r6]
-
-	mov		r0, #SYSTICK_3MS
-	bl		nx_systick_wait_ms	/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
-
-	subs	r6, r6, #1
-	bge		sample_loop			/* Continue if index is 0 or positive */
-
-	pop		{r4, r5, r6, pc}
-
-
-/* get_light_readings
+/* get_light_reading
  *    Light Sensor Input Routine
- *    Collect n readings, and obtain min and max values
- *    Note: This routine blocks until all samples have been collected
+ *    Collect one light sensor reading
+ * On Exit:
+ *     R0: Collected Sample (unsigned byte)
  */
-get_light_readings:
+get_light_reading:
 	push	{lr}
-
 	mov		r0, #LIGHT_PORT
-	ldr		r1, =light_readings
-	mov		r2, #n		/* Number of readings to collect */
-	bl		collect_samples
+	bl		nx_sensors_analog_get_normalized	/* returned value in range 0-100% */
+	pop		{pc}
+
+/* calc_light_min_max
+ *    Calculate Min-Max for n Light Readings
+ */
 
 calc_light_min_max:
+	push	{lr}
 	mov		r0, #n
 	ldr		r1, =light_readings
 	ldr		r2, =light_min
@@ -616,19 +586,23 @@ calc_light_min_max:
 	bl		min_max_ubyte
 	pop		{pc}
 
-/* get_sound_levels
+/* get_sound_level
  *    Sound Sensor Input Routine
- *    Collect n readings, and obtain min and max values
- *    Note: This routine blocks until all samples have been collected
+ *    Collect one sound sensor reading
+ * On Exit:
+ *     R0: Collected Sample (unsigned byte)
  */
-get_sound_levels:
+get_sound_level:
  	push	{lr}
 	mov		r0, #SOUND_PORT
-	ldr		r1, =sound_levels
-	mov		r2, #n		/* Number of readings to collect */
-	bl		collect_samples
+	bl		nx_sensors_analog_get_normalized	/* returned value in range 0-100% */
+	pop		{pc}
 
+/* calc_sound_min_max
+ *    Calculate Min-Max for n Sound Readings
+ */
 calc_sound_min_max:
+	push	{lr}
 	mov		r0, #n
 	ldr		r1, =sound_levels
 	ldr		r2, =sound_min
@@ -664,6 +638,45 @@ calc_sound_min_max:
 
 exit_get_sound_levels:
  	pop		{pc}
+
+/* collect_samples
+ *    Sensor Sample Collection Routine
+ *    This routine calls the respective sensor input collection routine n times
+ *
+ *    >>>Add additional sensor input routines here<<<
+ *
+ *    Note: This routine blocks until n samples have been collected
+ *			(Max. delay is ~ 3 * n ms)
+ *
+ * Register Usage:
+ *		R4: Sensor Readings Array Index
+ *      R5: Light Readings Array Pointer
+ *		R6: Sound Levels Array Pointer
+ */
+collect_samples:
+	push	{r4, r5, r6, lr}
+	mov		r4, #n		/* Number of readings to collect */
+	ldr		r5, =light_readings
+	ldr		r6, =sound_levels
+
+sample_loop:
+	subs	r4, r4, #1				/* Convert Number of readings to collect into Array Index */
+	blt		done_collect_samples	/* We're done when index is negative */
+
+	/* Sensor Input routines */
+	bl		get_light_reading
+	strb	r0, [r5, r4]
+
+	bl		get_sound_level
+	strb	r0, [r6, r4]
+
+	/* A/D Converter Delay */
+	mov		r0, #SYSTICK_3MS
+	bl		nx_systick_wait_ms		/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
+	b		sample_loop				/* Next Iteration */
+
+done_collect_samples:
+	pop		{r4, r5, r6, pc}
 
 
 
@@ -2101,8 +2114,9 @@ main_loop:
 	beq		robot_stop
 
 	/* Perform Sensor Readings */
-	bl		get_light_readings
-	bl		get_sound_levels
+	bl		collect_samples				/* Combine multiple sensor readings in one routine */
+	bl		calc_light_min_max			/* Calc min-max for light sensor inputs */
+	bl		calc_sound_min_max			/* Calc min-max for sound level inputs */
 	bl		get_touch_status
 	bl		get_claw_status
 
