@@ -28,11 +28,11 @@
 #include "systems/tribot/include/macros.h"
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
-#undef ENABLE_BREAKPOINTS
+#define ENABLE_BREAKPOINTS
 /* To disable Claw Debugging, change the following to #undef DEBUG_CLAW */
 #undef DEBUG_CLAW
 /* To disable Sound Input Level Debugging, change the following to #undef DEBUG_SOUND */
-#define DEBUG_SOUND
+#define DEBUG_ULTRASOUND
 
 	.equ	MAX_ITERATIONS, 0x0FFFF
 	.equ	CLAWPOS_CHECK_INTERVAL, SYSTICK_100MS		/* Keep CLAWPOS_CHECK_INTERVAL <= ROBOT_SCHED_DURATION to avoid going out of sync */
@@ -165,7 +165,7 @@ ENUM_END(bbr_behavior_t)
 
 .text
 .align 4
-title:	  .asciz "Mover Bot"
+title:	  .asciz "Tribot Bot"
 pressed:  .asciz "Touch: Pressed "
 released: .asciz "Touch: Released"
 maxsound: .asciz "Sound: Following"
@@ -187,10 +187,11 @@ openclaws_behavior:	           .asciz "BBR:Open-Claws  "
 followline_behavior:           .asciz "BBR:Follow-Line "
 idle_behavior:                 .asciz "BBR:Idle        "
 
-#ifdef DEBUG_SOUND
+#ifdef DEBUG_ULTRASOUND
 minstring: .asciz "-: "
 maxstring: .asciz "+: "
 blankspace: .asciz "  "
+ultrasound_error: .asciz "ERR: No USnd! "
 #endif
 
 .data
@@ -212,6 +213,11 @@ light_max:      .byte   0
 sound_levels:	.space  n, 0x0
 sound_min:		.byte   0
 sound_max:		.byte	0
+
+/* Ultrasound Sensor Variables */
+ultrasound_readings:	.space  8, 0x0
+ultrasound_min:		.byte   0
+ultrasound_max:		.byte	0
 
 /* Touch Sensor Variables */
 touchval: .byte   0
@@ -609,33 +615,6 @@ calc_sound_min_max:
 	ldr		r3, =sound_max
 	bl		min_max_ubyte
 
-#ifdef DEBUG_SOUND
-
-	mov		r0, #0
-	mov		r1, #SNDLVL_ROW
-	bl 		nx_display_cursor_set_pos
-	ldr		r0, =minstring
-	bl		nx_display_string
-
-	ldr		r2, =sound_min
-	ldrb	r0, [r2]
-	bl		nx_display_int
-
-	ldr		r0, =blankspace
-	bl		nx_display_string
-
-	ldr		r0, =maxstring
-	bl		nx_display_string
-
-	ldr		r2, =sound_max
-	ldrb	r0, [r2]
-	bl		nx_display_int
-
-	ldr		r0, =blankspace
-	bl		nx_display_string
-
-#endif
-
 exit_get_sound_levels:
  	pop		{pc}
 
@@ -678,7 +657,34 @@ sample_loop:
 done_collect_samples:
 	pop		{r4, r5, r6, pc}
 
+#ifdef DEBUG_ULTRASOUND
+debug_ultrasound:
+ 	push	{lr}
+	mov		r0, #0
+	mov		r1, #SNDLVL_ROW
+	bl 		nx_display_cursor_set_pos
+	ldr		r0, =minstring
+	bl		nx_display_string
 
+	ldr		r2, =ultrasound_min
+	ldrb	r0, [r2]
+	bl		nx_display_int
+
+	ldr		r0, =blankspace
+	bl		nx_display_string
+
+	ldr		r0, =maxstring
+	bl		nx_display_string
+
+	ldr		r2, =ultrasound_max
+	ldrb	r0, [r2]
+	bl		nx_display_int
+
+	ldr		r0, =blankspace
+	bl		nx_display_string
+ 	pop		{pc}
+
+#endif
 
 /* get_touch_status
  *    Retrieve Touch Sensor value and store in variable touchval,
@@ -952,14 +958,6 @@ sound_quiet_handler:
  */
 sound_unknown_handler:
 	push	{lr}
-#if 0
-	ldr		r1, =sound_following_state
-	mov		r0, #(SEEKING_THRESH_INCR-1)			/* Force to Waiting State */
-	strb	r0, [r1, #1]						/* Update Sound Level Trigger */
-
-	mov		r0, #FALSE
-	bl		sound_update_state_output
-#endif
 
 	ldr		r1, =sound_following_state
 	ldrb	r0, [r1, #1]						/* Sound Level Trigger */
@@ -1938,11 +1936,36 @@ init_robot:
 	strb	r0, [r1, #1]		/* Sound Level Trigger */
 
 #if 0
-	bl		claw_open_immediate			/* Disabled, use BBR Behavior Open-Claws instead */
+	bl		claw_open_immediate	/* Disabled, use BBR Behavior Open-Claws instead */
 #endif
 
+	mov		r0, #ULSND_PORT
+	bl		nx_radar_init					/* Initialize the Ultrasound Sensor */
+#if 0
+retry_us_init:
+	mov		r0, #SYSTICK_100MS
+	bl		nx_systick_wait_ms	/* Wait 100 ms before checking Results */
+
+	mov		r0, #ULSND_PORT
+	bl		nx_radar_detect
+	teq		r0, #FALSE
+	beq		ultrasound_sensor_error
+	mov		r0, #ULSND_PORT
+	bl		nx_radar_reset					/* Configure the Ultrasound Sensor for default settings */
+	b		continue_init
+ultrasound_sensor_error:
+	mov		r0, #0
+	mov		r1, #1
+	bl 		nx_display_cursor_set_pos
+	ldr		r0, =ultrasound_error
+	bl		nx_display_string
+	b		retry_us_init
+#endif
+
+continue_init:
+
 	bl		light_led_enable
-	ldr		r8, =MAX_ITERATIONS	/* Execution Lifetime Iteration Limiter */
+	ldr		r8, =MAX_ITERATIONS				/* Execution Lifetime Iteration Limiter */
 
 	bl		nx_systick_get_ms				/* Current systick */
 	add		r0, r0, #ROBOT_SCHED_DURATION	/* Next Scheduler Timeout value */
@@ -1986,6 +2009,10 @@ shutdown_robot:
 	bl		claw_close_immediate	/* FIXME: Can we replace it with another routne? */
 	bl		stop_motion				/* Stop motors */
 	bl		light_led_disable
+
+	/* Disable Ultrasound Sensor */
+	mov		r0, #ULSND_PORT
+	bl		nx_radar_close
 	pop		{pc}
 
 /* Non-BBR Actuator Routines */
@@ -2113,6 +2140,16 @@ main_loop:
 	subs	r8, r8, #1
 	beq		robot_stop
 
+#ifdef DEBUG_ULTRASOUND
+
+	mov		r0, #0
+	mov		r1, #2
+	bl 		nx_display_cursor_set_pos
+
+	mov		r0, #ULSND_PORT
+	bl		nx_radar_info
+#else
+
 	/* Perform Sensor Readings */
 	bl		collect_samples				/* Combine multiple sensor readings in one routine */
 	bl		calc_light_min_max			/* Calc min-max for light sensor inputs */
@@ -2120,16 +2157,6 @@ main_loop:
 	bl		get_touch_status
 	bl		get_claw_status
 
-#ifdef DEBUG_CLAW
-
-	// Debug Grasping Function using Direct Claw Motor Actuation
-	ldr		r4, =touched
-	ldrb	r0, [r4]
-	teq		r0, #FALSE				/* Touched Activated returns 255, not equal to #TRUE */
-	blne	claw_close_immediate
-	bleq	claw_open_immediate
-
-#else
 
 main_dispatch:
 	bl		mover_dispatcher
