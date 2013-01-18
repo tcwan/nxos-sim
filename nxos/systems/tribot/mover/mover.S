@@ -32,7 +32,7 @@
 /* To disable Claw Debugging, change the following to #undef DEBUG_CLAW */
 #undef DEBUG_CLAW
 /* To disable Sound Input Level Debugging, change the following to #undef DEBUG_SOUND */
-#define DEBUG_SOUND
+#undef DEBUG_SOUND
 
 	.equ	MAX_ITERATIONS, 0x0FFFF
 	.equ	CLAWPOS_CHECK_INTERVAL, SYSTICK_100MS		/* Keep CLAWPOS_CHECK_INTERVAL <= ROBOT_SCHED_DURATION to avoid going out of sync */
@@ -178,6 +178,7 @@ black:	  .asciz " Line: Black  "
 edge:	  .asciz " Line: Edge   "
 unknown:  .asciz " Line: Unknown"
 
+moveobject_inhibited_behavior: .asciz "                "
 moveobject_idle_behavior:      .asciz "BBR:Move-Idle   "
 moveobject_waiting_behavior:   .asciz "BBR:Move-Waiting"
 moveobject_seeking_behavior:   .asciz "BBR:Move-Seeking"
@@ -1828,6 +1829,17 @@ bbr_deactivate_move_object:
 	mov		r0, #BBR_MOVE_OBJECT
 	ldr		r1, =bbr_behavior_inhibited
 	bl		bbr_copy_actuator_outputs
+
+	/* Update LCD Display */
+	ldr		r0, =moveobject_inhibited_behavior
+	bl		print_behavior_state
+
+	/* Reset Sound Following State and Trigger Level */
+	ldr		r1, =sound_following_state
+	mov		r0, #SOUND_IDLE
+	strb	r0, [r1]
+	mov		r0, #0
+	strb	r0, [r1, #1]		/* Sound Level Trigger */
 
 	mov		r0, #FALSE				/* Deactivate Behavior Outputs */
 	b		exit_bbr_move_object
