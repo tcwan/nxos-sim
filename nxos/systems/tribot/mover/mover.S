@@ -953,14 +953,6 @@ sound_quiet_handler:
  */
 sound_unknown_handler:
 	push	{lr}
-#if 0
-	ldr		r1, =sound_following_state
-	mov		r0, #(SEEKING_THRESH_INCR-1)			/* Force to Waiting State */
-	strb	r0, [r1, #1]						/* Update Sound Level Trigger */
-
-	mov		r0, #FALSE
-	bl		sound_update_state_output
-#endif
 
 	ldr		r1, =sound_following_state
 	ldrb	r0, [r1, #1]						/* Sound Level Trigger */
