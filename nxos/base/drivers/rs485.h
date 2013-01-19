@@ -62,6 +62,18 @@ typedef enum {
                               AT91C_US_MSBF
 
 
+/** Switch Control to PIOA outputs (disable RS485)
+ *
+ * @warning This is an internal routine, not meant for user programs.
+ */
+void nx_rs485_switch_to_pioa(void);
+
+/** Switch Control to RS485 outputs (enable RS485)
+ *
+ * @warning This is an internal routine, not meant for user programs.
+ */
+void nx_rs485_switch_to_usart(void);
+
 /** Enables the transmission over the RS485 interface
  *
  * @param baud_rate The required baud rate.
@@ -74,7 +86,7 @@ typedef enum {
  *        devices, since avoids remote overruns.
  *
  * @note By specifying 0 in the uart_mr parameter the default configuration
- * is mantained.
+ * is maintained.
  *
  * @warning The RS485 driver should only be used if sensor port 4 has not
  * already been configured as a normal sensor port.

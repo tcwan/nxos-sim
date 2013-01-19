@@ -75,19 +75,34 @@ static void nx_rs485_isr(void) {
   }
 }
 
+void nx_rs485_switch_to_pioa(void)
+{
+	  /* Enable PIOA Control for the RS485 pins */
+	   *AT91C_PIOA_PER   = usart_to_rs485_lines;
+	   *AT91C_PIOA_PPUDR = usart_to_rs485_lines;		/* Disable Pullups */
+	   *AT91C_PIOA_OER   = usart_to_rs485_lines;
+	   *AT91C_PIOA_CODR  = usart_to_rs485_lines;		/* Set outputs Low */
+}
+
+void nx_rs485_switch_to_usart(void)
+{
+	  /* Disable PIOA Control, enable RS485 Outputs */
+	  *AT91C_PIOA_PPUDR = usart_to_rs485_lines;
+	  *AT91C_PIOA_PDR   = usart_to_rs485_lines;
+	  *AT91C_PIOA_ASR   = usart_to_rs485_lines;
+}
+
 void nx_rs485_init(nx_rs485_baudrate_t baud_rate,
                    U32 uart_mr,
                    U16 timeout,
                    bool timeguard) {
   NX_ASSERT(rs485_state.status == RS485_UNINITIALIZED);
 
+
   /* Enable the peripheral clock */
   *AT91C_PMC_PCER = (1 << AT91C_ID_US0);
 
-  /* Disable the PIOA controller pin management */
-  *AT91C_PIOA_PPUDR = usart_to_rs485_lines;
-  *AT91C_PIOA_PDR   = usart_to_rs485_lines;
-  *AT91C_PIOA_ASR   = usart_to_rs485_lines;
+  nx_rs485_switch_to_usart();
 
   /* Reset and disable to avoid funny jokes: */
   *AT91C_US0_CR = AT91C_US_RSTRX | /* Transmitter reset */
@@ -139,6 +154,8 @@ void nx_rs485_shutdown(void) {
 
   /* Disable usart clock */
   *AT91C_PMC_PCDR = (1 << AT91C_ID_US0);
+
+  nx_rs485_switch_to_pioa();
 
   rs485_state.status = RS485_UNINITIALIZED;
 }

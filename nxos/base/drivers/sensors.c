@@ -15,6 +15,7 @@
 #include "base/drivers/systick.h"
 #include "base/drivers/aic.h"
 #include "base/drivers/_avr.h"
+#include "base/drivers/rs485.h"
 
 #include "base/drivers/_sensors.h"
 
@@ -49,7 +50,11 @@ void nx__sensors_init(void) {
    * the lines.
    */
   *AT91C_PIOA_PER = pinmask;
+  *AT91C_PIOA_PPUDR = pinmask;					/* Disable Pullups */
   *AT91C_PIOA_ODR = pinmask;
+
+  nx_rs485_switch_to_pioa();					/* Make sure that we disable RS485 */
+
 }
 
 void nx__sensors_i2c_enable(U32 sensor) {
@@ -67,8 +72,14 @@ void nx__sensors_i2c_enable(U32 sensor) {
     sensors_pinmap[sensor].scl;
 
   *AT91C_PIOA_OER = pinmask;
+  *AT91C_PIOA_PPUDR = pinmask;					/* Disable Pullups */
   *AT91C_PIOA_SODR = pinmask;
   *AT91C_PIOA_MDER = pinmask;
+
+#if 0
+  if (sensor == 3)
+	  nx_rs485_switch_to_pioa();				/* Paranoid */
+#endif
 }
 
 const nx__sensors_pins *nx__sensors_get_pins(U32 sensor) {
