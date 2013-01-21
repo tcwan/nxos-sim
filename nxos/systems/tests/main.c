@@ -1,4 +1,4 @@
-/* Copyright (c) 2007,2008 the NxOS developers
+/* Copyright (c) 2007 - 2013 the NxOS developers
  *
  * See AUTHORS for a full list of the developers.
  *
@@ -28,12 +28,12 @@ void main(void) {
   //tests_all();
 
   // tests_fantom();
-  tests_gdbdebug();
+  //tests_gdbdebug();
 
   //tests_usb();
   //tests_bt();
   //tests_usb_hardcore();
-  //tests_radar();
+  tests_radar();
   //tests_util();
   //tests_defrag();
   //tests_ht_compass();

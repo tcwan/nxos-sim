@@ -1,4 +1,4 @@
-/* Copyright (c) 2007,2008 the NxOS developers
+/* Copyright (c) 2007 - 2013 the NxOS developers
  *
  * See AUTHORS for a full list of the developers.
  *
@@ -7,6 +7,23 @@
  */
 
 /* Various test routines for components of the NXT. */
+
+/* The following is used to test Port 4 (index = 3) I2C support
+ *
+ * Currently The NxOS I2C driver only implements Open Drain
+ * (Multi-Drive Enable = MDER set) I2C Data lines.
+ * Port 4 of the NXT has Schotty Diodes which affect the operation
+ * of Open Drain signals.
+ *
+ * The Official NXT Firmware implements Push-Pull where the I2C
+ * Data line is switched between Input and Output where necessary.
+ *
+ * When tested with the HiTechnic Compass sensor, the Open Drain
+ * configuration works with Port 4. However, the Ultrasound (Sonar/Radar)
+ * sensor from LEGO does not.
+ *
+ */
+#define TEST_PORT4_I2C
 
 #include "base/types.h"
 #include "base/interrupts.h"
@@ -826,7 +843,12 @@ void tests_usb_hardcore(void) {
 }
 
 void tests_radar(void) {
+#ifdef TEST_PORT4_I2C
+  U32 sensor = 3;
+#else
   U32 sensor = 0;
+#endif
+
   U8 reading;
   S8 object;
   U8 objects[8];
@@ -909,7 +931,11 @@ void tests_radar(void) {
 }
 
 void tests_ht_compass(void) {
+#ifdef TEST_PORT4_I2C
+  U32 sensor = 3;
+#else
   U32 sensor = 2;
+#endif
   hello();
   nx_display_clear();
   nx_display_cursor_set_pos(0, 0);
