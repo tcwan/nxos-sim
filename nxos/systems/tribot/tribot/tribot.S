@@ -26,9 +26,10 @@
 #include "armdebug/Debugger/debug_stub.h"
 #include "systems/tribot/include/tribot.h"
 #include "systems/tribot/include/macros.h"
+#include "systems/tribot/include/pid_equates.h"
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
-#define ENABLE_BREAKPOINTS
+#undef ENABLE_BREAKPOINTS
 /* To disable Claw Debugging, change the following to #undef DEBUG_CLAW */
 #undef DEBUG_CLAW
 /* To disable Sound Input Level Debugging, change the following to #undef DEBUG_SOUND */
@@ -39,6 +40,22 @@
 	.equ	ROBOT_SCHED_DURATION,	SYSTICK_100MS		/* 100 ms per robot scheduler loop */
 
 	.equ	IDLE_TONE_INTERVAL, SYSTICK_500MS			/* FIXME: May need to be > TONE_ENABLED_DUR to be safe */
+
+
+	/* PID Configuration Parameters
+	 * FIXME: Need to be changed to actual values
+	 * KP, KI, KD have the range of 16-bit integer values [MIN_SHORT,MAX_SHORT]
+	 * This is multiplied by alpha to give 32-bit resolution values
+	 * alphaKP, alphaKI, alphaKD BEFORE initializing the PID Controller
+	 * The value of alpha is 2^SCALING_SHIFT, where SCALING_SHIFT is 16
+	 * which gives alpha = 65536
+	 */
+    .equ alphaKP, 1
+    .equ alphaKI, 0
+    .equ alphaKD, 0
+    .equ STEADY_STATE_THRESHOLD, 0	    /* 0 = disabled, !0 = Stop PID Controller after x iterations */
+
+
 
 	/* LCD Display Constants */
 	.equ	TOUCH_ROW, 3				/* Touch Display Row Index */
@@ -239,6 +256,12 @@ claw_movement:  .byte 0
 /* Sound Following Behavior Variables */
 sound_following_state:	.byte 0
 sound_level_trigger:	.byte 0
+
+/* PID State Variables */
+.align
+pid:	.space  SIZEOF_PID_CONTROL, 0x0
+system_output: .word 0x0		/* FIXME */
+system_jitter: .word 0x100		/* FIXME */
 
 /* Signal Inhibition Values */
 #define MOTOR_INHIBITED 0xFFFFFF80
@@ -1904,6 +1927,16 @@ exit_mover_controller:
  */
 init_robot:
 	push	{lr}
+
+	/* Init PID */
+    mov		r0, #STEADY_STATE_THRESHOLD
+    push 	{r0}                         @ Stack Parameter
+    ldr  	r0, =pid
+    ldr  	r1, =alphaKP
+    ldr  	r2, =alphaKI
+    ldr  	r3, =alphaKD
+	bl		InitPID
+
 	/* Configure Sensors */
 	mov		r0, #LIGHT_PORT
 	bl		nx_sensors_analog_enable
@@ -1941,7 +1974,7 @@ init_robot:
 
 	mov		r0, #ULSND_PORT
 	bl		nx_radar_init					/* Initialize the Ultrasound Sensor */
-#if 0
+
 retry_us_init:
 	mov		r0, #SYSTICK_100MS
 	bl		nx_systick_wait_ms	/* Wait 100 ms before checking Results */
@@ -1949,10 +1982,8 @@ retry_us_init:
 	mov		r0, #ULSND_PORT
 	bl		nx_radar_detect
 	teq		r0, #FALSE
-	beq		ultrasound_sensor_error
-	mov		r0, #ULSND_PORT
-	bl		nx_radar_reset					/* Configure the Ultrasound Sensor for default settings */
-	b		continue_init
+	bne		continue_init
+
 ultrasound_sensor_error:
 	mov		r0, #0
 	mov		r1, #1
@@ -1960,7 +1991,6 @@ ultrasound_sensor_error:
 	ldr		r0, =ultrasound_error
 	bl		nx_display_string
 	b		retry_us_init
-#endif
 
 continue_init:
 
