@@ -28,6 +28,7 @@
  *   R1: Remainder
  *   R2,R3: Preserved (Needed by pid.S routines)
  */
+#define __ASSEMBLY__
 #include "base/interwork.h"
 
 /* The algorithm uses divides R1 by R2, so instead of

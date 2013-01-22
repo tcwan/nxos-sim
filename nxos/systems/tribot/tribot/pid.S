@@ -30,6 +30,7 @@
  * Scaling factor internally.
  */
 
+#define __ASSEMBLY__
 #include "base/interwork.h"
 #include "systems/tribot/include/pid_equates.h"
 	.extern  ulongdiv

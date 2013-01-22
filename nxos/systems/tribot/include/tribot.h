@@ -29,6 +29,7 @@
 	/* Sensor Port Assignments */
 	.equ	TOUCH_PORT, 0		/* Sensor 1 */
 	.equ	SOUND_PORT, 1		/* Sensor 2 */
+
 #ifdef PORT4_I2C_OK
 	.equ	LIGHT_PORT, 2		/* Sensor 3 */
 	.equ	ULSND_PORT, 3		/* Sensor 4 */
@@ -36,8 +37,18 @@
 	.equ	LIGHT_PORT, 3		/* Sensor 4 */
 	.equ	ULSND_PORT, 2		/* Sensor 3 */
 #endif
+	/* sensors.h enum */
 	.equ	DIGI0, 0
 	.equ	DIGI1, 1
+
+	/* radar.h enum */
+	.equ	RADAR_MODE_OFF, 0x00
+	.equ	RADAR_MODE_SINGLE_SHOT, 0x01
+	.equ	RADAR_MODE_CONTINUOUS, 0x02
+	.equ	RADAR_MODE_EVENT_CAPTURE, 0x03
+	.equ	RADAR_MODE_RESET, 0x04
+
+	.equ	RADAR_MAX_OBJECT_NUMBER, 8
 
 	/* Actuator Port Assignments */
 	.extern nx_motors_rotate

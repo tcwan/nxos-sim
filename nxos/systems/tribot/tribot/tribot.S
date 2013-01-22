@@ -209,6 +209,7 @@ minstring: .asciz "-: "
 maxstring: .asciz "+: "
 blankspace: .asciz "  "
 ultrasound_error: .asciz "ERR: No USnd! "
+ultrasound_found: .asciz "              "
 #endif
 
 .data
@@ -232,7 +233,7 @@ sound_min:		.byte   0
 sound_max:		.byte	0
 
 /* Ultrasound Sensor Variables */
-ultrasound_readings:	.space  8, 0x0
+ultrasound_readings:	.space  RADAR_MAX_OBJECT_NUMBER, 0x0
 ultrasound_min:		.byte   0
 ultrasound_max:		.byte	0
 
@@ -260,6 +261,7 @@ sound_level_trigger:	.byte 0
 /* PID State Variables */
 .align
 pid:	.space  SIZEOF_PID_CONTROL, 0x0
+.align
 system_output: .word 0x0		/* FIXME */
 system_jitter: .word 0x100		/* FIXME */
 
@@ -680,35 +682,6 @@ sample_loop:
 done_collect_samples:
 	pop		{r4, r5, r6, pc}
 
-#ifdef DEBUG_ULTRASOUND
-debug_ultrasound:
- 	push	{lr}
-	mov		r0, #0
-	mov		r1, #SNDLVL_ROW
-	bl 		nx_display_cursor_set_pos
-	ldr		r0, =minstring
-	bl		nx_display_string
-
-	ldr		r2, =ultrasound_min
-	ldrb	r0, [r2]
-	bl		nx_display_int
-
-	ldr		r0, =blankspace
-	bl		nx_display_string
-
-	ldr		r0, =maxstring
-	bl		nx_display_string
-
-	ldr		r2, =ultrasound_max
-	ldrb	r0, [r2]
-	bl		nx_display_int
-
-	ldr		r0, =blankspace
-	bl		nx_display_string
- 	pop		{pc}
-
-#endif
-
 /* get_touch_status
  *    Retrieve Touch Sensor value and store in variable touchval,
  *    Update Touch Status Boolean touched, possibly perform debouncing
@@ -774,6 +747,57 @@ exit_get_touch_status:
 
 exit_get_claw_status:
 	pop		{r4, pc}
+
+
+get_obstacle_distance:
+	push	{lr}
+
+	mov		r0, #ULSND_PORT
+	ldr		r1, =ultrasound_readings
+	bl		nx_radar_read_all
+
+	mov		r0, #ULSND_PORT
+	mov		r1, #RADAR_MODE_SINGLE_SHOT
+	bl		nx_radar_set_op_mode			/* Arm Ultrasound Sensor for next pass */
+
+	mov		r0, #RADAR_MAX_OBJECT_NUMBER
+	ldr		r1, =ultrasound_readings
+	ldr		r2, =ultrasound_min
+	ldr		r3, =ultrasound_max
+	bl		min_max_ubyte
+
+
+#ifdef DEBUG_ULTRASOUND
+debug_ultrasound:
+ 	push	{lr}
+	mov		r0, #0
+	mov		r1, #SNDLVL_ROW
+	bl 		nx_display_cursor_set_pos
+	ldr		r0, =minstring
+	bl		nx_display_string
+
+	ldr		r2, =ultrasound_min
+	ldrb	r0, [r2]
+	bl		nx_display_int
+
+	ldr		r0, =blankspace
+	bl		nx_display_string
+
+	ldr		r0, =maxstring
+	bl		nx_display_string
+
+	ldr		r2, =ultrasound_max
+	ldrb	r0, [r2]
+	bl		nx_display_int
+
+	ldr		r0, =blankspace
+	bl		nx_display_string
+ 	pop		{pc}
+
+#endif
+
+
+	pop		{pc}
 
 /* Behavior Support Routines */
 
@@ -1930,12 +1954,13 @@ init_robot:
 
 	/* Init PID */
     mov		r0, #STEADY_STATE_THRESHOLD
-    push 	{r0}                         @ Stack Parameter
+    push 	{r0}                /* Insert Parameter onto Stack */
     ldr  	r0, =pid
     ldr  	r1, =alphaKP
     ldr  	r2, =alphaKI
     ldr  	r3, =alphaKD
 	bl		InitPID
+	pop		{r0}				/* Cleanup stack after routine call */
 
 	/* Configure Sensors */
 	mov		r0, #LIGHT_PORT
@@ -1982,7 +2007,7 @@ retry_us_init:
 	mov		r0, #ULSND_PORT
 	bl		nx_radar_detect
 	teq		r0, #FALSE
-	bne		continue_init
+	bne		continue_ultrasound_init
 
 ultrasound_sensor_error:
 	mov		r0, #0
@@ -1992,7 +2017,16 @@ ultrasound_sensor_error:
 	bl		nx_display_string
 	b		retry_us_init
 
-continue_init:
+continue_ultrasound_init:
+	mov		r0, #0
+	mov		r1, #1
+	bl 		nx_display_cursor_set_pos
+	ldr		r0, =ultrasound_found
+	bl		nx_display_string
+
+	mov		r0, #ULSND_PORT
+	mov		r1, #RADAR_MODE_SINGLE_SHOT
+	bl		nx_radar_set_op_mode			/* Arm Ultrasound Sensor for next pass */
 
 	bl		light_led_enable
 	ldr		r8, =MAX_ITERATIONS				/* Execution Lifetime Iteration Limiter */
@@ -2176,8 +2210,12 @@ main_loop:
 	mov		r1, #2
 	bl 		nx_display_cursor_set_pos
 
+#if 0
 	mov		r0, #ULSND_PORT
 	bl		nx_radar_info
+#endif
+	bl		get_obstacle_distance
+
 #else
 
 	/* Perform Sensor Readings */
@@ -2186,6 +2224,7 @@ main_loop:
 	bl		calc_sound_min_max			/* Calc min-max for sound level inputs */
 	bl		get_touch_status
 	bl		get_claw_status
+	bl		get_obstacle_distance
 
 
 main_dispatch:
