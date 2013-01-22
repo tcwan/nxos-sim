@@ -25,11 +25,17 @@
 	.equ	SYSTICK_3MS,    3
 	.equ	SYSTICK_1MS,    1
 
+#undef PORT4_I2C_OK
 	/* Sensor Port Assignments */
 	.equ	TOUCH_PORT, 0		/* Sensor 1 */
 	.equ	SOUND_PORT, 1		/* Sensor 2 */
+#ifdef PORT4_I2C_OK
 	.equ	LIGHT_PORT, 2		/* Sensor 3 */
 	.equ	ULSND_PORT, 3		/* Sensor 4 */
+#else
+	.equ	LIGHT_PORT, 3		/* Sensor 4 */
+	.equ	ULSND_PORT, 2		/* Sensor 3 */
+#endif
 	.equ	DIGI0, 0
 	.equ	DIGI1, 1
 
