@@ -846,7 +846,7 @@ void tests_radar(void) {
 #ifdef TEST_PORT4_I2C
   U32 sensor = 3;
 #else
-  U32 sensor = 0;
+  U32 sensor = 2;
 #endif
 
   U8 reading;
