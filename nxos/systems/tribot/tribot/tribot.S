@@ -33,7 +33,9 @@
 /* To disable Claw Debugging, change the following to #undef DEBUG_CLAW */
 #undef DEBUG_CLAW
 /* To disable Sound Input Level Debugging, change the following to #undef DEBUG_SOUND */
-#define DEBUG_ULTRASOUND
+#undef DEBUG_ULTRASOUND
+/* To disable Avoid Obstacles Behavior Debugging, change the following to #undef DEBUG_AVOID_OBSTACLE */
+#define DEBUG_AVOID_OBSTACLE
 
 	.equ	MAX_ITERATIONS, 0x0FFFF
 	.equ	CLAWPOS_CHECK_INTERVAL, SYSTICK_100MS		/* Keep CLAWPOS_CHECK_INTERVAL <= ROBOT_SCHED_DURATION to avoid going out of sync */
@@ -55,7 +57,8 @@
     .equ alphaKD, 0
     .equ STEADY_STATE_THRESHOLD, 0	    /* 0 = disabled, !0 = Stop PID Controller after x iterations */
 
-
+	/* Ultrasound Sensor Calibration Offset */
+	.equ	ULTRASOUND_ERR_OFFSET, 3	/* FIXME: Min measurable distance is about 3 cm (1 inch), but it always returns 6 */
 
 	/* LCD Display Constants */
 	.equ	TOUCH_ROW, 3				/* Touch Display Row Index */
@@ -174,6 +177,8 @@ ENUM_VAL(BBR_FOLLOW_LINE)       	/**< Follow Line. */
 ENUM_VAL(BBR_OPEN_CLAWS)        	/**< Open Claws. */
 ENUM_VAL(BBR_GRASP_OBJECT)       	/**< Grasp Object. */
 ENUM_VAL(BBR_MOVE_OBJECT)        	/**< Move Object. */
+ENUM_VAL(BBR_AVOID_OBSTACLE)        /**< Avoid Obstacle. */
+
 ENUM_END(bbr_behavior_t)
 /*@}*/
 
@@ -204,13 +209,13 @@ openclaws_behavior:	           .asciz "BBR:Open-Claws  "
 followline_behavior:           .asciz "BBR:Follow-Line "
 idle_behavior:                 .asciz "BBR:Idle        "
 
-#ifdef DEBUG_ULTRASOUND
-minstring: .asciz "-: "
-maxstring: .asciz "+: "
-blankspace: .asciz "  "
+#if (defined DEBUG_ULTRASOUND || defined DEBUG_AVOID_OBSTACLE)
+ultrasoundstr: .asciz "Radar: "
+ultrasoundunits: .asciz " cm  "
+#endif
+
 ultrasound_error: .asciz "ERR: No USnd! "
 ultrasound_found: .asciz "              "
-#endif
 
 .data
 .align 4
@@ -233,9 +238,7 @@ sound_min:		.byte   0
 sound_max:		.byte	0
 
 /* Ultrasound Sensor Variables */
-ultrasound_readings:	.space  RADAR_MAX_OBJECT_NUMBER, 0x0
-ultrasound_min:		.byte   0
-ultrasound_max:		.byte	0
+ultrasoundval:	.byte	0
 
 /* Touch Sensor Variables */
 touchval: .byte   0
@@ -751,48 +754,33 @@ exit_get_claw_status:
 
 get_obstacle_distance:
 	push	{lr}
-
 	mov		r0, #ULSND_PORT
-	ldr		r1, =ultrasound_readings
-	bl		nx_radar_read_all
+	mov		r1, #0							/* Continue Reading only returns Object 0 */
+	bl		nx_radar_read_distance			/* Return distance in R0 */
+	ldr		r1, =ultrasoundval
+	cmp		r0, #0
+	cmp		r0, #RADAR_DIST_NOOBJECT
+	beq		exit_get_obstacle_distance		/* Weed out invalid readings (0 == no object) */
+	cmp		r0, #RADAR_DIST_ERR
+	beq		exit_get_obstacle_distance		/* Weed out invalid readings (255 == error) */
+	sub		r0, r0, #ULTRASOUND_ERR_OFFSET	/* Adjust read value with calibration offset */
+	strb	r0, [r1]						/* Store valid reading into ultrasoundval */
 
-	mov		r0, #ULSND_PORT
-	mov		r1, #RADAR_MODE_SINGLE_SHOT
-	bl		nx_radar_set_op_mode			/* Arm Ultrasound Sensor for next pass */
+exit_get_obstacle_distance:
 
-	mov		r0, #RADAR_MAX_OBJECT_NUMBER
-	ldr		r1, =ultrasound_readings
-	ldr		r2, =ultrasound_min
-	ldr		r3, =ultrasound_max
-	bl		min_max_ubyte
-
-
-#ifdef DEBUG_ULTRASOUND
-debug_ultrasound:
- 	push	{lr}
+#if (defined DEBUG_ULTRASOUND || defined DEBUG_AVOID_OBSTACLE)
 	mov		r0, #0
 	mov		r1, #SNDLVL_ROW
 	bl 		nx_display_cursor_set_pos
-	ldr		r0, =minstring
+	ldr		r0, =ultrasoundstr
 	bl		nx_display_string
 
-	ldr		r2, =ultrasound_min
-	ldrb	r0, [r2]
+	ldr		r1, =ultrasoundval
+	ldrb	r0, [r1]
 	bl		nx_display_int
 
-	ldr		r0, =blankspace
+	ldr		r0, =ultrasoundunits
 	bl		nx_display_string
-
-	ldr		r0, =maxstring
-	bl		nx_display_string
-
-	ldr		r2, =ultrasound_max
-	ldrb	r0, [r2]
-	bl		nx_display_int
-
-	ldr		r0, =blankspace
-	bl		nx_display_string
- 	pop		{pc}
 
 #endif
 
@@ -2002,7 +1990,7 @@ init_robot:
 
 retry_us_init:
 	mov		r0, #SYSTICK_100MS
-	bl		nx_systick_wait_ms	/* Wait 100 ms before checking Results */
+	bl		nx_systick_wait_ms				/* Wait 100 ms before checking Results */
 
 	mov		r0, #ULSND_PORT
 	bl		nx_radar_detect
@@ -2025,8 +2013,8 @@ continue_ultrasound_init:
 	bl		nx_display_string
 
 	mov		r0, #ULSND_PORT
-	mov		r1, #RADAR_MODE_SINGLE_SHOT
-	bl		nx_radar_set_op_mode			/* Arm Ultrasound Sensor for next pass */
+	mov		r1, #RADAR_MODE_CONTINUOUS
+	bl		nx_radar_set_op_mode			/* Arm Ultrasound Sensor */
 
 	bl		light_led_enable
 	ldr		r8, =MAX_ITERATIONS				/* Execution Lifetime Iteration Limiter */
@@ -2210,10 +2198,8 @@ main_loop:
 	mov		r1, #2
 	bl 		nx_display_cursor_set_pos
 
-#if 0
 	mov		r0, #ULSND_PORT
 	bl		nx_radar_info
-#endif
 	bl		get_obstacle_distance
 
 #else
