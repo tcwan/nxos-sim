@@ -50,6 +50,9 @@
 
 	.equ	RADAR_MAX_OBJECT_NUMBER, 8
 
+	.equ	RADAR_DIST_NOOBJECT, 0
+	.equ	RADAR_DIST_ERR, 255
+
 	/* Actuator Port Assignments */
 	.extern nx_motors_rotate
 	.extern nx_motors_stop
