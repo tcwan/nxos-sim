@@ -7,7 +7,7 @@
  * - Open Claws
  * - Grasp Object
  * - Move Object
- * - Avoid Obstacles
+ * - Avoid Obstacle
  *
  * This file must be processed using cpp before assembly.
  */
@@ -43,6 +43,7 @@
 
 	.equ	IDLE_TONE_INTERVAL, SYSTICK_500MS			/* FIXME: May need to be > TONE_ENABLED_DUR to be safe */
 
+	.equ	OBSTACLE_MINDIST, 10						/* FIXME: Set appropriate min distance (in cm) */
 
 	/* PID Configuration Parameters
 	 * FIXME: Need to be changed to actual values
@@ -59,6 +60,7 @@
 
 	/* Ultrasound Sensor Calibration Offset */
 	.equ	ULTRASOUND_ERR_OFFSET, 3	/* FIXME: Min measurable distance is about 3 cm (1 inch), but it always returns 6 */
+	.equ	ULTRASOUND_ERRSTATE_COUNT, 5	/* Used to reset Detected Distances if too many unknown objects /error */
 
 	/* LCD Display Constants */
 	.equ	TOUCH_ROW, 3				/* Touch Display Row Index */
@@ -132,6 +134,7 @@
 	/* Tone Control Constants
 	 */
 	.equ	TONE_ENABLED_FREQ, 2500				/* Hz */
+	.equ	TONE_OBSTACLE_FREQ, 750				/* Hz */
 	.equ	TONE_SILENCED_FREQ, 0				/* Hz */
 	.equ	TONE_ENABLED_DUR, 100				/* ms */
 
@@ -182,7 +185,7 @@ ENUM_VAL(BBR_AVOID_OBSTACLE)        /**< Avoid Obstacle. */
 ENUM_END(bbr_behavior_t)
 /*@}*/
 
-	.equ	BBR_LAST_BEHAVIOR, BBR_MOVE_OBJECT		/* Need to update this if behavior list changes */
+	.equ	BBR_LAST_BEHAVIOR, BBR_AVOID_OBSTACLE		/* FIXME: Need to update this if behavior list changes */
 	.equ	NUM_BEHAVIORS, (BBR_LAST_BEHAVIOR+1)
 
 .text
@@ -200,6 +203,8 @@ black:	  .asciz " Line: Black  "
 edge:	  .asciz " Line: Edge   "
 unknown:  .asciz " Line: Unknown"
 
+bbr_inhibited_behavior:        .asciz "BBR:            "
+avoidobstacle_idle_behavior:   .asciz "BBR:Avoid-Idle  "
 moveobject_idle_behavior:      .asciz "BBR:Move-Idle   "
 moveobject_waiting_behavior:   .asciz "BBR:Move-Waiting"
 moveobject_seeking_behavior:   .asciz "BBR:Move-Seeking"
@@ -239,6 +244,7 @@ sound_max:		.byte	0
 
 /* Ultrasound Sensor Variables */
 ultrasoundval:	.byte	0
+ultrasound_errcnt: .byte	0
 
 /* Touch Sensor Variables */
 touchval: .byte   0
@@ -362,6 +368,10 @@ behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
 	init_actuator_state bbr_behavior_inhibited, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, MOTOR_INHIBITED_BYTE, FALSE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
 			/* Inhibit Behavior */
 
+	/* Avoid-Obstacle Behavior Actuation Outputs */
+	init_actuator_state bbr_avoid_obstacle_idle, MOTOR_INHIBITED_BYTE, TRUE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_OBSTACLE_FREQ, TONE_ENABLED_DUR
+			/* Idle */
+
 	/* Move-Object Behavior Actuation Outputs */
 	init_actuator_state bbr_move_object_idle, CLOSE_SPEED, TRUE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
 			/* Idle */
@@ -471,6 +481,8 @@ dispatcher_behavior_jumptable:
 	.word	bbr_open_claws
 	.word	bbr_grasp_object
 	.word	bbr_move_object
+	.word	bbr_avoid_obstacle
+
 	.equ	NUM_DISPATCHER_ENTRIES, (. - dispatcher_behavior_jumptable)/4
 
 output_arbiter_jumptable:
@@ -757,14 +769,27 @@ get_obstacle_distance:
 	mov		r0, #ULSND_PORT
 	mov		r1, #0							/* Continue Reading only returns Object 0 */
 	bl		nx_radar_read_distance			/* Return distance in R0 */
-	ldr		r1, =ultrasoundval
+	ldr		r2, =ultrasoundval
 	cmp		r0, #0
 	cmp		r0, #RADAR_DIST_NOOBJECT
-	beq		exit_get_obstacle_distance		/* Weed out invalid readings (0 == no object) */
+	beq		get_obstacle_distance_err		/* Weed out invalid readings (0 == no object) */
 	cmp		r0, #RADAR_DIST_ERR
-	beq		exit_get_obstacle_distance		/* Weed out invalid readings (255 == error) */
+	beq		get_obstacle_distance_err		/* Weed out invalid readings (255 == error) */
 	sub		r0, r0, #ULTRASOUND_ERR_OFFSET	/* Adjust read value with calibration offset */
-	strb	r0, [r1]						/* Store valid reading into ultrasoundval */
+	mov		r1, #0							/* Reset Error Count */
+	b		update_obstacle_distance_errcnt
+
+get_obstacle_distance_err:
+	ldrb	r0, [r2]						/* Retrieve last reading */
+	ldrb	r1, [r2, #1]					/* Retrieve ultrasound_errcnt */
+	add		r1, r1, #1
+	cmp		r1, #ULTRASOUND_ERRSTATE_COUNT
+	movhs	r1, #0							/* Reset ultrasound_errcnt if limit reached */
+	movhs	r0, #RADAR_DIST_ERR				/* Store reading as error distance (for real) */
+
+update_obstacle_distance_errcnt:
+	strb	r0, [r2]						/* Store new distance reading (if valid) */
+	strb	r1, [r2, #1]					/* Update Error Count */
 
 exit_get_obstacle_distance:
 
@@ -1862,6 +1887,17 @@ bbr_deactivate_move_object:
 	ldr		r1, =bbr_behavior_inhibited
 	bl		bbr_copy_actuator_outputs
 
+	/* Update LCD Display */
+	ldr		r0, =bbr_inhibited_behavior
+	bl		print_behavior_state
+
+	/* Reset Sound Following State and Trigger Level */
+	ldr		r1, =sound_following_state
+	mov		r0, #SOUND_IDLE
+	strb	r0, [r1]
+	mov		r0, #0
+	strb	r0, [r1, #1]		/* Sound Level Trigger */
+
 	mov		r0, #FALSE				/* Deactivate Behavior Outputs */
 	b		exit_bbr_move_object
 
@@ -1879,6 +1915,55 @@ bbr_move_object_active:
 	mov		r0, #TRUE				/* Activate Behavior */
 
 exit_bbr_move_object:
+	pop		{r5, r6, pc}
+
+/* Avoid Obstacle Behavior
+ *
+ * Returns:
+ *    Activated : Boolean
+ *
+ *
+ */
+bbr_avoid_obstacle:
+	push	{r5, r6, lr}
+	ldr		r1, =ultrasoundval
+	ldrb	r0, [r1]
+	cmp		r0, #OBSTACLE_MINDIST
+	bge		bbr_deactivate_avoid_obstacle
+
+bbr_avoid_obstacle_action:
+
+/* FIXME:
+ *
+ *  Currently when this behavior is activated, lower level behaviors, esp. move object still has
+ *  active states.
+ *  This needs to reset the active states such that when the lower level behavior is reactivated it won't
+ *  jump into a weird state.
+ */
+
+	mov		r0, #BBR_AVOID_OBSTACLE
+	ldr		r1, =bbr_avoid_obstacle_idle
+	bl		bbr_copy_actuator_outputs			/* Update behavior outputs */
+
+	ldr		r0, =avoidobstacle_idle_behavior	/* Display String */
+	bl		print_behavior_state
+	b		bbr_avoid_obstacle_active
+
+bbr_deactivate_avoid_obstacle:
+	mov		r0, #BBR_AVOID_OBSTACLE
+	ldr		r1, =bbr_behavior_inhibited
+	bl		bbr_copy_actuator_outputs
+
+	ldr		r0, =bbr_inhibited_behavior	/* Display String */
+	bl		print_behavior_state
+
+	mov		r0, #FALSE				/* Deactivate Behavior Outputs */
+	b		exit_bbr_avoid_obstacle
+
+bbr_avoid_obstacle_active:
+	mov		r0, #TRUE				/* Activate Behavior */
+
+exit_bbr_avoid_obstacle:
 	pop		{r5, r6, pc}
 
 /* Mover Dispatcher
