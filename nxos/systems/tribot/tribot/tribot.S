@@ -267,6 +267,12 @@ claw_movement:  .byte 0
 sound_following_state:	.byte 0
 sound_level_trigger:	.byte 0
 
+/* Avoid Object Behavior Variables */
+obstacle_detected:	.byte	0
+obstacle_tone_active: .byte FALSE
+.align
+obstacle_tone_timestamp: .word 0
+
 /* PID State Variables */
 .align
 pid:	.space  SIZEOF_PID_CONTROL, 0x0
@@ -369,8 +375,10 @@ behavior_actuations: .space	(SIZEOF_ACTUATOR_STATE * NUM_BEHAVIORS), 0x0
 			/* Inhibit Behavior */
 
 	/* Avoid-Obstacle Behavior Actuation Outputs */
-	init_actuator_state bbr_avoid_obstacle_idle, MOTOR_INHIBITED_BYTE, TRUE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_OBSTACLE_FREQ, TONE_ENABLED_DUR
-			/* Idle */
+	init_actuator_state bbr_avoid_obstacle_on, MOTOR_INHIBITED_BYTE, TRUE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_AVOID, TONE_OBSTACLE_FREQ, TONE_ENABLED_DUR
+			/* Avoid Obstacle Template, Tone On */
+	init_actuator_state bbr_avoid_obstacle_off, MOTOR_INHIBITED_BYTE, TRUE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_AVOID, TONE_SILENCED_FREQ, TONE_ENABLED_DUR
+			/* Avoid Obstacle Template, Tone Off */
 
 	/* Move-Object Behavior Actuation Outputs */
 	init_actuator_state bbr_move_object_idle, CLOSE_SPEED, TRUE, STOP_SPEED, TRUE, STOP_SPEED, TRUE, ROBOT_STOP, TONE_INHIBITED, TONE_INHIBITED
@@ -1578,12 +1586,12 @@ idle_switch_state:
 
 	ldr		r2, =tone_active
 	ldrb	r0, [r2]					/* Get Tone Active status */
-	teq		r0, #FALSE					/* Check Tone Active status */
-	moveq	r0, #TRUE
-	ldreq	r1, =bbr_idle_on			/* False, enable tone */
-	movne	r0, #FALSE
-	ldrne	r1, =bbr_idle_off			/* True, disable tone */
+	mvn		r0, r0						/* Invert status */
+	and		r0, r0, #0xFF				/* Mask to 8-bits */
 	strb	r0, [r2]					/* Toggle Tone Active Status */
+	teq		r0, #FALSE					/* Check Tone Active status */
+	ldrne	r1, =bbr_idle_on			/* False, enable tone */
+	ldreq	r1, =bbr_idle_off			/* True, disable tone */
 
 	mov		r0, #BBR_IDLE
 	bl		bbr_copy_actuator_outputs
@@ -1852,6 +1860,7 @@ exit_bbr_grasp_object:
  */
 bbr_move_object:
 	/* Move Object Algorithm
+	 *  If Not Object Detected
 	 *    If Touched AND Claw Closed (i.e., Claw Open)
 	 *		For each level increase, increment trigger exponentially
 	 *		For each level decrease, decrement trigger arithmetically
@@ -1862,6 +1871,11 @@ bbr_move_object:
 	 */
 	push	{r5, r6, lr}
 
+bbr_check_obstacle:
+	ldr		r5, =obstacle_detected
+	ldrb	r0, [r5]
+	teq		r0, #FALSE
+	bne		bbr_deactivate_move_object
 
 	ldr		r5, =touched
 	ldr		r6, =claw_closed
@@ -1919,15 +1933,32 @@ exit_bbr_move_object:
 
 /* Avoid Obstacle Behavior
  *
+ * Avoid Obstacle Algorithm
+ *    If Object < Obstacle Mininum Distance
+ *        If Not Obstacle Detected
+ *            Reset PID
+ *        Else
+ *            Converge PID
+ *        If ((PID Output > 0) || (Not PID Ended))
+ *           Set Obstacle Detected to TRUE
+ *           Activate Behavior
+ *        Else
+ *           Set Obstacle Detected to FALSE
+ *           Deactivate behavior
+ *    Else
+ *        Set Obstacle Detected to FALSE
+ *        Deactivate behavior
+ *
  * Returns:
  *    Activated : Boolean
  *
  *
  */
 bbr_avoid_obstacle:
-	push	{r5, r6, lr}
-	ldr		r1, =ultrasoundval
-	ldrb	r0, [r1]
+	push	{r4, r5, r6, r7, r8, lr}
+	ldr		r5, =obstacle_detected
+	ldr		r6, =ultrasoundval
+	ldrb	r0, [r6]							/* Retrieve Ultrasound Value (object distance) */
 	cmp		r0, #OBSTACLE_MINDIST
 	bge		bbr_deactivate_avoid_obstacle
 
@@ -1940,10 +1971,78 @@ bbr_avoid_obstacle_action:
  *  This needs to reset the active states such that when the lower level behavior is reactivated it won't
  *  jump into a weird state.
  */
+	ldrb	r0, [r5]							/* Check Obstacle Detected */
+	cmp		r0, #FALSE
+	bne		bbr_avoid_obstacle_pid_converge		/* True, so go perform PID control loop */
 
+bbr_avoid_obstacle_pid_reset:
+	ldr		r0, =pid
+	mov		r1, #OBSTACLE_MINDIST
+	bl		SetPIDReferenceVal					/* Set PID Reference Value to Obstacle Minimum Distance */
+
+bbr_avoid_obstacle_pid_converge:
+	ldr		r0, =pid
+	ldrb	r1, [r6]							/* Retrieve ultrasound value again */
+	bl		PIDController						/* Activate PID Controller */
+	mov		r4, r0								/* Keep PID Controller Output in R4 for later use */
+	cmp		r4, #0								/* Check if the PID Output is non-zero */
+	bne		bbr_activate_avoid_obstacle			/* If non-zero, continue updating motor actuator outputs */
+
+bbr_avoid_obstacle_check_steady_state:
+	ldr		r0, =pid
+	bl		CheckPIDEnd
+	teq		r0, #FALSE
+	bne		bbr_deactivate_avoid_obstacle		/* PID Steady State Reached, disable PID */
+
+bbr_activate_avoid_obstacle:
+
+	ldr		r7, =obstacle_tone_timestamp		/* pointer to tone_timestamp */
+	bl		nx_systick_get_ms					/* R0 has current timestamp */
+	mov		r8, r0								/* Store current timestamp in R8 for later use */
+
+	ldr		r1, [r7]			    			/* retrieve previous tone_timestamp */
+	time_elapsed r0, r1, #IDLE_TONE_INTERVAL
+	ldr		r2, =obstacle_tone_active			/* Use R2 as pointer to Obstacle Tone Active status */
+	cmp		r0, #FALSE
+	beq		avoid_obstacle_behavior_template	/* Has not reached target update time interval yet */
+
+avoid_obstacle_switch_tone_state:
+	str		r8, [r7]					/* Store current timestamp in tone_timestamp */
+
+	ldrb	r0, [r2]					/* Get Obstacle Tone Active status */
+	mvn		r0, r0						/* Invert status */
+	and		r0, r0, #0xFF				/* Mask to 8-bits */
+	strb	r0, [r2]					/* Toggle Obstacle Tone Active Status */
+
+avoid_obstacle_behavior_template:
+	ldrb	r0, [r2]					/* Get Obstacle Tone Active status */
+	teq		r0, #FALSE					/* Check Obstacle Tone Active status */
+	ldrne	r1, =bbr_avoid_obstacle_on	/* False, enable tone */
+	ldreq	r1, =bbr_avoid_obstacle_off	/* True, disable tone */
 	mov		r0, #BBR_AVOID_OBSTACLE
-	ldr		r1, =bbr_avoid_obstacle_idle
-	bl		bbr_copy_actuator_outputs			/* Update behavior outputs */
+	bl		bbr_copy_actuator_outputs	/* Setup Avoid Obstacle behavior template outputs */
+
+	/* Convert PID Controller output in R4 into Motor Speed in R1 */
+	mov		r1, r4, asr #8						/* 16 bit signed output -> 8 bit signed value */
+
+clamp_output_max:
+	cmp		r1, #100
+	blt		clamp_output_min
+	mov		r1, #100							/* Clamp to 100 if greater */
+
+clamp_output_min:
+	cmp		r1, #-100
+	bgt		done_clamp_output
+	mov		r1, #-100							/* Clamp to -100 if less */
+
+done_clamp_output:
+	mov		r0, #BBR_AVOID_OBSTACLE
+	ldr		r3, =behavior_actuations			/* candidate actuations array start address */
+	mov		r2, #SIZEOF_ACTUATOR_STATE			/* number of bytes per actuator_state struct */
+	mla		r0, r2, r0, r3						/* r0 = (sizeof(actuator_state) (r2) * index (r0)) + behavior_actuations start (r3) */
+
+	strb	r1, [r0, #MOTOR_RWHEEL_OFFSET]
+	strb	r1, [r0, #MOTOR_LWHEEL_OFFSET]		/* Set Wheel Speeds to actual calculated speeds */
 
 	ldr		r0, =avoidobstacle_idle_behavior	/* Display String */
 	bl		print_behavior_state
@@ -1964,7 +2063,8 @@ bbr_avoid_obstacle_active:
 	mov		r0, #TRUE				/* Activate Behavior */
 
 exit_bbr_avoid_obstacle:
-	pop		{r5, r6, pc}
+	strb	r0, [r5]				/* Update Obstacle Detected boolean */
+	pop		{r4, r5, r6, r7, r8, pc}
 
 /* Mover Dispatcher
  *
@@ -2100,6 +2200,10 @@ continue_ultrasound_init:
 	mov		r0, #ULSND_PORT
 	mov		r1, #RADAR_MODE_CONTINUOUS
 	bl		nx_radar_set_op_mode			/* Arm Ultrasound Sensor */
+
+	mov		r0, #FALSE
+	ldr		r1, =obstacle_detected
+	strb	r0, [r1]
 
 	bl		light_led_enable
 	ldr		r8, =MAX_ITERATIONS				/* Execution Lifetime Iteration Limiter */
