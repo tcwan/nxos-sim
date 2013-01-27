@@ -36,6 +36,9 @@
 #undef DEBUG_ULTRASOUND
 /* To disable Avoid Obstacles Behavior Debugging, change the following to #undef DEBUG_AVOID_OBSTACLE */
 #define DEBUG_AVOID_OBSTACLE
+/* To disable Avoid Obstacles Behavior Debugging, change the following to #undef DEBUG_AVOID_OBSTACLE */
+#define DEBUG_PID
+
 
 	.equ	MAX_ITERATIONS, 0x0FFFF
 	.equ	CLAWPOS_CHECK_INTERVAL, SYSTICK_100MS		/* Keep CLAWPOS_CHECK_INTERVAL <= ROBOT_SCHED_DURATION to avoid going out of sync */
@@ -44,6 +47,7 @@
 	.equ	IDLE_TONE_INTERVAL, SYSTICK_500MS			/* FIXME: May need to be > TONE_ENABLED_DUR to be safe */
 
 	.equ	OBSTACLE_MINDIST, 10						/* FIXME: Set appropriate min distance (in cm) */
+	.equ	OBSTACLE_STOPDIST, 20						/* FIXME: Set appropriate distance to stop avoiding obstacle (in cm) */
 
 	/* PID Configuration Parameters
 	 * FIXME: Need to be changed to actual values
@@ -53,9 +57,11 @@
 	 * The value of alpha is 2^SCALING_SHIFT, where SCALING_SHIFT is 16
 	 * which gives alpha = 65536
 	 */
-    .equ alphaKP, 1
-    .equ alphaKI, 0
-    .equ alphaKD, 0
+
+	 /* Applying Kc = 2, T = 100 ms, Pc = 1 s, alpha = 65536 */
+    .equ alphaKP, 85197					/* alphaKP = alpha x 0.65 x Kc = 85197 */
+    .equ alphaKI, 17039					/* alphaKI = alpha x Kp x T / (0.5 x Pc) = 17039 */
+    .equ alphaKD, 102236				/* alphaKD = alpha x Kp x 0.12 x Pc / T = 102236 */
     .equ STEADY_STATE_THRESHOLD, 0	    /* 0 = disabled, !0 = Stop PID Controller after x iterations */
 
 	/* Ultrasound Sensor Calibration Offset */
@@ -65,6 +71,7 @@
 	/* LCD Display Constants */
 	.equ	TOUCH_ROW, 3				/* Touch Display Row Index */
 	.equ	SOUND_ROW, 4				/* Sound Display Row Index */
+	.equ	PID_ROW, 5					/* PID Output Debug Display Row Index */
 	.equ	BEHAVIOR_ROW, 6				/* Behavior Display Row Index */
 	.equ	SNDLVL_ROW, 7				/* Sound Level Display Row Index */
 
@@ -120,6 +127,8 @@
 	.equ	FASTROT_SPEED, 40
 	.equ	SLOWROT_SPEED, 20
 	.equ	SEEK_SPEED, 30
+	.equ	WHEEL_SPEED_MAX, 30
+	.equ	WHEEL_SPEED_MIN, -30
 
 	/* Claw Control Constants
 	 *    Open and Close Speeds are directional (signed)
@@ -217,6 +226,11 @@ idle_behavior:                 .asciz "BBR:Idle        "
 #if (defined DEBUG_ULTRASOUND || defined DEBUG_AVOID_OBSTACLE)
 ultrasoundstr: .asciz "Radar: "
 ultrasoundunits: .asciz " cm  "
+#endif
+
+#ifdef DEBUG_PID
+pidstr:   .asciz "PID O/P: "
+pidunits: .asciz "   "
 #endif
 
 ultrasound_error: .asciz "ERR: No USnd! "
@@ -1676,6 +1690,12 @@ bbr_open_claws:
 	 *      Deactivate Behavior
 	 */
 	push	{r4, r5, r6, lr}
+
+	ldr		r5, =obstacle_detected
+	ldrb	r0, [r5]
+	teq		r0, #FALSE
+	bne		bbr_deactivate_open_claws
+
 	/* Setup Pointers at start of routine */
 	ldr		r4, =claw_movement
 	ldr		r5, =touched
@@ -1779,6 +1799,13 @@ bbr_grasp_object:
 	 *      Deactivate Behavior
 	 */
 	push	{r4, r5, r6, lr}
+
+	ldr		r5, =obstacle_detected
+	ldrb	r0, [r5]
+	teq		r0, #FALSE
+	bne		bbr_deactivate_grasp_object
+
+
 	/* Setup Pointers at start of routine */
 	ldr		r4, =claw_movement
 	ldr		r5, =touched
@@ -1868,6 +1895,9 @@ bbr_move_object:
 	 *		Once trigger level reached, move forward
 	 *    Else
 	 *       Deactivate Behavior
+	 *  Else
+	 *    Maintain current actuator outputs
+	 *    Reset trigger level
 	 */
 	push	{r5, r6, lr}
 
@@ -1875,7 +1905,7 @@ bbr_check_obstacle:
 	ldr		r5, =obstacle_detected
 	ldrb	r0, [r5]
 	teq		r0, #FALSE
-	bne		bbr_deactivate_move_object
+	bne		bbr_reset_sound_state_trigger
 
 	ldr		r5, =touched
 	ldr		r6, =claw_closed
@@ -1905,6 +1935,7 @@ bbr_deactivate_move_object:
 	ldr		r0, =bbr_inhibited_behavior
 	bl		print_behavior_state
 
+bbr_reset_sound_state_trigger:
 	/* Reset Sound Following State and Trigger Level */
 	ldr		r1, =sound_following_state
 	mov		r0, #SOUND_IDLE
@@ -1959,25 +1990,19 @@ bbr_avoid_obstacle:
 	ldr		r5, =obstacle_detected
 	ldr		r6, =ultrasoundval
 	ldrb	r0, [r6]							/* Retrieve Ultrasound Value (object distance) */
-	cmp		r0, #OBSTACLE_MINDIST
-	bge		bbr_deactivate_avoid_obstacle
+	cmp		r0, #OBSTACLE_STOPDIST
+	bge		bbr_deactivate_avoid_obstacle		/* Disable behavior if Stop Distance Exceeded */
 
-bbr_avoid_obstacle_action:
-
-/* FIXME:
- *
- *  Currently when this behavior is activated, lower level behaviors, esp. move object still has
- *  active states.
- *  This needs to reset the active states such that when the lower level behavior is reactivated it won't
- *  jump into a weird state.
- */
-	ldrb	r0, [r5]							/* Check Obstacle Detected */
-	cmp		r0, #FALSE
+	ldrb	r1, [r5]							/* Check Obstacle Detected */
+	cmp		r1, #FALSE
 	bne		bbr_avoid_obstacle_pid_converge		/* True, so go perform PID control loop */
+
+	cmp		r0, #OBSTACLE_MINDIST
+	bge		bbr_deactivate_avoid_obstacle		/* Only enable behavior if Obstacle Min Distance breached */
 
 bbr_avoid_obstacle_pid_reset:
 	ldr		r0, =pid
-	mov		r1, #OBSTACLE_MINDIST
+	mov		r1, #OBSTACLE_STOPDIST
 	bl		SetPIDReferenceVal					/* Set PID Reference Value to Obstacle Minimum Distance */
 
 bbr_avoid_obstacle_pid_converge:
@@ -1985,6 +2010,21 @@ bbr_avoid_obstacle_pid_converge:
 	ldrb	r1, [r6]							/* Retrieve ultrasound value again */
 	bl		PIDController						/* Activate PID Controller */
 	mov		r4, r0								/* Keep PID Controller Output in R4 for later use */
+
+#ifdef DEBUG_PID
+	mov		r0, #0
+	mov		r1, #PID_ROW
+	bl 		nx_display_cursor_set_pos
+	ldr		r0, =pidstr
+	bl		nx_display_string
+
+	mov		r0, r4
+	bl		nx_display_int
+
+	ldr		r0, =pidunits
+	bl		nx_display_string
+#endif
+
 	cmp		r4, #0								/* Check if the PID Output is non-zero */
 	bne		bbr_activate_avoid_obstacle			/* If non-zero, continue updating motor actuator outputs */
 
@@ -2023,17 +2063,17 @@ avoid_obstacle_behavior_template:
 	bl		bbr_copy_actuator_outputs	/* Setup Avoid Obstacle behavior template outputs */
 
 	/* Convert PID Controller output in R4 into Motor Speed in R1 */
-	mov		r1, r4, asr #8						/* 16 bit signed output -> 8 bit signed value */
+	rsb		r1, r4, #0					/* PID Controller output is positive, need negative motor speed for reverse */
 
 clamp_output_max:
-	cmp		r1, #100
+	cmp		r1, #WHEEL_SPEED_MAX
 	blt		clamp_output_min
-	mov		r1, #100							/* Clamp to 100 if greater */
+	mov		r1, #WHEEL_SPEED_MAX		/* Clamp to WHEEL_SPEED_MAX if greater */
 
 clamp_output_min:
-	cmp		r1, #-100
+	cmp		r1, #WHEEL_SPEED_MIN
 	bgt		done_clamp_output
-	mov		r1, #-100							/* Clamp to -100 if less */
+	mov		r1, #WHEEL_SPEED_MIN		/* Clamp to WHEEL_SPEED_MIN if less */
 
 done_clamp_output:
 	mov		r0, #BBR_AVOID_OBSTACLE
@@ -2066,53 +2106,53 @@ exit_bbr_avoid_obstacle:
 	strb	r0, [r5]				/* Update Obstacle Detected boolean */
 	pop		{r4, r5, r6, r7, r8, pc}
 
-/* Mover Dispatcher
+/* Tribot Dispatcher
  *
  *   In this implementation, we iterate from lowest priority to highest priority behaviors
  */
-mover_dispatcher:
+tribot_dispatcher:
 	push	{lr}
 	ldr		r0, =dispatcher_behavior_jumptable
 	mov		r1, #NUM_DISPATCHER_ENTRIES
 	bl		jumptable_dispatcher
 
-exit_mover_dispatcher:
+exit_tribot_dispatcher:
 	pop		{pc}
 
 
-/* Mover Arbiter
+/* Tribot Arbiter
  *	This is just a dispatch routine used to call the respective arbiters.
  *
  *   In this implementation, we iterate from last entry to first entry
  */
-mover_arbiter:
+tribot_arbiter:
 	push	{lr}
 	ldr		r0, =output_arbiter_jumptable
 	mov		r1, #NUM_ARBITER_ENTRIES
 	bl		jumptable_dispatcher
 
-exit_mover_arbiter:
+exit_tribot_arbiter:
 	pop		{pc}
 
-/* Mover Actuator Controller
+/* Tribot Actuator Controller
  *	This is just a dispatch routine used to call the respective controllers.
  *
  *   In this implementation, we iterate from last entry to first entry
  */
-mover_controller:
+tribot_controller:
 	push	{lr}
 	ldr		r0, =actuator_state
 	ldr		r1, =prev_actuator_state
 	mov		r2, #SIZEOF_ACTUATOR_STATE
 	bl		memcmp						/* returns 0 if identical */
 	teq		r0, #0
-	beq		exit_mover_controller		/* Nothing has changed, skip controller update */
+	beq		exit_tribot_controller		/* Nothing has changed, skip controller update */
 
 	ldr		r0, =actuation_controller_jumptable
 	mov		r1, #NUM_CONTROLLER_ENTRIES
 	bl		jumptable_dispatcher
 
-exit_mover_controller:
+exit_tribot_controller:
 	pop		{pc}
 
 
@@ -2403,13 +2443,13 @@ main_loop:
 
 
 main_dispatch:
-	bl		mover_dispatcher
+	bl		tribot_dispatcher
 
 main_arbitration:
-	bl		mover_arbiter			/* Behavior Arbiter */
+	bl		tribot_arbiter			/* Behavior Arbiter */
 
 main_actuation:
-	bl		mover_controller		/* Actuator Controller */
+	bl		tribot_controller		/* Actuator Controller */
 
 #endif
 
