@@ -6,5 +6,7 @@ linefollower - Line Following
 grasper - Object Grasping + linefollower behaviors
 mover - Object Moving + grasper behaviors
 tribot - Obstacle Avoidance + mover behaiors
+         Note: The -arm version is ARM only
+               The -thumb version uses Thumb Interworking 
 
 Build using appkernels=tribot/<projectname>

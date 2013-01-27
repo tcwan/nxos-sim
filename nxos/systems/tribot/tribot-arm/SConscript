@@ -1,0 +1,3 @@
+from glob import glob
+Import('env')
+env.AppKernel('tribot-arm', glob('*.[cS]'), kernelsize='50k')
