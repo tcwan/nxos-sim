@@ -28,4 +28,10 @@
 	movge	r0, #TRUE
 	.endm
 
+	.macro toggle_boolean_byte	reg
+	/* This macro toggles 8-bit Boolean TRUE (0xFF) to FALSE (0x00) and vice versa */
+	mvn		\reg, \reg						/* Invert status */
+	and		\reg, \reg, #0xFF				/* Mask to 8-bits */
+	.endm
+
 #endif /* __NXOS_SYSTEMS_MACROS_H__ */

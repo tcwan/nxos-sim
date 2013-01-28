@@ -1513,12 +1513,12 @@ idle_switch_state:
 
 	ldr		r2, =tone_active
 	ldrb	r0, [r2]					/* Get Tone Active status */
+	toggle_boolean_byte r0				/* Toggle Tone Active status */
+	strb	r0, [r2]					/* Update Tone Active Status */
 	teq		r0, #FALSE					/* Check Tone Active status */
-	moveq	r0, #TRUE
-	ldreq	r1, =bbr_idle_on			/* False, enable tone */
-	movne	r0, #FALSE
-	ldrne	r1, =bbr_idle_off			/* True, disable tone */
-	strb	r0, [r2]					/* Toggle Tone Active Status */
+	ldrne	r1, =bbr_idle_on			/* True, enable tone */
+	ldreq	r1, =bbr_idle_off			/* False, disable tone */
+
 
 	mov		r0, #BBR_IDLE
 	bl		bbr_copy_actuator_outputs
