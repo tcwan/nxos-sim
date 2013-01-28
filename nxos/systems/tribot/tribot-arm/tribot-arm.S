@@ -786,7 +786,9 @@ exit_get_touch_status:
 exit_get_claw_status:
 	pop		{r4, pc}
 
-
+/* get_obstacle_distance
+ *    Retrieve Ultrasound reading, and perform input sanity checking
+ */
 get_obstacle_distance:
 	push	{lr}
 	mov		r0, #ULSND_PORT
@@ -1575,11 +1577,11 @@ speaker_outputs_unchanged:
 	cmp		r3, #TONE_INHIBITED
 	beq		exit_speaker_controller	/* Skip update since we're already inhibited */
 
-	bl		nx_systick_get_ms		/* Current systick in R0 */
-	ldr		r1, [r6]				/* Prev speaker_timestamp in R1 */
-	time_elapsed r0, r1, r3			/* Returns TRUE if timer exceeded duration TONE_DUR (R3) */
-	cmp		r0, #FALSE				/* If Timer reached, return value is TRUE */
-	beq		exit_speaker_controller	/* Elapsed Duration < TONE_DUR, so exit */
+	mov		r0, r6					/* Setup Pointer to speaker_timestamp, R1 already has current Tone Duration */
+	bl		has_timer_elapsed
+	cmp		r0, #FALSE
+	beq		exit_speaker_controller	/* Has not reached target update time interval yet, exit */
+
 	mov		r0, #TONE_INHIBITED
 	mov		r1, #TONE_INHIBITED		/* Force update of Speaker Output */
 
