@@ -38,7 +38,8 @@
 #define DEBUG_AVOID_OBSTACLE
 /* To disable Avoid Obstacles Behavior Debugging, change the following to #undef DEBUG_AVOID_OBSTACLE */
 #define DEBUG_PID
-
+/* To use normal PID Convergence behavior, change the following to #undef ENABLE_PID_ABORT */
+#undef ENABLE_PID_ABORT
 
 	.equ	MAX_ITERATIONS, 0x0FFFF
 	.equ	CLAWPOS_CHECK_INTERVAL, SYSTICK_100MS		/* Keep CLAWPOS_CHECK_INTERVAL <= ROBOT_SCHED_DURATION to avoid going out of sync */
@@ -58,11 +59,11 @@
 	 * which gives alpha = 65536
 	 */
 
-	 /* Applying Kc = 2, T = 100 ms, Pc = 1 s, alpha = 65536 */
-    .equ alphaKP, 85197					/* alphaKP = alpha x 0.65 x Kc = 85197 */
-    .equ alphaKI, 17039					/* alphaKI = alpha x Kp x T / (0.5 x Pc) = 17039 */
-    .equ alphaKD, 102236				/* alphaKD = alpha x Kp x 0.12 x Pc / T = 102236 */
-    .equ STEADY_STATE_THRESHOLD, 0	    /* 0 = disabled, !0 = Stop PID Controller after x iterations */
+	 /* Applying Kc = 3, T = 100 ms, Pc = 1 s, alpha = 65536 */
+    .equ alphaKP, 127795				/* alphaKP = alpha x 0.65 x Kc = 127795 */
+    .equ alphaKI, 25559					/* alphaKI = alpha x Kp x T / (0.5 x Pc) = 25559 */
+    .equ alphaKD, 153354				/* alphaKD = alpha x Kp x 0.12 x Pc / T = 153354 */
+    .equ STEADY_STATE_THRESHOLD, 1	    /* 0 = disabled, !0 = Stop PID Controller after x iterations */
 
 	/* Ultrasound Sensor Calibration Offset */
 	.equ	ULTRASOUND_ERR_OFFSET, 3	/* FIXME: Min measurable distance is about 3 cm (1 inch), but it always returns 6 */
@@ -1153,6 +1154,29 @@ claw_update_pos:
 exit_has_claw_fully_stopped:
 	pop		{r4, pc}
 
+/* has_timer_elapsed
+ *
+ * Internal Support Routine used to determine whether
+ * a given time interval has passed
+ *
+ * Inputs:
+ *    R0: Pointer to Last Timestamp address
+ *    R1: Time Interval for Time Expiry
+ *
+ * Returns:
+ *    R0: Boolean (Timer Has Elapsed = TRUE)
+ *    R1: Current Timestamp
+ */
+	arm_interwork has_timer_elapsed
+	push	{r4, r5, lr}
+	ldr		r4, [r0]			/* Retrieve Last Timestamp into R4 */
+	mov		r5, r1				/* Keep Time Interval in R5 */
+	bl		nx_systick_get_ms	/* R0 has current timestamp */
+	mov		r1, r0				/* Copy to R1 for return value */
+	time_elapsed r0, r4, r5		/* Boolean result in R0 */
+	pop		{r4, r5, lr}
+	bx		lr					/* Return to caller */
+
 /*
  * Advanced Jump Table Action Routine Dispatcher
  *
@@ -1584,34 +1608,32 @@ exit_speaker_controller:
  *
  */
 bbr_idle:
-	push	{r4, r5, lr}
+	push	{lr}
 	/* Check time of last tone change */
-	ldr		r4, =tone_timestamp		/* pointer to tone_timestamp */
-	bl		nx_systick_get_ms		/* R0 has current timestamp */
-	mov		r5, r0					/* Store current timestamp in R5 for later use */
 
-	ldr		r1, [r4]			    /* retrieve previous tone_timestamp */
-	time_elapsed r0, r1, #IDLE_TONE_INTERVAL
+	ldr		r0, =tone_timestamp		/* pointer to tone_timestamp */
+	mov		r1, #IDLE_TONE_INTERVAL	/* Time Interval required */
+	bl		has_timer_elapsed
 	cmp		r0, #FALSE
 	beq		exit_bbr_idle			/* Has not reached target update time interval yet, exit */
 
 idle_switch_state:
-	str		r5, [r4]				/* Store current timestamp in tone_timestamp */
+	ldr		r0, =tone_timestamp		/* pointer to tone_timestamp */
+	str		r1, [r0]				/* Store current timestamp in tone_timestamp */
 
 	ldr		r2, =tone_active
 	ldrb	r0, [r2]					/* Get Tone Active status */
-	mvn		r0, r0						/* Invert status */
-	and		r0, r0, #0xFF				/* Mask to 8-bits */
-	strb	r0, [r2]					/* Toggle Tone Active Status */
+	toggle_boolean_byte r0				/* Toggle Tone Active status */
+	strb	r0, [r2]					/* Update Tone Active Status */
 	teq		r0, #FALSE					/* Check Tone Active status */
-	ldrne	r1, =bbr_idle_on			/* False, enable tone */
-	ldreq	r1, =bbr_idle_off			/* True, disable tone */
+	ldrne	r1, =bbr_idle_on			/* True, enable tone */
+	ldreq	r1, =bbr_idle_off			/* False, disable tone */
 
 	mov		r0, #BBR_IDLE
 	bl		bbr_copy_actuator_outputs
 exit_bbr_idle:
     mov     r0, #TRUE					/* Always activated */
-	pop		{r4, r5, pc}
+	pop		{pc}
 
 /* Line Follower Behavior
  *
@@ -1986,12 +2008,18 @@ exit_bbr_move_object:
  *
  */
 bbr_avoid_obstacle:
-	push	{r4, r5, r6, r7, r8, lr}
+	push	{r4, r5, r6, lr}
 	ldr		r5, =obstacle_detected
 	ldr		r6, =ultrasoundval
 	ldrb	r0, [r6]							/* Retrieve Ultrasound Value (object distance) */
+
+/* If ENABLE_PID_ABORT is defined, the PID Convergence process will be aborted and the Avoid Obstacle Behavior deactivate
+ * once the obstacle minimum distance is reached. Otherwise, the normal PID convergence behavior will be used.
+ */
+#ifdef ENABLE_PID_ABORT
 	cmp		r0, #OBSTACLE_STOPDIST
 	bge		bbr_deactivate_avoid_obstacle		/* Disable behavior if Stop Distance Exceeded */
+#endif
 
 	ldrb	r1, [r5]							/* Check Obstacle Detected */
 	cmp		r1, #FALSE
@@ -2036,23 +2064,20 @@ bbr_avoid_obstacle_check_steady_state:
 
 bbr_activate_avoid_obstacle:
 
-	ldr		r7, =obstacle_tone_timestamp		/* pointer to tone_timestamp */
-	bl		nx_systick_get_ms					/* R0 has current timestamp */
-	mov		r8, r0								/* Store current timestamp in R8 for later use */
-
-	ldr		r1, [r7]			    			/* retrieve previous tone_timestamp */
-	time_elapsed r0, r1, #IDLE_TONE_INTERVAL
+	ldr		r0, =obstacle_tone_timestamp		/* pointer to tone_timestamp */
+	mov		r1, #IDLE_TONE_INTERVAL				/* Time Interval required */
+	bl		has_timer_elapsed
 	ldr		r2, =obstacle_tone_active			/* Use R2 as pointer to Obstacle Tone Active status */
 	cmp		r0, #FALSE
 	beq		avoid_obstacle_behavior_template	/* Has not reached target update time interval yet */
 
 avoid_obstacle_switch_tone_state:
-	str		r8, [r7]					/* Store current timestamp in tone_timestamp */
+	ldr		r0, =obstacle_tone_timestamp		/* pointer to tone_timestamp */
+	str		r1, [r0]					/* Store current timestamp in tone_timestamp */
 
 	ldrb	r0, [r2]					/* Get Obstacle Tone Active status */
-	mvn		r0, r0						/* Invert status */
-	and		r0, r0, #0xFF				/* Mask to 8-bits */
-	strb	r0, [r2]					/* Toggle Obstacle Tone Active Status */
+	toggle_boolean_byte r0				/* Toggle Obstacle Tone Active status */
+	strb	r0, [r2]					/* Update Obstacle Tone Active Status */
 
 avoid_obstacle_behavior_template:
 	ldrb	r0, [r2]					/* Get Obstacle Tone Active status */
@@ -2104,7 +2129,7 @@ bbr_avoid_obstacle_active:
 
 exit_bbr_avoid_obstacle:
 	strb	r0, [r5]				/* Update Obstacle Detected boolean */
-	pop		{r4, r5, r6, r7, r8, pc}
+	pop		{r4, r5, r6, pc}
 
 /* Tribot Dispatcher
  *
@@ -2263,19 +2288,17 @@ continue_ultrasound_init:
  */
 sleep_robot:
 	push	{lr}
-	ldr		r2, =sched_tick					/* Setup Pointer to sched_tick */
 
 cont_sleep:
-	bl		nx_systick_get_ms				/* Current systick in R0 */
-	ldr		r1, [r2]						/* Prev systick in R1 */
-	time_elapsed r0, r1, #ROBOT_SCHED_DURATION	/* Returns TRUE if timer exceeded duration */
-
+	ldr		r0, =sched_tick					/* pointer to sched_tick */
+	mov		r1, #ROBOT_SCHED_DURATION		/* Time Interval required */
+	bl		has_timer_elapsed				/* R0: Time Elapsed (Boolean), R1 contains current timestamp */
 	cmp		r0, #FALSE						/* If Timer reached, return value is TRUE */
 	beq		cont_sleep						/* Scheduler Timeout < Systick, so exit */
 
 next_sleep_robot:
-	bl		nx_systick_get_ms				/* Current systick in R0 */
-	str		r0, [r2]						/* Update sched_tick with current systick */
+	ldr		r0, =sched_tick					/* pointer to sched_tick */
+	str		r1, [r0]						/* Update sched_tick with current systick */
 
 exit_sleep_robot:
 	pop		{pc}
