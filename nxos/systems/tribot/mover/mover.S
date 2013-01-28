@@ -1066,6 +1066,28 @@ claw_update_pos:
 exit_has_claw_fully_stopped:
 	pop		{r4, pc}
 
+/* has_timer_elapsed
+ *
+ * Internal Support Routine used to determine whether
+ * a given time interval has passed
+ *
+ * Inputs:
+ *    R0: Pointer to Last Timestamp address
+ *    R1: Time Interval for Time Expiry
+ *
+ * Returns:
+ *    R0: Boolean (Timer Has Elapsed = TRUE)
+ *    R1: Current Timestamp
+ */
+has_timer_elapsed:
+	push	{r4, r5, lr}
+	ldr		r4, [r0]			/* Retrieve Last Timestamp into R4 */
+	mov		r5, r1				/* Keep Time Interval in R5 */
+	bl		nx_systick_get_ms	/* R0 has current timestamp */
+	mov		r1, r0				/* Copy to R1 for return value */
+	time_elapsed r0, r4, r5		/* Boolean result in R0 */
+	pop		{r4, r5, pc}
+
 /*
  * Advanced Jump Table Action Routine Dispatcher
  *
@@ -1497,19 +1519,18 @@ exit_speaker_controller:
  *
  */
 bbr_idle:
-	push	{r4, r5, lr}
+	push	{lr}
 	/* Check time of last tone change */
-	ldr		r4, =tone_timestamp		/* pointer to tone_timestamp */
-	bl		nx_systick_get_ms		/* R0 has current timestamp */
-	mov		r5, r0					/* Store current timestamp in R5 for later use */
 
-	ldr		r1, [r4]			    /* retrieve previous tone_timestamp */
-	time_elapsed r0, r1, #IDLE_TONE_INTERVAL
+	ldr		r0, =tone_timestamp		/* pointer to tone_timestamp */
+	mov		r1, #IDLE_TONE_INTERVAL	/* Time Interval required */
+	bl		has_timer_elapsed
 	cmp		r0, #FALSE
 	beq		exit_bbr_idle			/* Has not reached target update time interval yet, exit */
 
 idle_switch_state:
-	str		r5, [r4]				/* Store current timestamp in tone_timestamp */
+	ldr		r0, =tone_timestamp		/* pointer to tone_timestamp */
+	str		r1, [r0]				/* Store current timestamp in tone_timestamp */
 
 	ldr		r2, =tone_active
 	ldrb	r0, [r2]					/* Get Tone Active status */
@@ -1519,12 +1540,11 @@ idle_switch_state:
 	ldrne	r1, =bbr_idle_on			/* True, enable tone */
 	ldreq	r1, =bbr_idle_off			/* False, disable tone */
 
-
 	mov		r0, #BBR_IDLE
 	bl		bbr_copy_actuator_outputs
 exit_bbr_idle:
     mov     r0, #TRUE					/* Always activated */
-	pop		{r4, r5, pc}
+	pop		{pc}
 
 /* Line Follower Behavior
  *
@@ -1963,19 +1983,17 @@ init_robot:
  */
 sleep_robot:
 	push	{lr}
-	ldr		r2, =sched_tick					/* Setup Pointer to sched_tick */
 
 cont_sleep:
-	bl		nx_systick_get_ms				/* Current systick in R0 */
-	ldr		r1, [r2]						/* Prev systick in R1 */
-	time_elapsed r0, r1, #ROBOT_SCHED_DURATION	/* Returns TRUE if timer exceeded duration */
-
+	ldr		r0, =sched_tick					/* pointer to sched_tick */
+	mov		r1, #ROBOT_SCHED_DURATION		/* Time Interval required */
+	bl		has_timer_elapsed				/* R0: Time Elapsed (Boolean), R1 contains current timestamp */
 	cmp		r0, #FALSE						/* If Timer reached, return value is TRUE */
 	beq		cont_sleep						/* Scheduler Timeout < Systick, so exit */
 
 next_sleep_robot:
-	bl		nx_systick_get_ms				/* Current systick in R0 */
-	str		r0, [r2]						/* Update sched_tick with current systick */
+	ldr		r0, =sched_tick					/* pointer to sched_tick */
+	str		r1, [r0]						/* Update sched_tick with current systick */
 
 exit_sleep_robot:
 	pop		{pc}
