@@ -1763,7 +1763,7 @@ bbr_deactivate_open_claws:
 	bl		bbr_copy_actuator_outputs
 
 	mov		r0, #FALSE				/* Deactivate Behavior Outputs */
-	b		exit_bbr_grasp_object
+	b		exit_bbr_open_claws
 
 bbr_claw_still_opening:
 	bl		has_claw_started_moving
