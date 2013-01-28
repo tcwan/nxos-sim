@@ -217,7 +217,7 @@ memcmp_exit:
 dispatcher_loop:
 	ldr		r0, [r4, r5, lsl #2]	/* Load dispatch routine address from table */
     mov		lr, pc					/* LR = PC + 8 (pipeline) == done_dispatch */
-    mov		pc, r0					/* Dispatch Behavior */
+    bx		r0						/* Dispatch Behavior */
 done_dispatch:
 	subs	r5, r5, #1
 	bge		dispatcher_loop			/* Continue if index is 0 or positive */
