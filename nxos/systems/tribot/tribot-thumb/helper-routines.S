@@ -46,9 +46,9 @@
  *
  */
 
-    arm_interwork min_max_ubyte
+    thumb_interwork min_max_ubyte
     push	{r4-r6, lr}
-    teq		r0, #0               /* Sanity check, don't process n == 0 */
+    cmp		r0, #0               /* Sanity check, don't process n == 0 */
     beq		done_min_max         /* Leave things unchanged */
 init_min_max:
     mov  	r5, #MIN_INITVAL     /* Initialize min to largest 8-bit value */
@@ -60,21 +60,23 @@ min_max_loop:
     ldrb	r4, [r1, r0]   /* Retrieve array[counter] into r4 */
 check_min:
     cmp		r4, r5         /* check array[counter] (in r4) < min */
-    movlo	r5, r4         /* Min = array[counter] */
+	bhs		check_max
+    mov		r5, r4         /* Min = array[counter] */
 check_max:
     cmp		r4, r6         /* check array[counter] (in r4) > max */
-    movhi	r6, r4         /* Max = array[counter] */
+	bls		next_iter
+    mov		r6, r4         /* Max = array[counter] */
 next_iter:
-    teq		r0, #0         /* Compare counter/index r0 against zero */
+    cmp		r0, #0         /* Compare counter/index r0 against zero */
     bne		min_max_loop   /* NE: r0 is non-zero */
 exit_min_max_loop:
     strb	r5, [r2]       /* Store min into memory location */
     strb	r6, [r3]       /* Store max into memory location */
-    mov		r0, #TRUE      /* Always activated */
-
+    mov		r0, #FALSE
+	mvn		r0, r0         /* Convert to TRUE, always activated */
 done_min_max:
-	pop		{r4-r6, lr}
-	bx		lr
+	pop		{r4-r6}
+	thumb_iret	r1		   /* Thumb Interworking Return */
 
 #if 0
 /*	MemMove Byte Copy Routine
@@ -122,7 +124,7 @@ done_min_max:
  */
 
 
-    arm_interwork memmove
+    thumb_interwork memmove
     PUSH   {R0, R4, LR}    @ Keep s1, R4
     ADD    R3, R1, R2      @ R3: Source End := Source Begin (s2) + n
     CMP    R0, R1          @ Compare Dest Begin (s1) vs. Source Begin (s2)
@@ -146,8 +148,8 @@ memmove_loop:
     BNE    memmove_loop
 
 memmove_exit:
-    POP    {R0, R4, LR}    @ Restore R0, R4, retrieve LR to PC, exit
-    BX     LR
+    POP    {R0, R4}        @ Restore R0, R4
+	thumb_iret	r1		   @ Thumb Interworking Return
 #endif
 
 /*	MemCmp Buffer Compare Routine
@@ -173,28 +175,32 @@ memmove_exit:
  */
 
 
-    arm_interwork memcmp
+    thumb_interwork memcmp
     PUSH   {R4, LR}        @ Keep R4, LR
     /* Sanity Checks */
-    TEQ    R2, #0
+    CMP    R2, #0
     BEQ    memcmp_equal    @ Zero length comparisons are always equal
     CMP    R0, R1
     BEQ    memcmp_equal    @ Comparing buffer to itself will always be equal
 
 memcmp_loop:
-    LDRB   R3, [R0], #1    @ Load byte, increment First Buffer Pointer
-    LDRB   R4, [R1], #1    @ Load byte, increment Second Buffer Pointer
-    SUBS   R3, R3, R4      @ R3 = R3 - R4
-    MOVNE  R0, R3          @ Move difference to R0 as return value
-    BNE    memcmp_exit     @ Bytes not equal, exit
-    SUBS   R2, R2, #1
+    LDRB   R3, [R0]        @ Load byte, increment First Buffer Pointer
+    ADD    R0, R0, #1
+    LDRB   R4, [R1]        @ Load byte, increment Second Buffer Pointer
+    ADD    R1, R1, #1
+    SUB    R3, R3, R4      @ R3 = R3 - R4
+    BEQ    0f
+    MOV    R0, R3          @ Move difference to R0 as return value
+    B      memcmp_exit     @ Bytes not equal, exit
+0:
+    SUB    R2, R2, #1
     BNE    memcmp_loop     @ While bytes remain, keep going
 
 memcmp_equal:
 	MOV    R0, #0          @ Flag as equal
 memcmp_exit:
-    POP    {R4, LR}        @ Restore R4, Retrieve LR to PC, exit
-    BX     LR
+    POP    {R4}            @ Restore R4
+	thumb_iret	r1		   @ Thumb Interworking Return
 
 /* Jump Table Dispatcher
  *
@@ -210,19 +216,20 @@ memcmp_exit:
  *
  *   In this implementation, we iterate from last entry to first entry
  */
-    arm_interwork jumptable_dispatcher
+    thumb_interwork jumptable_dispatcher
 	push	{r4, r5, lr}
 	mov		r4, r0					/* Use R4 and R5 to keep input parameters since R0 & R1 will be destroyed */
 	sub		r5, r1, #1				/* Convert jump table count to array index */
 dispatcher_loop:
-	ldr		r0, [r4, r5, lsl #2]	/* Load dispatch routine address from table */
+    lsl		r1, r5, #2				/* Convert index to item offset */
+	ldr		r0, [r4, r1]			/* Load dispatch routine address from table */
     mov		lr, pc					/* LR = PC + 8 (pipeline) == done_dispatch */
     bx		r0						/* Dispatch Behavior */
 done_dispatch:
-	subs	r5, r5, #1
+	sub		r5, r5, #1
 	bge		dispatcher_loop			/* Continue if index is 0 or positive */
 exit_jumptable_dispatcher:
-	pop		{r4, r5, lr}
-	bx		lr
+	pop		{r4, r5}
+	thumb_iret	r1		  			/* Thumb Interworking Return */
 
 .end
