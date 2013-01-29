@@ -2082,8 +2082,8 @@ avoid_obstacle_switch_tone_state:
 avoid_obstacle_behavior_template:
 	ldrb	r0, [r2]					/* Get Obstacle Tone Active status */
 	teq		r0, #FALSE					/* Check Obstacle Tone Active status */
-	ldrne	r1, =bbr_avoid_obstacle_on	/* False, enable tone */
-	ldreq	r1, =bbr_avoid_obstacle_off	/* True, disable tone */
+	ldrne	r1, =bbr_avoid_obstacle_on	/* True, enable tone */
+	ldreq	r1, =bbr_avoid_obstacle_off	/* False, disable tone */
 	mov		r0, #BBR_AVOID_OBSTACLE
 	bl		bbr_copy_actuator_outputs	/* Setup Avoid Obstacle behavior template outputs */
 
