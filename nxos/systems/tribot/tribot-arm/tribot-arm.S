@@ -30,8 +30,6 @@
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
 #undef ENABLE_BREAKPOINTS
-/* To disable Claw Debugging, change the following to #undef DEBUG_CLAW */
-#undef DEBUG_CLAW
 /* To disable Sound Input Level Debugging, change the following to #undef DEBUG_SOUND */
 #undef DEBUG_ULTRASOUND
 /* To disable Avoid Obstacles Behavior Debugging, change the following to #undef DEBUG_AVOID_OBSTACLE */
@@ -2322,51 +2320,6 @@ shutdown_robot:
 	pop		{pc}
 
 /* Non-BBR Actuator Routines */
-
-#ifdef DEBUG_CLAW
-
-/* claw_open_immediate
- *    Open Claws to maximum aperature.
- *      Keep motor engaged until tachometer shows no progress
- *      Note: This is best done using slower speed to the Motor (within Threshold value)
- *		R4: Address Pointer to Claw variables
- */
-claw_open_immediate:
- 	push	{r4, lr}
-	ldr		r4, =claw_position
-
-claw_start_opening:
- 	mov		r0, #CLAW_PORT
- 	mov		r1, #OPEN_SPEED
- 	bl		nx_motors_rotate
-
-claw_keep_opening:
-	mov		r0, #SYSTICK_100MS
-	bl		nx_systick_wait_ms	/* Wait 100 ms before checking Tachometer */
-	bl		get_claw_status
-
-	ldr		r0, [r4]			/* Current Claw Position */
-	ldr		r1, [r4, #4]		/* Old Claw Position */
-	subs	r2, r0, r1			/* Current - Old Positions */
-	rsblt	r2, r0, r1			/* Absolute difference in R2 */
-	str		r0, [r4, #4]		/* Store Current Claw Position as Old Claw Position */
-	cmp		r2, #TACHO_THRESH	/* Is it within margin of error? */
-	bhi		claw_keep_opening
-
-claw_stop_opening:
- 	mov		r0, #CLAW_PORT
- 	mov		r1, #TRUE			/* We want braking */
-	bl		nx_motors_stop
-
- 	mov		r0, #FALSE
- 	strb	r0, [r4, #8]		/* Update claw_closed */
-
-	ldr		r0, =opened
-	bl		nx_progcontent2
-	pop		{r4, pc}
-
-#endif
-
 
 /* claw_close_immediate
  *    Close Claws to minimum aperature (gripping object).
