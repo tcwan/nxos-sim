@@ -81,5 +81,16 @@
 \thumb_routine:
 	.endm
 
+/** Macro to return from Interworking Thumb Routine
+ *
+ *      thumb_iret <register>
+ *
+ */
+	.macro thumb_iret register
+	pop		{\register}
+	bx		\register
+	.endm
+
+
 #endif
 #endif  /* __NXOS_BASE_INTERWORK_H__ */
