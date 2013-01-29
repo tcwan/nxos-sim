@@ -223,8 +223,11 @@ memcmp_exit:
 dispatcher_loop:
     lsl		r1, r5, #2				/* Convert index to item offset */
 	ldr		r0, [r4, r1]			/* Load dispatch routine address from table */
-    mov		lr, pc					/* LR = PC + 8 (pipeline) == done_dispatch */
-    bx		r0						/* Dispatch Behavior */
+    b		0f
+9:
+    bx		r0						/* register setup before indirect call */
+0:
+    bl		9b
 done_dispatch:
 	sub		r5, r5, #1
 	bge		dispatcher_loop			/* Continue if index is 0 or positive */

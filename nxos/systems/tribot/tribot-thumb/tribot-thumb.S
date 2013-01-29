@@ -29,7 +29,7 @@
 #include "systems/tribot/include/pid_equates.h"
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
-#undef ENABLE_BREAKPOINTS
+#define ENABLE_BREAKPOINTS
 /* To disable Sound Input Level Debugging, change the following to #undef DEBUG_SOUND */
 #undef DEBUG_ULTRASOUND
 /* To disable Avoid Obstacles Behavior Debugging, change the following to #undef DEBUG_AVOID_OBSTACLE */
@@ -1464,21 +1464,23 @@ exit_grasping_arbiter:
  *
  */
 
-	arm_interwork tone_generator_arbiter
+	thumb_interwork tone_generator_arbiter
 	push	{r4, r5, lr}
 	ldr		r4, =behavior_actuations
 	mov		r5, #NUM_BEHAVIORS				/* Assume at least 1 */
 tone_generator_arbiter_loop:
-	subs	r5, r5, #1						/* Convert behavior count to array index */
+	sub		r5, r5, #1						/* Convert behavior count to array index */
 	blt		tone_generator_copy_output		/* Last entry is Inhibited, copy it over anyway */
 
 	get_actuation_element_double_word r4, r5, #TONE_FREQ, #TONE_DUR
 
 	/* Tone is Inhibited if both Tone and Duration are TONE_INHIBITED */
-	cmp		r0, #TONE_INHIBITED
+	ldr		r2, =TONE_INHIBITED
+
+	cmp		r0, r2
 	bne		tone_generator_copy_output		/* Found a non-Inhibited entry, copy it over */
 
-	cmp		r1, #TONE_INHIBITED
+	cmp		r1, r2
 	beq		tone_generator_arbiter_loop		/* Actuator output is Inhibited, skip to next Behavior */
 
 tone_generator_copy_output:
@@ -1487,8 +1489,8 @@ tone_generator_copy_output:
 	str		r1, [r4, #TONE_DUR]
 
 exit_tone_generator_arbiter:
-	pop		{r4, r5, lr}					/* and exit */
-	bx		lr
+	pop		{r4, r5}					/* and exit */
+	thumb_iret	R1					/* Thumb Interworking Return */
 
 /* Actuator Routines */
 
@@ -2352,7 +2354,14 @@ continue_ultrasound_init:
 	mov		r1, #RADAR_MODE_CONTINUOUS
 	bl		nx_radar_set_op_mode			/* Arm Ultrasound Sensor */
 
+	mov		r0, #RADAR_DIST_ERR				/* Initialize to RADAR_DIST_ERR (unknown distance) */
+	ldr		r1, =ultrasoundval
+	strb	r0, [r1]
+
 	mov		r0, #FALSE
+	ldr		r1, =obstacle_tone_active
+	strb	r0, [r1]
+
 	ldr		r1, =obstacle_detected
 	strb	r0, [r1]
 
