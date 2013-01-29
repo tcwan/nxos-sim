@@ -2266,7 +2266,14 @@ continue_ultrasound_init:
 	mov		r1, #RADAR_MODE_CONTINUOUS
 	bl		nx_radar_set_op_mode			/* Arm Ultrasound Sensor */
 
+	mov		r0, #RADAR_DIST_ERR				/* Initialize to RADAR_DIST_ERR (unknown distance) */
+	ldr		r1, =ultrasoundval
+	strb	r0, [r1]
+
 	mov		r0, #FALSE
+	ldr		r1, =obstacle_tone_active
+	strb	r0, [r1]
+
 	ldr		r1, =obstacle_detected
 	strb	r0, [r1]
 
