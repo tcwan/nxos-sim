@@ -39,7 +39,7 @@
  *
  */
 	.macro arm_interwork arm_routine
-	.align 4
+	.align 2
 	.arm
 	.type \arm_routine, %function   @ Needed by new binutils (>2.21)
 	.global \arm_routine
