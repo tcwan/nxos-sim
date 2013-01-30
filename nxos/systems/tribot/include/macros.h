@@ -36,9 +36,9 @@
 
 	.macro thumb_toggle_boolean_byte	reg
 	/* This macro toggles 8-bit Boolean TRUE (0xFF) to FALSE (0x00) and vice versa using Thumb instructions */
-	mvn		\reg, \reg						/* Invert status */
-	lsl		\reg, #24
-	lsr		\reg, #24						/* Mask to 8-bits */
+	mvns	\reg, \reg						/* Invert status */
+	lsls	\reg, #24
+	lsrs	\reg, #24						/* Mask to 8-bits */
 	.endm
 
 #endif /* __NXOS_SYSTEMS_MACROS_H__ */
