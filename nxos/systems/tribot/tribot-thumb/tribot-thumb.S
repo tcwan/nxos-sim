@@ -29,7 +29,7 @@
 #include "systems/tribot/include/pid_equates.h"
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
-#define ENABLE_BREAKPOINTS
+#undef ENABLE_BREAKPOINTS
 /* To disable Sound Input Level Debugging, change the following to #undef DEBUG_SOUND */
 #undef DEBUG_ULTRASOUND
 /* To disable Avoid Obstacles Behavior Debugging, change the following to #undef DEBUG_AVOID_OBSTACLE */
@@ -38,6 +38,8 @@
 #define DEBUG_PID
 /* To use normal PID Convergence behavior, change the following to #undef ENABLE_PID_ABORT */
 #undef ENABLE_PID_ABORT
+
+.syntax unified
 
 	.equ	MAX_ITERATIONS, 0x0FFFF
 	.equ	CLAWPOS_CHECK_INTERVAL, SYSTICK_100MS		/* Keep CLAWPOS_CHECK_INTERVAL <= ROBOT_SCHED_DURATION to avoid going out of sync */
@@ -212,7 +214,7 @@ edge:	  .asciz " Line: Edge   "
 unknown:  .asciz " Line: Unknown"
 
 bbr_inhibited_behavior:        .asciz "BBR:            "
-avoidobstacle_idle_behavior:   .asciz "BBR:Avoid-Idle  "
+avoidobstacle_idle_behavior:   .asciz "BBR:Avoid       "
 moveobject_idle_behavior:      .asciz "BBR:Move-Idle   "
 moveobject_waiting_behavior:   .asciz "BBR:Move-Waiting"
 moveobject_seeking_behavior:   .asciz "BBR:Move-Seeking"
@@ -549,7 +551,7 @@ actuation_controller_jumptable:
  */
 	thumb_interwork print_behavior_state
 	push	{lr}
-	mov		r1, #BEHAVIOR_ROW
+	movs	r1, #BEHAVIOR_ROW
 	bl		nx_progcontentX
 	thumb_iret	r1					/* Thumb Interworking Return */
 
@@ -557,21 +559,21 @@ actuation_controller_jumptable:
 	thumb_interwork plip
 	push	{lr}
 	ldr		r0, =3000
-	mov		r1, #100
+	movs	r1, #100
 	bl		nx_sound_freq
 	thumb_iret	r1					/* Thumb Interworking Return */
 
 	thumb_interwork plop
 	push	{lr}
 	ldr		r0, =500
-	mov		r1, #100
+	movs	r1, #100
 	bl		nx_sound_freq
 	thumb_iret	r1					/* Thumb Interworking Return */
 
 	thumb_interwork plap
 	push	{lr}
 	ldr		r0, =1500
-	mov		r1, #100
+	movs	r1, #100
 	bl		nx_sound_freq
 	thumb_iret	r1					/* Thumb Interworking Return */
 
@@ -580,7 +582,7 @@ actuation_controller_jumptable:
 	push	{lr}
 	bl		plip
 	ldr		r0, =pressed
-	mov		r1, #TOUCH_ROW
+	movs	r1, #TOUCH_ROW
 	bl		nx_progcontentX
 	thumb_iret	r1					/* Thumb Interworking Return */
 
@@ -588,42 +590,42 @@ actuation_controller_jumptable:
 	push	{lr}
 	bl		plop
 	ldr		r0, =released
-	mov		r1, #TOUCH_ROW
+	movs	r1, #TOUCH_ROW
 	bl		nx_progcontentX
 	thumb_iret	r1					/* Thumb Interworking Return */
 
 	thumb_interwork sound_activated
 	push	{lr}
 	ldr		r0, =maxsound
-	mov		r1, #SOUND_ROW
+	movs	r1, #SOUND_ROW
 	bl		nx_progcontentX
 	thumb_iret	r1					/* Thumb Interworking Return */
 
 	thumb_interwork sound_detected
 	push	{lr}
 	ldr		r0, =minsound
-	mov		r1, #SOUND_ROW
+	movs	r1, #SOUND_ROW
 	bl		nx_progcontentX
 	thumb_iret	r1					/* Thumb Interworking Return */
 
 	thumb_interwork sound_absent
 	push	{lr}
 	ldr		r0, =nosound
-	mov		r1, #SOUND_ROW
+	movs	r1, #SOUND_ROW
 	bl		nx_progcontentX
 	thumb_iret	r1					/* Thumb Interworking Return */
 
 	thumb_interwork light_led_enable
 	push	{lr}
-	mov		r0, #LIGHT_PORT
-	mov		r1, #DIGI0
+	movs	r0, #LIGHT_PORT
+	movs	r1, #DIGI0
 	bl		nx_sensors_analog_digi_set
 	thumb_iret	r1					/* Thumb Interworking Return */
 
 	thumb_interwork light_led_disable
 	push	{lr}
-	mov		r0, #LIGHT_PORT
-	mov		r1, #DIGI0
+	movs	r0, #LIGHT_PORT
+	movs	r1, #DIGI0
 	bl		nx_sensors_analog_digi_clear
 	thumb_iret	r1					/* Thumb Interworking Return */
 
@@ -640,7 +642,7 @@ actuation_controller_jumptable:
  */
 	thumb_interwork get_light_reading
 	push	{lr}
-	mov		r0, #LIGHT_PORT
+	movs	r0, #LIGHT_PORT
 	bl		nx_sensors_analog_get_normalized	/* returned value in range 0-100% */
 	thumb_iret	r1					/* Thumb Interworking Return */
 
@@ -650,7 +652,7 @@ actuation_controller_jumptable:
 
 	thumb_interwork calc_light_min_max
 	push	{lr}
-	mov		r0, #n
+	movs	r0, #n
 	ldr		r1, =light_readings
 	ldr		r2, =light_min
 	ldr		r3, =light_max
@@ -665,7 +667,7 @@ actuation_controller_jumptable:
  */
 	thumb_interwork get_sound_level
  	push	{lr}
-	mov		r0, #SOUND_PORT
+	movs	r0, #SOUND_PORT
 	bl		nx_sensors_analog_get_normalized	/* returned value in range 0-100% */
 	thumb_iret	r1					/* Thumb Interworking Return */
 
@@ -674,7 +676,7 @@ actuation_controller_jumptable:
  */
 	thumb_interwork calc_sound_min_max
 	push	{lr}
-	mov		r0, #n
+	movs	r0, #n
 	ldr		r1, =sound_levels
 	ldr		r2, =sound_min
 	ldr		r3, =sound_max
@@ -699,12 +701,12 @@ exit_get_sound_levels:
  */
 	thumb_interwork collect_samples
 	push	{r4, r5, r6, lr}
-	mov		r4, #n		/* Number of readings to collect */
+	movs	r4, #n		/* Number of readings to collect */
 	ldr		r5, =light_readings
 	ldr		r6, =sound_levels
 
 sample_loop:
-	sub		r4, r4, #1				/* Convert Number of readings to collect into Array Index */
+	subs	r4, r4, #1				/* Convert Number of readings to collect into Array Index */
 	blt		done_collect_samples	/* We're done when index is negative */
 
 	/* Sensor Input routines */
@@ -715,7 +717,7 @@ sample_loop:
 	strb	r0, [r6, r4]
 
 	/* A/D Converter Delay */
-	mov		r0, #SYSTICK_3MS
+	movs	r0, #SYSTICK_3MS
 	bl		nx_systick_wait_ms		/* Delay 3 ms before next reading (Required by AVR A/D Converter) */
 	b		sample_loop				/* Next Iteration */
 
@@ -736,7 +738,7 @@ done_collect_samples:
  */
 	thumb_interwork get_touch_status
  	push	{r4, lr}
-	mov		r0, #TOUCH_PORT
+	movs	r0, #TOUCH_PORT
 	bl		nx_sensors_analog_get
 	ldr		r4, =touchval
 	strb	r0, [r4]		/* Store Touch Value */
@@ -748,8 +750,8 @@ done_collect_samples:
 touch:
 	cmp		r0, #FALSE				/* We can't teq #TRUE due to constant value exceeding 8 bits */
 	bne		exit_get_touch_status
-	mov		r0, #FALSE
-	mvn		r0, r0					/* Set R0 to TRUE */
+	movs	r0, #FALSE
+	mvns	r0, r0					/* Set R0 to TRUE */
 	strb	r0, [r4, #1]			/* Update Touch Status (non-zero value, truncated to 8 bits) */
 	bl		light_led_disable
 	bl		touch_detected
@@ -758,7 +760,7 @@ touch:
 no_touch:
 	cmp		r0, #FALSE
 	beq		exit_get_touch_status
-	mov		r0, #FALSE
+	movs	r0, #FALSE
 	strb	r0, [r4, #1]			/* Update Touch Status (zero value, truncated to 8 bits) */
 	bl		light_led_enable
 	bl		touch_lost
@@ -778,7 +780,7 @@ exit_get_touch_status:
  */
  	thumb_interwork get_claw_status
  	push	{lr}
- 	mov		r0, #CLAW_PORT	/* Specify Claw Motor Port */
+ 	movs	r0, #CLAW_PORT	/* Specify Claw Motor Port */
  	bl		nx_motors_get_tach_count
 	ldr		r1, =claw_position
 	str		r0, [r1]			/* Store 32-bit tachometer count */
@@ -798,8 +800,8 @@ exit_get_claw_status:
  */
 	thumb_interwork get_obstacle_distance
 	push	{lr}
-	mov		r0, #ULSND_PORT
-	mov		r1, #0							/* Continue Reading only returns Object 0 */
+	movs	r0, #ULSND_PORT
+	movs	r1, #0							/* Continue Reading only returns Object 0 */
 	bl		nx_radar_read_distance			/* Return distance in R0 */
 	ldr		r2, =ultrasoundval
 	cmp		r0, #0
@@ -807,18 +809,18 @@ exit_get_claw_status:
 	beq		get_obstacle_distance_err		/* Weed out invalid readings (0 == no object) */
 	cmp		r0, #RADAR_DIST_ERR
 	beq		get_obstacle_distance_err		/* Weed out invalid readings (255 == error) */
-	sub		r0, r0, #ULTRASOUND_ERR_OFFSET	/* Adjust read value with calibration offset */
-	mov		r1, #0							/* Reset Error Count */
+	subs	r0, r0, #ULTRASOUND_ERR_OFFSET	/* Adjust read value with calibration offset */
+	movs	r1, #0							/* Reset Error Count */
 	b		update_obstacle_distance_errcnt
 
 get_obstacle_distance_err:
 	ldrb	r0, [r2]						/* Retrieve last reading */
 	ldrb	r1, [r2, #1]					/* Retrieve ultrasound_errcnt */
-	add		r1, r1, #1
+	adds	r1, r1, #1
 	cmp		r1, #ULTRASOUND_ERRSTATE_COUNT
 	blo		update_obstacle_distance_errcnt
-	mov		r1, #0							/* Reset ultrasound_errcnt if limit reached */
-	mov		r0, #RADAR_DIST_ERR				/* Store reading as error distance (for real) */
+	movs	r1, #0							/* Reset ultrasound_errcnt if limit reached */
+	movs	r0, #RADAR_DIST_ERR				/* Store reading as error distance (for real) */
 
 update_obstacle_distance_errcnt:
 	strb	r0, [r2]						/* Store new distance reading (if valid) */
@@ -827,8 +829,8 @@ update_obstacle_distance_errcnt:
 exit_get_obstacle_distance:
 
 #if (defined DEBUG_ULTRASOUND || defined DEBUG_AVOID_OBSTACLE)
-	mov		r0, #0
-	mov		r1, #SNDLVL_ROW
+	movs	r0, #0
+	movs	r1, #SNDLVL_ROW
 	bl 		nx_display_cursor_set_pos
 	ldr		r0, =ultrasoundstr
 	bl		nx_display_string
@@ -861,10 +863,10 @@ exit_get_obstacle_distance:
 	thumb_interwork bbr_copy_actuator_outputs
 	push	{lr}
 	ldr		r3, =behavior_actuations			/* candidate actuations array start address */
-	mov		r2, #SIZEOF_ACTUATOR_STATE			/* number of bytes per actuator_state struct */
+	movs	r2, #SIZEOF_ACTUATOR_STATE			/* number of bytes per actuator_state struct */
 @	mla		r0, r2, r0, r3						/* r0 = (sizeof(actuator_state) (r2) * index (r0)) + behavior_actuations start (r3) */
-	mul		r0, r2, r0
-	add		r0, r0, r3
+	muls	r0, r2, r0
+	adds	r0, r0, r3
 	bl		memmove								/* r0: destination pointer, r1: source pointer, r2: number of bytes to copy */
 	thumb_iret	r1								/* Thumb Interworking Return */
 
@@ -878,7 +880,7 @@ exit_get_obstacle_distance:
 	ldr		r0, =black
 	bl		nx_progcontent
 
-	mov		r0, #BBR_FOLLOW_LINE
+	movs	r0, #BBR_FOLLOW_LINE
 	ldr		r1, =bbr_follow_line_black
 	bl		bbr_copy_actuator_outputs
 	thumb_iret	r1					/* Thumb Interworking Return */
@@ -893,7 +895,7 @@ exit_get_obstacle_distance:
 	ldr		r0, =white
 	bl		nx_progcontent
 
-	mov		r0, #BBR_FOLLOW_LINE
+	movs	r0, #BBR_FOLLOW_LINE
 	ldr		r1, =bbr_follow_line_white
 	bl		bbr_copy_actuator_outputs
 	thumb_iret	r1					/* Thumb Interworking Return */
@@ -908,7 +910,7 @@ exit_get_obstacle_distance:
 	ldr		r0, =edge
 	bl		nx_progcontent
 
-	mov		r0, #BBR_FOLLOW_LINE
+	movs	r0, #BBR_FOLLOW_LINE
 	ldr		r1, =bbr_follow_line_edge
 	bl		bbr_copy_actuator_outputs
 	thumb_iret	r1					/* Thumb Interworking Return */
@@ -922,7 +924,7 @@ exit_get_obstacle_distance:
 	ldr		r0, =unknown
 	bl		nx_progcontent
 
-	mov		r0, #BBR_FOLLOW_LINE
+	movs	r0, #BBR_FOLLOW_LINE
 	ldr		r1, =bbr_behavior_inhibited
 	bl		bbr_copy_actuator_outputs
 	thumb_iret	r1					/* Thumb Interworking Return */
@@ -944,7 +946,7 @@ exit_get_obstacle_distance:
 	ldrb	r1, [r3]							/* Sound Following State */
 	cmp		r1, #NUM_SOUND_STATES
 	bls		0f
-	mov		r1, #NUM_SOUND_STATES				/* Force to sane state value */
+	movs	r1, #NUM_SOUND_STATES				/* Force to sane state value */
 0:
 	ldrb	r2, [r3, #1]						/* Sound Level Trigger */
 
@@ -958,8 +960,8 @@ exit_get_obstacle_distance:
 
 sound_decreasing:
 @	add		r4, r4, r1, lsl #1					/* Point to Item Entry at sound_state_hysterisis + sound_following_state x 2 */
-	add		r4, r4, r1
-	add		r4, r4, r1							/* r4 = r4 + r1 + r1 */
+	adds	r4, r4, r1
+	adds	r4, r4, r1							/* r4 = r4 + r1 + r1 */
 	ldrb	r0, [r4]							/* Decreasing Threshold */
 	cmp		r2, r0								/* Trigger - Threshold */
 	bhs		sound_process_state
@@ -969,8 +971,8 @@ sound_decreasing:
 
 sound_increasing:
 @	add		r4, r4, r1, lsl #1					/* Point to Item Entry at sound_state_hysterisis + sound_following_state x 2 */
-	add		r4, r4, r1
-	add		r4, r4, r1							/* r4 = r4 + r1 + r1 */
+	adds	r4, r4, r1
+	adds	r4, r4, r1							/* r4 = r4 + r1 + r1 */
 	ldrb	r0, [r4]							/* Decreasing Threshold */
 	cmp		r2, r0								/* Trigger - Threshold */
 	blo		sound_process_state
@@ -980,12 +982,12 @@ sound_increasing:
 sound_process_state:
 	ldr		r4, =move_object_output_table
 @	add		r4, r4, r1, lsl #3					/* Point to Item Entry at move_object_output_table + sound_following_state x 8 */
-	lsl		r2, r1, #3
-	add		r4, r4, r2
+	lsls	r2, r1, #3
+	adds	r4, r4, r2
 	ldr		r1, [r4]							/* Idle State Behavior Output */
 
 sound_do_update:
-	mov		r0, #BBR_MOVE_OBJECT
+	movs	r0, #BBR_MOVE_OBJECT
 	bl		bbr_copy_actuator_outputs			/* Update behavior outputs */
 
 	ldr		r0, [r4, #4]						/* Display String */
@@ -1004,14 +1006,14 @@ sound_do_update:
 	ldr		r1, =sound_following_state
 	ldrb	r0, [r1, #1]						/* Sound Level Trigger */
 
-	add		r0, r0, #SOUND_LOUD_INCR
+	adds	r0, r0, #SOUND_LOUD_INCR
 	cmp		r0, #255
 	bls		0f
-	mov		r0, #255							/* Clamp to 255 if exceeded 8-bits */
+	movs	r0, #255							/* Clamp to 255 if exceeded 8-bits */
 0:	strb	r0, [r1, #1]
 
-	mov		r0, #FALSE
-	mvn		r0, r0								/* Convert to TRUE */
+	movs	r0, #FALSE
+	mvns	r0, r0								/* Convert to TRUE */
 	bl		sound_update_state_output
 	thumb_iret	r1					/* Thumb Interworking Return */
 
@@ -1026,14 +1028,14 @@ sound_do_update:
 	ldr		r1, =sound_following_state
 	ldrb	r0, [r1, #1]						/* Sound Level Trigger */
 
-	add		r0, r0, #SOUND_SOFT_INCR
+	adds	r0, r0, #SOUND_SOFT_INCR
 	cmp		r0, #255
 	bls		0f
-	mov		r0, #255							/* Clamp to 255 if exceeded 8-bits */
+	movs	r0, #255							/* Clamp to 255 if exceeded 8-bits */
 0:	strb	r0, [r1, #1]
 
-	mov		r0, #FALSE
-	mvn		r0, r0								/* Convert to TRUE */
+	movs	r0, #FALSE
+	mvns	r0, r0								/* Convert to TRUE */
 	bl		sound_update_state_output
 	thumb_iret	r1					/* Thumb Interworking Return */
 
@@ -1050,19 +1052,19 @@ sound_do_update:
 	ldr		r1, =sound_following_state
 	ldrb	r0, [r1, #1]						/* Sound Level Trigger */
 
-	mov		r3, #SOUND_QUIET_NORMAL_DECR
+	movs	r3, #SOUND_QUIET_NORMAL_DECR
 
 	ldrb	r2, [r1]							/* Sound Following State */
 	cmp		r2, #SOUND_FOLLOWING
 	bne		0f
-	mov		r3, #SOUND_QUIET_FOLLOWING_DECR		/* Decrement faster if in Following State */
+	movs	r3, #SOUND_QUIET_FOLLOWING_DECR		/* Decrement faster if in Following State */
 0:
-	sub		r0, r0, r3
+	subs	r0, r0, r3
 	bhs		1f
-	mov		r0, #0								/* Clamp to 0 if negative */
+	movs	r0, #0								/* Clamp to 0 if negative */
 1:	strb	r0, [r1, #1]
 
-	mov		r0, #FALSE
+	movs	r0, #FALSE
 	bl		sound_update_state_output
 	thumb_iret	r1					/* Thumb Interworking Return */
 
@@ -1076,12 +1078,12 @@ sound_do_update:
 	ldr		r1, =sound_following_state
 	ldrb	r0, [r1, #1]						/* Sound Level Trigger */
 
-	sub		r0, r0, #SOUND_UNKNOWN_DECR
+	subs	r0, r0, #SOUND_UNKNOWN_DECR
 	bhs		0f
-	mov		r0, #0								/* Clamp to 0 if negative */
+	movs	r0, #0								/* Clamp to 0 if negative */
 0:	strb	r0, [r1, #1]
 
-	mov		r0, #FALSE
+	movs	r0, #FALSE
 	bl		sound_update_state_output
 
 	thumb_iret	r1					/* Thumb Interworking Return */
@@ -1148,11 +1150,11 @@ sound_do_update:
 	beq		claw_is_stopped			/* If Motor Inhibited, it is equivalent to Stopped */
 	cmp		r0, #STOP_SPEED
 	beq		claw_is_stopped
-	mov		r0, #FALSE
-	mvn		r0, r0								/* Convert to TRUE */
+	movs	r0, #FALSE
+	mvns	r0, r0								/* Convert to TRUE */
 	b		exit_has_claw_started_moving
 claw_is_stopped:
-	mov		r0, #FALSE
+	movs	r0, #FALSE
 exit_has_claw_started_moving:
 	pop		{r4}
 	thumb_iret	r1					/* Thumb Interworking Return */
@@ -1252,7 +1254,7 @@ exit_has_claw_fully_stopped:
 jump_table_loop:
     CMP    R4, R5
     BLO    0f
-	MOV    R0, #FALSE
+	MOVS   R0, #FALSE
     B      exit_advanced_jump_table_dispatcher	/* Traversed entire table, exit (not found) */
 0:
     LDRB   R2, [R4, #MINVAL_OFFSET]         /* Retrieve Min & Max Bounds for Item */
@@ -1274,14 +1276,14 @@ matched_classification_item:
     BL     9b
 
 done_execution:
-	MOV     R0, #FALSE
-	MVN     R0, R0
+	MOVS    R0, #FALSE
+	MVNS    R0, R0
 @	MOV		R0, #TRUE
     B       exit_advanced_jump_table_dispatcher
 
 next_jump_table_item:
-    ADD    R4, R4, #SIZEOF_ADV_JUMP_TABLE_ITEM
-    B      jump_table_loop         /* Repeat for next item */
+    ADDS    R4, R4, #SIZEOF_ADV_JUMP_TABLE_ITEM
+    B       jump_table_loop         /* Repeat for next item */
 
 exit_advanced_jump_table_dispatcher:
     POP   {R4, R5}
@@ -1309,10 +1311,10 @@ exit_advanced_jump_table_dispatcher:
  *
  */
 	.macro get_actuation_element_double_unsigned_byte behavior_actuations_ptr_reg, array_index_reg, element1_offset, element2_offset
-	mov		r1, #SIZEOF_ACTUATOR_STATE
+	movs	r1, #SIZEOF_ACTUATOR_STATE
 @	mla		r1, \array_index_reg, r1, \behavior_actuations_ptr_reg	/* r1 = (index (array_index_reg) * sizeof(actuator_state) (r1)) + behavior_actuations_ptr_reg */
-	mul		r1, \array_index_reg, r1
-	add		r1, r1, \behavior_actuations_ptr_reg
+	muls	r1, \array_index_reg, r1
+	adds	r1, r1, \behavior_actuations_ptr_reg
 	ldrb	r0, [r1, \element1_offset]
 	ldrb	r1, [r1, \element2_offset]
 	.endm
@@ -1365,10 +1367,10 @@ exit_advanced_jump_table_dispatcher:
  *
  */
 	.macro get_actuation_element_double_word behavior_actuations_ptr_reg, array_index_reg, element1_offset, element2_offset
-	mov		r1, #SIZEOF_ACTUATOR_STATE
+	movs	r1, #SIZEOF_ACTUATOR_STATE
 @	mla		r1, \array_index_reg, r1, \behavior_actuations_ptr_reg	/* r1 = (index (array_index_reg) * sizeof(actuator_state) (r1)) + behavior_actuations_ptr_reg */
-	mul		r1, \array_index_reg, r1
-	add		r1, r1, \behavior_actuations_ptr_reg
+	muls	r1, \array_index_reg, r1
+	adds	r1, r1, \behavior_actuations_ptr_reg
 	ldr		r0, [r1, \element1_offset]
 	ldr		r1, [r1, \element2_offset]
 	.endm
@@ -1467,9 +1469,9 @@ exit_grasping_arbiter:
 	thumb_interwork tone_generator_arbiter
 	push	{r4, r5, lr}
 	ldr		r4, =behavior_actuations
-	mov		r5, #NUM_BEHAVIORS				/* Assume at least 1 */
+	movs	r5, #NUM_BEHAVIORS				/* Assume at least 1 */
 tone_generator_arbiter_loop:
-	sub		r5, r5, #1						/* Convert behavior count to array index */
+	subs	r5, r5, #1						/* Convert behavior count to array index */
 	blt		tone_generator_copy_output		/* Last entry is Inhibited, copy it over anyway */
 
 	get_actuation_element_double_word r4, r5, #TONE_FREQ, #TONE_DUR
@@ -1565,9 +1567,9 @@ exit_motor_actuator:
 	thumb_interwork motor_controller
 	push	{lr}
 	/* FIXME: input checking, etc. */
-	mov		r0, #RWHEEL_PORT
+	movs	r0, #RWHEEL_PORT
 	bl		motor_actuator
-	mov		r0, #LWHEEL_PORT
+	movs	r0, #LWHEEL_PORT
 	bl		motor_actuator
 
 	/* Update Robot State */
@@ -1586,7 +1588,7 @@ exit_motor_actuator:
 	thumb_interwork claw_controller
 	push	{lr}
 	/* FIXME: input checking, etc. */
-	mov		r0, #CLAW_PORT
+	movs	r0, #CLAW_PORT
 	bl		motor_actuator
 	thumb_iret	r1					/* Thumb Interworking Return */
 
@@ -1697,11 +1699,11 @@ idle_switch_state:
 	bne		0f
 	ldr		r1, =bbr_idle_off			/* False, disable tone */
 0:
-	mov		r0, #BBR_IDLE
+	movs	r0, #BBR_IDLE
 	bl		bbr_copy_actuator_outputs
 exit_bbr_idle:
-	mov		r0, #FALSE
-	mvn		r0, r0					/* Load TRUE, Always Activate Behavior */
+	movs	r0, #FALSE
+	mvns	r0, r0					/* Load TRUE, Always Activate Behavior */
 	thumb_iret	r1					/* Thumb Interworking Return */
 
 /* Line Follower Behavior
@@ -1732,11 +1734,11 @@ exit_bbr_idle:
 	beq		follow_line_check_line	/* Not Touched, check Follow Line Behavior */
 
 	/* Touch active, deactivate Behavior and exit */
-	mov		r0, #BBR_FOLLOW_LINE
+	movs	r0, #BBR_FOLLOW_LINE
 	ldr		r1, =bbr_behavior_inhibited
 	bl		bbr_copy_actuator_outputs
 
-	mov		r0, #FALSE				/* Deactivate Behavior Outputs */
+	movs	r0, #FALSE				/* Deactivate Behavior Outputs */
 	b		exit_bbr_follow_line
 
 follow_line_check_line:
@@ -1812,10 +1814,10 @@ bbr_check_open_claws:
 	beq		bbr_deactivate_open_claws	/* If Opened (Claw Closed == False), deactivate Behavior Outputs and exit */
 
 bbr_start_opening_claws:
-	mov		r0, #CLAW_OPENING
+	movs	r0, #CLAW_OPENING
 	strb	r0, [r4]				/* Claw Movement = OPENING */
 
-	mov		r0, #BBR_OPEN_CLAWS
+	movs	r0, #BBR_OPEN_CLAWS
 	bl		unlock_claw				/* start opening claw */
 	b		bbr_open_claws_active	/* let controller do its work */
 
@@ -1825,18 +1827,18 @@ bbr_claw_check_still_opening:
 
 bbr_deactivate_open_claws:
 	/* Not Claw Opening Movement, deactivate Behavior and exit */
-	mov		r0, #BBR_OPEN_CLAWS
+	movs	r0, #BBR_OPEN_CLAWS
 	ldr		r1, =bbr_behavior_inhibited
 	bl		bbr_copy_actuator_outputs
 
-	mov		r0, #FALSE				/* Deactivate Behavior Outputs */
+	movs	r0, #FALSE				/* Deactivate Behavior Outputs */
 	b		exit_bbr_open_claws
 
 bbr_claw_still_opening:
 	bl		has_claw_started_moving
 	cmp		r0, #FALSE				/* Check if claw motor is moving (non-zero speed) */
 	bne		0f
-	mov		r0, #BBR_OPEN_CLAWS
+	movs	r0, #BBR_OPEN_CLAWS
 	bl		open_claw				/* Keep opening claw */
 	b		bbr_open_claws_active	/* No, still Opening, keep Behavior active */
 0:
@@ -1845,18 +1847,18 @@ bbr_claw_still_opening:
 	beq		bbr_open_claws_active	/* No, still Opening, keep Behavior active */
 
 bbr_claw_opening_stopped:
-	mov		r0, #FALSE
+	movs	r0, #FALSE
 	strb	r0, [r6]				/* update Claw Closed Status */
 
-	mov		r0, #CLAW_STOPPED
+	movs	r0, #CLAW_STOPPED
 	strb	r0, [r4]				/* Update Claw Movement Status */
 
-	mov		r0, #BBR_OPEN_CLAWS
+	movs	r0, #BBR_OPEN_CLAWS
 	bl		lock_claw				/* Keep Behavior Active for one more iteration */
 
 bbr_open_claws_active:
-	mov		r0, #FALSE
-	mvn		r0, r0					/* Load TRUE, Activate Behavior */
+	movs	r0, #FALSE
+	mvns	r0, r0					/* Load TRUE, Activate Behavior */
 
 exit_bbr_open_claws:
 	pop		{r4, r5, r6}
@@ -1924,10 +1926,10 @@ bbr_check_grasp_object:
 	bne		bbr_deactivate_grasp_object	/* If Claw Closed, deactivate Behavior Outputs and exit */
 
 bbr_start_grasp_object:
-	mov		r0, #CLAW_CLOSING
+	movs	r0, #CLAW_CLOSING
 	strb	r0, [r4]				/* Claw Movement = CLOSING */
 
-	mov		r0, #BBR_GRASP_OBJECT
+	movs	r0, #BBR_GRASP_OBJECT
 	bl		unlock_claw				/* start closing claw */
 	b		bbr_grasp_object_active	/* let controller do its work */
 
@@ -1937,18 +1939,18 @@ bbr_claw_check_still_closing:
 
 bbr_deactivate_grasp_object:
 	/* Not Claw Closing Movement, deactivate Behavior and exit */
-	mov		r0, #BBR_GRASP_OBJECT
+	movs	r0, #BBR_GRASP_OBJECT
 	ldr		r1, =bbr_behavior_inhibited
 	bl		bbr_copy_actuator_outputs
 
-	mov		r0, #FALSE				/* Deactivate Behavior Outputs */
+	movs	r0, #FALSE				/* Deactivate Behavior Outputs */
 	b		exit_bbr_grasp_object
 
 bbr_claw_still_closing:
 	bl		has_claw_started_moving
 	cmp		r0, #FALSE				/* Check if claw motor is moving (non-zero speed) */
 	bne		0f
-	mov		r0, #BBR_GRASP_OBJECT
+	movs	r0, #BBR_GRASP_OBJECT
 	bl		close_claw				/* No, Keep closing claw */
 	b		bbr_grasp_object_active	/* No, still Closing, keep Behavior active */
 0:
@@ -1957,19 +1959,19 @@ bbr_claw_still_closing:
 	beq		bbr_grasp_object_active	/* No, still Closing, keep Behavior active */
 
 bbr_claw_closing_stopped:
-	mov		r0, #FALSE
-	mvn		r0, r0					/* Load TRUE */
+	movs	r0, #FALSE
+	mvns	r0, r0					/* Load TRUE */
 	strb	r0, [r6]				/* update Claw Closed Status */
 
-	mov		r0, #CLAW_STOPPED
+	movs	r0, #CLAW_STOPPED
 	strb	r0, [r4]				/* Update Claw Movement Status */
 
-	mov		r0, #BBR_GRASP_OBJECT
+	movs	r0, #BBR_GRASP_OBJECT
 	bl		lock_claw				/* Keep Behavior Active for one more iteration */
 
 bbr_grasp_object_active:
-	mov		r0, #FALSE
-	mvn		r0, r0					/* Load TRUE, Activate Behavior */
+	movs	r0, #FALSE
+	mvns	r0, r0					/* Load TRUE, Activate Behavior */
 
 exit_bbr_grasp_object:
 	pop		{r4, r5, r6}
@@ -2024,7 +2026,7 @@ bbr_check_move_object:
 
 /* If Not Claw Closed, deactivate Behavior Outputs and exit */
 bbr_deactivate_move_object:
-	mov		r0, #BBR_MOVE_OBJECT
+	movs	r0, #BBR_MOVE_OBJECT
 	ldr		r1, =bbr_behavior_inhibited
 	bl		bbr_copy_actuator_outputs
 
@@ -2035,12 +2037,12 @@ bbr_deactivate_move_object:
 bbr_reset_sound_state_trigger:
 	/* Reset Sound Following State and Trigger Level */
 	ldr		r1, =sound_following_state
-	mov		r0, #SOUND_IDLE
+	movs	r0, #SOUND_IDLE
 	strb	r0, [r1]
-	mov		r0, #0
+	movs	r0, #0
 	strb	r0, [r1, #1]		/* Sound Level Trigger */
 
-	mov		r0, #FALSE				/* Deactivate Behavior Outputs */
+	movs	r0, #FALSE				/* Deactivate Behavior Outputs */
 	b		exit_bbr_move_object
 
 move_object_check_soundlevel:
@@ -2054,8 +2056,8 @@ move_object_check_soundlevel:
 	bl		advanced_jump_table_dispatcher
 
 bbr_move_object_active:
-	mov		r0, #FALSE
-	mvn		r0, r0					/* Load TRUE, Activate Behavior */
+	movs	r0, #FALSE
+	mvns	r0, r0					/* Load TRUE, Activate Behavior */
 
 exit_bbr_move_object:
 	pop		{r5, r6}
@@ -2107,7 +2109,7 @@ exit_bbr_move_object:
 
 bbr_avoid_obstacle_pid_reset:
 	ldr		r0, =pid
-	mov		r1, #OBSTACLE_STOPDIST
+	movs	r1, #OBSTACLE_STOPDIST
 	bl		SetPIDReferenceVal					/* Set PID Reference Value to Obstacle Minimum Distance */
 
 bbr_avoid_obstacle_pid_converge:
@@ -2117,8 +2119,8 @@ bbr_avoid_obstacle_pid_converge:
 	mov		r4, r0								/* Keep PID Controller Output in R4 for later use */
 
 #ifdef DEBUG_PID
-	mov		r0, #0
-	mov		r1, #PID_ROW
+	movs	r0, #0
+	movs	r1, #PID_ROW
 	bl 		nx_display_cursor_set_pos
 	ldr		r0, =pidstr
 	bl		nx_display_string
@@ -2164,17 +2166,16 @@ avoid_obstacle_behavior_template:
 	bne		0f
 	ldr		r1, =bbr_avoid_obstacle_off	/* False, disable tone */
 0:
-	mov		r0, #BBR_AVOID_OBSTACLE
+	movs	r0, #BBR_AVOID_OBSTACLE
 	bl		bbr_copy_actuator_outputs	/* Setup Avoid Obstacle behavior template outputs */
 
 	/* Convert PID Controller output in R4 into Motor Speed in R1 */
-	neg		r1, r1						/* PID Controller output is positive, need negative motor speed for reverse */
-@	rsb		r1, r4, #0
+	rsbs		r1, r4, #0				/* PID Controller output is positive, need negative motor speed for reverse */
 
 clamp_output_max:
 	cmp		r1, #WHEEL_SPEED_MAX
 	blt		clamp_output_min
-	mov		r1, #WHEEL_SPEED_MAX		/* Clamp to WHEEL_SPEED_MAX if greater */
+	movs	r1, #WHEEL_SPEED_MAX		/* Clamp to WHEEL_SPEED_MAX if greater */
 
 clamp_output_min:
 	ldr		r2, =WHEEL_SPEED_MIN
@@ -2183,12 +2184,12 @@ clamp_output_min:
 	mov		r1, r2						/* Clamp to WHEEL_SPEED_MIN if less */
 
 done_clamp_output:
-	mov		r0, #BBR_AVOID_OBSTACLE
+	movs	r0, #BBR_AVOID_OBSTACLE
 	ldr		r3, =behavior_actuations			/* candidate actuations array start address */
-	mov		r2, #SIZEOF_ACTUATOR_STATE			/* number of bytes per actuator_state struct */
+	movs	r2, #SIZEOF_ACTUATOR_STATE			/* number of bytes per actuator_state struct */
 @	mla		r0, r2, r0, r3						/* r0 = (sizeof(actuator_state) (r2) * index (r0)) + behavior_actuations start (r3) */
-	mul		r0, r2, r0
-	add		r0, r0, r3
+	muls	r0, r2, r0
+	adds	r0, r0, r3
 
 	strb	r1, [r0, #MOTOR_RWHEEL_OFFSET]
 	strb	r1, [r0, #MOTOR_LWHEEL_OFFSET]		/* Set Wheel Speeds to actual calculated speeds */
@@ -2198,19 +2199,19 @@ done_clamp_output:
 	b		bbr_avoid_obstacle_active
 
 bbr_deactivate_avoid_obstacle:
-	mov		r0, #BBR_AVOID_OBSTACLE
+	movs	r0, #BBR_AVOID_OBSTACLE
 	ldr		r1, =bbr_behavior_inhibited
 	bl		bbr_copy_actuator_outputs
 
 	ldr		r0, =bbr_inhibited_behavior	/* Display String */
 	bl		print_behavior_state
 
-	mov		r0, #FALSE				/* Deactivate Behavior Outputs */
+	movs	r0, #FALSE				/* Deactivate Behavior Outputs */
 	b		exit_bbr_avoid_obstacle
 
 bbr_avoid_obstacle_active:
-	mov		r0, #FALSE
-	mvn		r0, r0					/* Load TRUE, Activate Behavior */
+	movs	r0, #FALSE
+	mvns	r0, r0					/* Load TRUE, Activate Behavior */
 
 exit_bbr_avoid_obstacle:
 	strb	r0, [r5]				/* Update Obstacle Detected boolean */
@@ -2225,7 +2226,7 @@ exit_bbr_avoid_obstacle:
 	thumb_interwork tribot_dispatcher
 	push	{lr}
 	ldr		r0, =dispatcher_behavior_jumptable
-	mov		r1, #NUM_DISPATCHER_ENTRIES
+	movs	r1, #NUM_DISPATCHER_ENTRIES
 	bl		jumptable_dispatcher
 
 exit_tribot_dispatcher:
@@ -2240,7 +2241,7 @@ exit_tribot_dispatcher:
 	thumb_interwork tribot_arbiter
 	push	{lr}
 	ldr		r0, =output_arbiter_jumptable
-	mov		r1, #NUM_ARBITER_ENTRIES
+	movs	r1, #NUM_ARBITER_ENTRIES
 	bl		jumptable_dispatcher
 
 exit_tribot_arbiter:
@@ -2255,13 +2256,13 @@ exit_tribot_arbiter:
 	push	{lr}
 	ldr		r0, =actuator_state
 	ldr		r1, =prev_actuator_state
-	mov		r2, #SIZEOF_ACTUATOR_STATE
+	movs	r2, #SIZEOF_ACTUATOR_STATE
 	bl		memcmp						/* returns 0 if identical */
 	cmp		r0, #0
 	beq		exit_tribot_controller		/* Nothing has changed, skip controller update */
 
 	ldr		r0, =actuation_controller_jumptable
-	mov		r1, #NUM_CONTROLLER_ENTRIES
+	movs	r1, #NUM_CONTROLLER_ENTRIES
 	bl		jumptable_dispatcher
 
 exit_tribot_controller:
@@ -2278,7 +2279,7 @@ exit_tribot_controller:
 	push	{lr}
 
 	/* Init PID */
-    mov		r0, #STEADY_STATE_THRESHOLD
+    movs	r0, #STEADY_STATE_THRESHOLD
     push 	{r0}                /* Insert Parameter onto Stack */
     ldr  	r0, =pid
     ldr  	r1, =alphaKP
@@ -2288,23 +2289,23 @@ exit_tribot_controller:
 	pop		{r0}				/* Cleanup stack after routine call */
 
 	/* Configure Sensors */
-	mov		r0, #LIGHT_PORT
+	movs	r0, #LIGHT_PORT
 	bl		nx_sensors_analog_enable
-	mov		r0, #TOUCH_PORT
+	movs	r0, #TOUCH_PORT
 	bl		nx_sensors_analog_enable
-	mov		r0, #SOUND_PORT
+	movs	r0, #SOUND_PORT
 	bl		nx_sensors_analog_enable
 
-	mov		r0, #FALSE
-	mvn		r0, r0
+	movs	r0, #FALSE
+	mvns	r0, r0
 @	mov		r0, #TRUE			/* force claw opening on init via Open-Claws Behavior */
 	ldr		r1, =claw_closed
 	strb	r0, [r1]			/* claw_closed boolean */
 
-	mov		r0, #CLAW_STOPPED
+	movs	r0, #CLAW_STOPPED
 	ldr		r1, =claw_movement
 	strb	r0, [r1]			/* claw_movement enum */
-	mov		r0, #FALSE
+	movs	r0, #FALSE
 	ldr		r1, =touched
 	strb	r0, [r1]			/* touched boolean */
 	ldr		r4, =claw_oldpos
@@ -2314,51 +2315,51 @@ exit_tribot_controller:
 
 
 	ldr		r1, =sound_following_state
-	mov		r0, #SOUND_IDLE
+	movs	r0, #SOUND_IDLE
 	strb	r0, [r1]
-	mov		r0, #0
+	movs	r0, #0
 	strb	r0, [r1, #1]		/* Sound Level Trigger */
 
 #if 0
 	bl		claw_open_immediate	/* Disabled, use BBR Behavior Open-Claws instead */
 #endif
 
-	mov		r0, #ULSND_PORT
+	movs	r0, #ULSND_PORT
 	bl		nx_radar_init					/* Initialize the Ultrasound Sensor */
 
 retry_us_init:
-	mov		r0, #SYSTICK_100MS
+	movs	r0, #SYSTICK_100MS
 	bl		nx_systick_wait_ms				/* Wait 100 ms before checking Results */
 
-	mov		r0, #ULSND_PORT
+	movs	r0, #ULSND_PORT
 	bl		nx_radar_detect
 	cmp		r0, #FALSE
 	bne		continue_ultrasound_init
 
 ultrasound_sensor_error:
-	mov		r0, #0
-	mov		r1, #1
+	movs	r0, #0
+	movs	r1, #1
 	bl 		nx_display_cursor_set_pos
 	ldr		r0, =ultrasound_error
 	bl		nx_display_string
 	b		retry_us_init
 
 continue_ultrasound_init:
-	mov		r0, #0
-	mov		r1, #1
+	movs	r0, #0
+	movs	r1, #1
 	bl 		nx_display_cursor_set_pos
 	ldr		r0, =ultrasound_found
 	bl		nx_display_string
 
-	mov		r0, #ULSND_PORT
-	mov		r1, #RADAR_MODE_CONTINUOUS
+	movs	r0, #ULSND_PORT
+	movs	r1, #RADAR_MODE_CONTINUOUS
 	bl		nx_radar_set_op_mode			/* Arm Ultrasound Sensor */
 
-	mov		r0, #RADAR_DIST_ERR				/* Initialize to RADAR_DIST_ERR (unknown distance) */
+	movs	r0, #RADAR_DIST_ERR				/* Initialize to RADAR_DIST_ERR (unknown distance) */
 	ldr		r1, =ultrasoundval
 	strb	r0, [r1]
 
-	mov		r0, #FALSE
+	movs	r0, #FALSE
 	ldr		r1, =obstacle_tone_active
 	strb	r0, [r1]
 
@@ -2368,7 +2369,7 @@ continue_ultrasound_init:
 	bl		light_led_enable
 
 	bl		nx_systick_get_ms				/* Current systick */
-	add		r0, r0, #ROBOT_SCHED_DURATION	/* Next Scheduler Timeout value */
+	adds	r0, r0, #ROBOT_SCHED_DURATION	/* Next Scheduler Timeout value */
 	ldr		r2, =sched_tick
 	str		r0, [r2]						/* Update Scheduler Timeout */
 
@@ -2385,7 +2386,7 @@ continue_ultrasound_init:
 
 cont_sleep:
 	ldr		r0, =sched_tick					/* pointer to sched_tick */
-	mov		r1, #ROBOT_SCHED_DURATION		/* Time Interval required */
+	movs	r1, #ROBOT_SCHED_DURATION		/* Time Interval required */
 	bl		has_timer_elapsed				/* R0: Time Elapsed (Boolean), R1 contains current timestamp */
 	cmp		r0, #FALSE						/* If Timer reached, return value is TRUE */
 	beq		cont_sleep						/* Scheduler Timeout < Systick, so exit */
@@ -2409,7 +2410,7 @@ exit_sleep_robot:
 	bl		light_led_disable
 
 	/* Disable Ultrasound Sensor */
-	mov		r0, #ULSND_PORT
+	movs	r0, #ULSND_PORT
 	bl		nx_radar_close
 	thumb_iret	r1					/* Thumb Interworking Return */
 
@@ -2432,20 +2433,20 @@ exit_sleep_robot:
 	ldr		r4, =claw_position
 
 claw_start_closing:
- 	mov		r0, #CLAW_PORT
+ 	movs	r0, #CLAW_PORT
  	ldr		r1, =CLOSE_SPEED
  	bl		nx_motors_rotate
 
 claw_keep_closing:
-	mov		r0, #SYSTICK_100MS
+	movs	r0, #SYSTICK_100MS
 	bl		nx_systick_wait_ms	/* Wait 100 ms before checking Tachometer */
 	bl		get_claw_status
 
 	ldr		r0, [r4]			/* Current Claw Position */
 	ldr		r1, [r4, #4]		/* Old Claw Position */
-	sub		r2, r0, r1			/* Current - Old Positions */
+	subs	r2, r0, r1			/* Current - Old Positions */
 	bge		0f
-	sub		r2, r1, r0			/* If negative, Old - Current Positions (Absolute difference in R2) */
+	subs	r2, r1, r0			/* If negative, Old - Current Positions (Absolute difference in R2) */
 @	rsb		r2, r0, r1			/* Absolute difference in R2 */
 0:
 	str		r0, [r4, #4]		/* Store Current Claw Position as Old Claw Position */
@@ -2453,14 +2454,14 @@ claw_keep_closing:
 	bhi		claw_keep_closing
 
 claw_stop_closing:
- 	mov		r0, #CLAW_PORT
- 	mov		r1, #FALSE			/* We want braking */
-	mvn		r1, r1
+ 	movs	r0, #CLAW_PORT
+ 	movs	r1, #FALSE			/* We want braking */
+	mvns	r1, r1
 	bl		nx_motors_stop
 
 	ldr		r4, =claw_closed
- 	mov		r0, #FALSE
- 	mvn		r1, r1
+ 	movs	r0, #FALSE
+ 	mvns	r1, r1
  	strb	r0, [r4, #8]		/* Update claw_closed */
 
 	ldr		r0, =closed
