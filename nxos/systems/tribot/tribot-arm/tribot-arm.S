@@ -212,7 +212,7 @@ edge:	  .asciz " Line: Edge   "
 unknown:  .asciz " Line: Unknown"
 
 bbr_inhibited_behavior:        .asciz "BBR:            "
-avoidobstacle_idle_behavior:   .asciz "BBR:Avoid-Idle  "
+avoidobstacle_idle_behavior:   .asciz "BBR:Avoid       "
 moveobject_idle_behavior:      .asciz "BBR:Move-Idle   "
 moveobject_waiting_behavior:   .asciz "BBR:Move-Waiting"
 moveobject_seeking_behavior:   .asciz "BBR:Move-Seeking"
