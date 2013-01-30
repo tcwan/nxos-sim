@@ -7,4 +7,5 @@ Directory Structure:
 - remote_gdb_reference: Various GDB Stub reference source code materials
 - scripts: Miscellaneous cross-compiler toolchain utilities
 - usb_console: Low Level USB Console, unmaintained
+- build_instr: Lego Digital Designer files for 9797 Educational Set Tribot Robot
 
