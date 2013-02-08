@@ -149,7 +149,7 @@ _irq_exit_handler:
          */
         msr 	cpsr_c, #(MODE_IRQ | IRQ_FIQ_MASK)
 
-		/* In IRQ Mode (IRQ & FIQ Enabled) */
+		/* In IRQ Mode (IRQ & FIQ Disabled) */
         ldr 	lr, =AT91C_BASE_AIC
         str 	lr, [lr, #AIC_EOICR]
 
