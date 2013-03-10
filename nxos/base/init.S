@@ -32,7 +32,7 @@
 
 #ifdef __DBGENABLE__
 .section .stack.abort, "aw", %nobits
-        .space 0x200; /* 512 byte abort mode stack. */
+        .space 0x300; /* 768 byte abort mode stack. */
 .section .stack.debugger, "aw", %nobits
         .space 0x48; /* 16 user mode registers + SPSR + UNDEF Next Instruction Address */
 .section .breakpoints, "aw", %nobits
