@@ -26,11 +26,19 @@ static const nx__sensors_pins sensors_pinmap[NXT_N_SENSORS] = {
   { AT91C_PIO_PA30, AT91C_PIO_PA2  },
 };
 
+static const nx__sensors_adcmap sensors_adcmap[NXT_N_SENSORS] = {
+  { AT91C_ADC_CH1, (U32 *) AT91C_ADC_CDR1 },
+  { AT91C_ADC_CH2, (U32 *) AT91C_ADC_CDR2 },
+  { AT91C_ADC_CH3, (U32 *) AT91C_ADC_CDR3 },
+  { AT91C_ADC_CH7, (U32 *) AT91C_ADC_CDR7 },
+};
+
 static enum {
   OFF = 0, /* Unused. */
   LEGACY,  /* Legacy RCX sensor support (Not currently supported). */
   ANALOG,  /* NXT sensor in analog mode. */
   DIGITAL, /* NXT sensor in digital (i2c) mode. */
+  LEGOCOLOR, /* NXT Color Sensor (hybrid) mode */
 } sensors_mode[NXT_N_SENSORS] = {
   /* All sensors start off. */
   OFF, OFF, OFF, OFF
@@ -72,9 +80,32 @@ void nx__sensors_i2c_enable(U32 sensor) {
     sensors_pinmap[sensor].scl;
 
   *AT91C_PIOA_OER = pinmask;
-  *AT91C_PIOA_PPUDR = pinmask;					/* Disable Pullups */
+//  *AT91C_PIOA_PPUDR = pinmask;					/* Disable Pullups */
   *AT91C_PIOA_SODR = pinmask;
   *AT91C_PIOA_MDER = pinmask;
+
+#if 0
+  if (sensor == 3)
+	  nx_rs485_switch_to_pioa();				/* Paranoid */
+#endif
+}
+
+void nx__sensors_color_enable(U32 sensor) {
+  U32 pinmask;
+
+  NX_ASSERT(sensor < NXT_N_SENSORS);
+  NX_ASSERT(sensors_mode[sensor] == OFF);
+
+  sensors_mode[sensor] = LEGOCOLOR;
+
+  /* In color sensor mode, the DIGI outputs (SDA and SCL) are left up, and
+   * enabled in multi-drive mode.
+   */
+  pinmask = sensors_pinmap[sensor].sda |
+    sensors_pinmap[sensor].scl;
+
+  *AT91C_PIOA_OER = pinmask;
+  *AT91C_PIOA_SODR = pinmask;
 
 #if 0
   if (sensor == 3)
@@ -88,10 +119,19 @@ const nx__sensors_pins *nx__sensors_get_pins(U32 sensor) {
   return &sensors_pinmap[sensor];
 }
 
+const nx__sensors_adcmap *nx__sensors_get_adcmap(U32 sensor) {
+  NX_ASSERT(sensor < NXT_N_SENSORS);
+
+  return &sensors_adcmap[sensor];
+}
+
 void nx__sensors_disable(U32 sensor) {
+  U32 pinmask;
+
   NX_ASSERT(sensor < NXT_N_SENSORS);
   if (sensor >= NXT_N_SENSORS)
     return;
+
 
   switch (sensors_mode[sensor]) {
   case OFF:
@@ -99,11 +139,13 @@ void nx__sensors_disable(U32 sensor) {
     break;
   case ANALOG:
   case DIGITAL:
+  case LEGOCOLOR:
+	pinmask = sensors_pinmap[sensor].sda |
+	    sensors_pinmap[sensor].scl;
     /* Disable output on the DIGI pins to return to the idle state. */
-    *AT91C_PIOA_SODR = (sensors_pinmap[sensor].sda |
-                        sensors_pinmap[sensor].scl);
-    *AT91C_PIOA_ODR = (sensors_pinmap[sensor].sda |
-                       sensors_pinmap[sensor].scl);
+    *AT91C_PIOA_SODR = pinmask;
+    *AT91C_PIOA_ODR = pinmask;
+    *AT91C_PIOA_MDDR = pinmask;		/* Disable Multi-Drive */
     break;
   }
 

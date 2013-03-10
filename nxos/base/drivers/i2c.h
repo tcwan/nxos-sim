@@ -56,28 +56,6 @@ typedef enum
   TXN_STAT_FAILED,
 } i2c_txn_status;
 
-/** I2C bus control parameters.
- *
- * Note that in practice, on the bus, a RESTART is the same as a new
- * START bit (when running in normal bus mode).
- *
- * Pre (resp post) control values must only be used in pre_control
- * (resp post_control).
- */
-typedef enum {
-  I2C_CONTROL_NONE = 0,
-
-  /* Pre control bits. */
-  I2C_CONTROL_START,
-  I2C_CONTROL_RESTART,
-
-  /* Post control bits. */
-  I2C_CONTROL_STOP,
-} i2c_control;
-
-/** Initialize the NXT to allow I2C communication.
- */
-void nx_i2c_init(void);
 
 /** Register an I2C device of address @a address on port @a sensor.
  *

@@ -1,11 +1,9 @@
-/* Driver for the NXT's I2C-based sensors.
+/* Driver for the NXT's LEGO Color sensors.
  *
- * SoftMAC I2C driver.
+ * SoftMAC Color Sensor driver.
  */
 
 #include "base/at91sam7s256.h"
-
-#define I2C_LOG FALSE
 
 #include "base/types.h"
 #include "base/nxt.h"
@@ -13,76 +11,49 @@
 #include "base/util.h"
 #include "base/display.h"
 #include "base/drivers/aic.h"
+#include "base/drivers/_avr.h"
 #include "base/drivers/_sensors.h"
-#include "base/drivers/_i2c.h"
+#include "base/drivers/_color.h"
 
-/** The base clock frequency of the sensor I2C bus in Hz. */
-#define I2C_BUS_SPEED 9600
+/** The frequency of the Color Sensor SoftMAC processing loop in Hz. */
+#define COLOR_SOFTMAC_FREQUENCY 1000				/* 1 ms per SoftMAC loop */
 
-/** A classic I2C exchange includes up to 4 partial transactions. */
-#define I2C_MAX_TXN 4
-
-/** Length of the I2C pauses (in 4th of BUS_SPEED) */
-#define I2C_PAUSE_LEN 3
-
-/** Number of currently processed I2C transactions. */
-U32 i2c_txn_count = 0;
-
-struct i2c_txn_info
+#if 0
+struct color_txn_info
 {
-  /* Bus control triggers, tells the state machine to issue start,
-   * stop or restart bits at the begniing or at the end of the
-   * transaction.
-   */
-  i2c_control pre_control, post_control;
 
   /* Sub transaction mode, tells whether data will be writen or
    * read to/from the bus.
    */
-  i2c_txn_mode mode;
+  color_bus_txn_mode mode;
 
   /* Data to be sent or to buffer for reception. */
   U8 *data;
   U8 data_size;
 
   /* Sub transaction result. */
-  i2c_txn_status result;
+  color_bus_txn_status result;
 };
+#endif
 
-static volatile struct i2c_port {
+static volatile struct color_port {
   enum {
-    I2C_OFF = 0, /* Port not initialized in I2C mode. */
-    I2C_IDLE,    /* No transaction in progress. */
-    I2C_CONFIG,  /* Nothing is happening, but the bus is locked by
-                  * transaction configuration. */
-    I2C_PAUSE,
-    I2C_RECLOCK0,
-    I2C_RECLOCK1,
-    I2C_READ_ACK0,
-    I2C_READ_ACK1,
-    I2C_READ_ACK2,
-    I2C_WRITE_ACK0,
-    I2C_WRITE_ACK1,
-    I2C_WRITE_ACK2,
-    I2C_SEND_START_BIT0,
-    I2C_SEND_START_BIT1,
-    I2C_SCL_LOW,
-    I2C_SAMPLE0,
-    I2C_SAMPLE1,
-    I2C_SAMPLE2,
-    I2C_SEND_STOP_BIT0,
-    I2C_SEND_STOP_BIT1,
+    COLORBUS_OFF = 0, /* Port not initialized in I2C mode. */
+    COLORBUS_CONFIG,  /* Nothing is happening, but the bus is locked by
+                  	  	* transaction configuration. */
+    COLORBUS_IDLE,    /* No transaction in progress. */
+    COLORBUS_SCL_LOW,
+    COLORBUS_PAUSE,
+    COLORBUS_WRITEBYTE,
+    COLORBUS_READBYTE,
+    COLORBUS_SAMPLE0,
+    COLORBUS_SAMPLE1,
+    COLORBUS_SAMPLE2,
+    COLORBUS_SAMPLE3,
   } bus_state;
 
 
-  U8 device_addr;           /* The connected device address on the bus... */
-  U8 addr[TXN_MODE_COUNT];  /* ... and the read/write ORed addresses. */
-
-  /* Toggles the use of degraded I2C mode for LEGO Radar
-   * compatibility (use STOP/START instead of RESTART, etc).
-   */
-  bool lego_compat;
-
+#if 0
   enum {
     TXN_NONE = 0,
     TXN_WAITING,
@@ -92,11 +63,15 @@ static volatile struct i2c_port {
     TXN_READ_ACK,
     TXN_STOP,
   } txn_state;
+#endif
 
-  /** I2C transactions and current transaction number. */
-  struct i2c_txn_info txns[I2C_MAX_TXN];
-  U8 current_txn;
-  U8 n_txns;
+  /* Pointer to Calibration Data Buffer (pre-allocated) */
+  color_cal_data *caldataptr;
+
+  /* A/D Values
+   * indexed based on color_mode enum
+   */
+  U32 advals[COLOR_NUM_MODES];
 
   /* Data flow tracking values : currently processed bytes, the
    * currently transmitted byte, and the position of the bit currently
@@ -113,26 +88,49 @@ static volatile struct i2c_port {
   U8 p_ticks;
   U8 p_next;
 
-} i2c_state[NXT_N_SENSORS];
+} color_bus_state[NXT_N_SENSORS];
 
 /* Forward declarations. */
-static void i2c_isr(void);
+static void color_isr(void);
+
+/* Configuration parameter for initializing Color Sensor device */
+static const U8 color_mode_setup[COLOR_NUM_MODES] = {
+		17, /* COLOR_NONE */
+		13, /* COLOR_FULL */
+		14, /* COLOR_RED */
+		15, /* COLOR_GREEN */
+		16, /* COLOR_BLUE */
+};
+
+/* Color Sensor Default to None (LEDs off) */
+static color_config sensors_colorconfig[NXT_N_SENSORS] = {
+		{COLOR_NONE, COLOR_NOTFOUND },
+		{COLOR_NONE, COLOR_NOTFOUND },
+		{COLOR_NONE, COLOR_NOTFOUND },
+		{COLOR_NONE, COLOR_NOTFOUND },
+};
+
+#if 0
 static void i2c_log(const char *s);
 static void i2c_log_uint(U32 val);
+#endif
 
-/** Initializes the I2C SoftMAC driver, configures the TC (Timer Counter)
+/** [Internal Routine]
+ * Initializes the Color Sensor SoftMAC driver, configures the TC (Timer Counter)
  * and set the interrupt handler.
  */
-void nx__i2c_init(void) {
-  memset((void*)i2c_state, 0, sizeof(i2c_state));
-  nx_interrupts_disable();
+void nx__color_init(void) {
+#if 0
+	memset((void*)i2c_state, 0, sizeof(i2c_state));
+#endif
+	nx_interrupts_disable();
 
-  /* We need power for both the PIO controller and the first TC (Timer
+  /* We need power for both the PIO controller and the second TC (Timer
    * Channel) controller.
    */
-  *AT91C_PMC_PCER = (1 << AT91C_ID_PIOA) | (1 << AT91C_ID_TC0);
+  *AT91C_PMC_PCER = (1 << AT91C_ID_PIOA) | (1 << AT91C_ID_TC1);
 
-  /* Configure a timer to trigger interrupts for managing the I2C
+  /* Configure a timer to trigger interrupts for managing the Color Sensor
    * ports.
    *
    * Disable the counter before reconfiguring it, and mask all
@@ -140,31 +138,31 @@ void nx__i2c_init(void) {
    * shutdown in its status register. Reading the SR has the
    * side-effect of clearing any pending state in there.
    */
-  *AT91C_TC0_CCR = AT91C_TC_CLKDIS;
-  *AT91C_TC0_IDR = ~0;
-  while (*AT91C_TC0_SR & AT91C_TC_CLKSTA);
+  *AT91C_TC1_CCR = AT91C_TC_CLKDIS;
+  *AT91C_TC1_IDR = ~0;
+  while (*AT91C_TC1_SR & AT91C_TC_CLKSTA);
 
   /* Configure the timer to count at a rate of MCLK/2 (24MHz), and to
    * reset on RC compare. This means the clock will be repeatedly
    * counting at 24MHz from 0 to the value in the RC register.
    */
-  *AT91C_TC0_CMR = AT91C_TC_CPCTRG;
-  *AT91C_TC0_RC = (NXT_CLOCK_FREQ/2)/(4*I2C_BUS_SPEED);
+  *AT91C_TC1_CMR = AT91C_TC_CPCTRG;
+  *AT91C_TC1_RC = (NXT_CLOCK_FREQ/2)/(4*COLOR_SOFTMAC_FREQUENCY);
 
   /* Enable the timer. */
-  *AT91C_TC0_CCR = AT91C_TC_CLKEN;
+  *AT91C_TC1_CCR = AT91C_TC_CLKEN;
 
   /* Allow the timer to trigger interrupts and register our interrupt
    * handler.
    */
-  nx_aic_install_isr(AT91C_ID_TC0, AIC_PRIO_SOFTMAC, AIC_TRIG_EDGE, i2c_isr);
+  nx_aic_install_isr(AT91C_ID_TC1, AIC_PRIO_SOFTMAC, AIC_TRIG_EDGE, color_isr);
 
   /* Softare trigger, to get the counter going. */
-  *AT91C_TC0_CCR = AT91C_TC_SWTRG;
+  *AT91C_TC1_CCR = AT91C_TC_SWTRG;
 
   nx_interrupts_enable();
 }
-
+#if 0
 static void i2c_log(const char *s)
 {
   if (I2C_LOG)
@@ -176,14 +174,38 @@ static void i2c_log_uint(U32 val)
   if (I2C_LOG)
     nx_display_uint(val);
 }
+#endif
 
-/** Register a remote device (by its address) on the given sensor. */
-void nx_i2c_register(U32 sensor, U8 address, bool lego_compat) {
-  volatile struct i2c_port *p;
+/** [Internal Routine]
+ *
+ * Get the actual configuration status of the LEGO Color Sensor on the given port
+ */
+color_status nx__color_update_status(U32 sensor) {
 
-  if (sensor >= NXT_N_SENSORS || address <= 0)
+}
+
+
+
+/** Initialize a color sensor for the given mode on the given sensor port. */
+void nx_color_init(U32 sensor, color_mode mode, color_cal_data *caldata) {
+
+  volatile struct color_port *p;
+
+  if ((sensor >= NXT_N_SENSORS) || (mode >= COLOR_NUM_MODES))
     return;
 
+  nx__sensors_color_enable(sensor);
+  sensors_colorconfig[sensor].mode = mode;
+  sensors_colorconfig[sensor].status = COLOR_CALIBRATE;
+
+  /* Configure Color Bus for the
+   * Lego Color Sensor on the given port
+   */
+  p->bus_state = COLORBUS_OFF;
+  p->caldataptr = caldata;
+  memset((U8 *)p->advals, 0, (sizeof(U32)*COLOR_NUM_MODES));
+
+#if 0
   /* First, make sure the sensor port is configured for multi-driver
    * I2C devices.
    */
@@ -204,13 +226,33 @@ void nx_i2c_register(U32 sensor, U8 address, bool lego_compat) {
   //  I2C_MAX_TXN*sizeof(struct i2c_txn_info));
   i2c_state[sensor].current_txn = 0;
   i2c_state[sensor].n_txns = 0;
+#endif
+
 }
 
-/** Unregister the device on the given sensor port. */
-void nx_i2c_unregister(U32 sensor) {
+/** Close the link to the color sensor and disable the color sensor on the given sensor port. */
+void nx_color_close(U32 sensor) {
   nx__sensors_disable(sensor);
+  sensors_colorconfig[sensor].mode = COLOR_NONE;
+  sensors_colorconfig[sensor].status = COLOR_EXIT;	/* Trigger Color Sensor Cleanup */
 }
 
+/** Check the presence and color mode of a lego color sensor on the given sensor port. */
+color_status nx_color_detect(U32 sensor) {
+
+  /* If AVR Co-processor A/D Value is above threshold, it means that some other sensor is attached */
+  if (nx__avr_get_sensor_value(sensor) > 50) {
+	  nx__sensors_disable(sensor);
+	  sensors_colorconfig[sensor].mode = COLOR_NONE;
+	  sensors_colorconfig[sensor].status = COLOR_NOTFOUND;
+  } else
+	  sensors_colorconfig[sensor].status = nx__color_update_status(sensor);
+
+  return sensors_colorconfig[sensor].status;
+}
+
+
+#if 0
 /** Add a I2C sub transaction.
  *
  * Adds a sub transaction for the given sensor. The given data (along with its
@@ -735,4 +777,10 @@ static void i2c_isr(void) {
     if (sodr)
       *AT91C_PIOA_SODR = sodr;
   }
+}
+#endif
+
+
+/** Interrupt handler. */
+static void color_isr(void) {
 }
