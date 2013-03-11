@@ -39,6 +39,15 @@ U32 nx_systick_get_ms(void);
  */
 void nx_systick_wait_ms(U32 ms);
 
+/** Sleep for @a us milliseconds.
+ *
+ * @param us The number of microseconds to sleep.
+ *
+ * @note As the Baseplate provides no scheduler, this sleeping is a busy
+ * wait loop.
+ */
+void nx_systick_wait_us(U32 us);
+
 /** Sleep for approximately @a ns nanoseconds.
  *
  * @param ns The number of nanoseconds to sleep.

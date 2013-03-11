@@ -5,9 +5,12 @@
 
 #include "base/at91sam7s256.h"
 
+#define COLOR_LOG FALSE
+
 #include "base/types.h"
 #include "base/nxt.h"
 #include "base/interrupts.h"
+#include "base/assert.h"
 #include "base/util.h"
 #include "base/display.h"
 #include "base/drivers/aic.h"
@@ -36,20 +39,21 @@ struct color_txn_info
 };
 #endif
 
+/* Internal Color Bus Data Structure.
+ * This should be updated only by the ISR */
 static volatile struct color_port {
   enum {
     COLORBUS_OFF = 0, /* Port not initialized in I2C mode. */
-    COLORBUS_CONFIG,  /* Nothing is happening, but the bus is locked by
-                  	  	* transaction configuration. */
     COLORBUS_IDLE,    /* No transaction in progress. */
+    COLORBUS_CALSTART,
     COLORBUS_SCL_LOW,
     COLORBUS_PAUSE,
     COLORBUS_WRITEBYTE,
     COLORBUS_READBYTE,
-    COLORBUS_SAMPLE0,
-    COLORBUS_SAMPLE1,
-    COLORBUS_SAMPLE2,
-    COLORBUS_SAMPLE3,
+//    COLORBUS_SAMPLE0,
+//    COLORBUS_SAMPLE1,
+//    COLORBUS_SAMPLE2,
+//    COLORBUS_SAMPLE3,
   } bus_state;
 
 
@@ -64,6 +68,12 @@ static volatile struct color_port {
     TXN_STOP,
   } txn_state;
 #endif
+
+  /* Actual Status of the Color Sensor Bus */
+  color_status colorbus_status;
+
+  /* Target Status of the Color Sensor Bus */
+  color_status colorbus_target_status;
 
   /* Pointer to Calibration Data Buffer (pre-allocated) */
   color_cal_data *caldataptr;
@@ -110,9 +120,9 @@ static color_config sensors_colorconfig[NXT_N_SENSORS] = {
 		{COLOR_NONE, COLOR_NOTFOUND },
 };
 
-#if 0
-static void i2c_log(const char *s);
-static void i2c_log_uint(U32 val);
+#if (COLOR_LOG == TRUE)
+static void colorbus_log(const char *s);
+static void colorbus_log_uint(U32 val);
 #endif
 
 /** [Internal Routine]
@@ -120,9 +130,8 @@ static void i2c_log_uint(U32 val);
  * and set the interrupt handler.
  */
 void nx__color_init(void) {
-#if 0
-	memset((void*)i2c_state, 0, sizeof(i2c_state));
-#endif
+
+	memset((void*)color_bus_state, 0, sizeof(color_bus_state));
 	nx_interrupts_disable();
 
   /* We need power for both the PIO controller and the second TC (Timer
@@ -162,17 +171,16 @@ void nx__color_init(void) {
 
   nx_interrupts_enable();
 }
-#if 0
-static void i2c_log(const char *s)
+
+#if (COLOR_LOG == TRUE)
+static void colorbus_log(const char *s)
 {
-  if (I2C_LOG)
-    nx_display_string(s);
+  nx_display_string(s);
 }
 
-static void i2c_log_uint(U32 val)
+static void colorbus_log_uint(U32 val)
 {
-  if (I2C_LOG)
-    nx_display_uint(val);
+  nx_display_uint(val);
 }
 #endif
 
@@ -180,8 +188,14 @@ static void i2c_log_uint(U32 val)
  *
  * Get the actual configuration status of the LEGO Color Sensor on the given port
  */
-color_status nx__color_update_status(U32 sensor) {
+static color_status nx__color_update_status(U32 sensor) {
 
+  color_status actual_status = color_bus_state[sensor].colorbus_status;
+
+  if ((sensors_colorconfig[sensor].status == COLOR_EXIT) && (actual_status != COLOR_NOTFOUND))
+	return COLOR_EXIT;
+  else
+	return actual_status;
 }
 
 
@@ -198,59 +212,152 @@ void nx_color_init(U32 sensor, color_mode mode, color_cal_data *caldata) {
   sensors_colorconfig[sensor].mode = mode;
   sensors_colorconfig[sensor].status = COLOR_CALIBRATE;
 
+  p = &color_bus_state[sensor];
+
   /* Configure Color Bus for the
    * Lego Color Sensor on the given port
    */
-  p->bus_state = COLORBUS_OFF;
   p->caldataptr = caldata;
   memset((U8 *)p->advals, 0, (sizeof(U32)*COLOR_NUM_MODES));
 
-#if 0
-  /* First, make sure the sensor port is configured for multi-driver
-   * I2C devices.
-   */
-  nx__sensors_i2c_enable(sensor);
-
-  p = &i2c_state[sensor];
-
-  p->bus_state = I2C_IDLE;
-  p->txn_state = TXN_NONE;
-  p->device_addr = address;
-  p->lego_compat = lego_compat;
-
-  p->addr[TXN_MODE_WRITE] = (address << 1) | TXN_MODE_WRITE;
-  p->addr[TXN_MODE_READ] = (address << 1) | TXN_MODE_READ;
-
-  /* Reset the bus transaction structures and parameters. */
-  //memset((U8 *)i2c_state[sensor].txns, 0,
-  //  I2C_MAX_TXN*sizeof(struct i2c_txn_info));
-  i2c_state[sensor].current_txn = 0;
-  i2c_state[sensor].n_txns = 0;
-#endif
-
+  p->bus_state = COLORBUS_IDLE;			/* Initial state, will be updated once ISR kicks in. Note: This violates the
+   	   	   	   	   	   	   	   	   	   	 * critical section separation where only the ISR updates color_bus_state[sensor],
+   	   	   	   	   	   	   	   	   	   	 * but since we're initializing the sensor, it is safe to do so.
+   	   	   	   	   	   	   	   	   	   	 */
 }
 
 /** Close the link to the color sensor and disable the color sensor on the given sensor port. */
 void nx_color_close(U32 sensor) {
+
+  if (sensor >= NXT_N_SENSORS)
+    return;
+
   nx__sensors_disable(sensor);
   sensors_colorconfig[sensor].mode = COLOR_NONE;
   sensors_colorconfig[sensor].status = COLOR_EXIT;	/* Trigger Color Sensor Cleanup */
 }
 
-/** Check the presence and color mode of a lego color sensor on the given sensor port. */
+/** Check the presence and status of a lego color sensor on the given sensor port. */
 color_status nx_color_detect(U32 sensor) {
+
+  NX_ASSERT(sensor < NXT_N_SENSORS);
 
   /* If AVR Co-processor A/D Value is above threshold, it means that some other sensor is attached */
   if (nx__avr_get_sensor_value(sensor) > 50) {
 	  nx__sensors_disable(sensor);
 	  sensors_colorconfig[sensor].mode = COLOR_NONE;
 	  sensors_colorconfig[sensor].status = COLOR_NOTFOUND;
-  } else
+  } else	/* TODO: Can we handle sensor reconnection? */
 	  sensors_colorconfig[sensor].status = nx__color_update_status(sensor);
 
   return sensors_colorconfig[sensor].status;
 }
 
+/** Recalibrate the lego color sensor on the given sensor port. */
+void nx_color_reset(U32 sensor, color_mode mode) {
+  if (sensor >= NXT_N_SENSORS)
+    return;
+
+  NX_ASSERT(sensors_colorconfig[sensor].status != COLOR_NOTFOUND);
+
+  sensors_colorconfig[sensor].mode = mode;
+  sensors_colorconfig[sensor].status = COLOR_CALIBRATE;	/* Trigger Color Sensor Recalibration */
+
+}
+
+void nx__colorbus_setup_txbyte(U32 sensor, U8 val) {
+
+  volatile struct color_port *p;
+  p = &color_bus_state[sensor];
+
+  p->processed = 0;
+  p->current_pos = 0;
+  p->current_byte = val;
+
+}
+
+/** Interrupt handler. */
+static void color_isr(void) {
+
+  volatile struct color_port *p;
+  volatile U32 dummy __attribute__ ((unused));
+  volatile U32 lines = *AT91C_PIOA_PDSR;
+  U32 codr = 0;
+  U32 sodr = 0;
+  U32 sensor;
+
+  /* Read the TC1 status register to ack the TC1 timer and allow this
+   * interrupt handler to be called again.
+   */
+  dummy = *AT91C_TC1_SR;
+
+  for (sensor=0; sensor<NXT_N_SENSORS; sensor++) {
+    const nx__sensors_pins *pins = nx__sensors_get_pins(sensor);
+    p = &color_bus_state[sensor];
+
+    switch (p->bus_state)
+       {
+       default:
+       case COLORBUS_OFF:
+         /* Port is OFF, do nothing. */
+         break;
+       case COLORBUS_IDLE:
+    	   if (p->colorbus_target_status != sensors_colorconfig[sensor].status) {
+    		   /* State Changed */
+    		   p->colorbus_target_status = sensors_colorconfig[sensor].status;
+    		   /* Configure new state */
+    		   switch (p->colorbus_target_status) {
+    		     default:
+    		     case COLOR_NOTFOUND:
+    		    	 /* Disable Color Sensor */
+    		    	 p->colorbus_status = p->colorbus_target_status;
+    		    	 break;
+    		     case COLOR_CALIBRATE:
+    		    	 if ((p->colorbus_status != COLOR_NOTFOUND) && (p->colorbus_status != COLOR_READY)) {
+    		    		 /* Perform Calibration for given mode */
+    		    		 nx__colorbus_setup_txbyte(sensor, sensors_colorconfig[sensor].mode);
+    		    		 p->colorbus_status = p->colorbus_target_status;
+    		    	 }
+    		    	 break;
+    		     case COLOR_EXIT:
+    		    	 if (p->colorbus_status != COLOR_NOTFOUND) {
+    		    		 /* Perform Calibration for mode == COLOR_NONE */
+    		    		 nx__colorbus_setup_txbyte(sensor, COLOR_NONE);
+    		    		 p->colorbus_status = p->colorbus_target_status;
+    		    	 }
+    		    	 break;
+    		     case COLOR_READY:
+    		    	 /* Remain in current state */
+    		    	 break;
+    		   }
+    	   }
+
+    	   /* Continue processing current state */
+		   switch (p->colorbus_status) {
+			 case COLOR_CALIBRATE:
+				 /* Continue Calibration */
+		    	 p->bus_state = COLORBUS_CALSTART;
+				 break;
+			 case COLOR_READY:
+				 /* Read A/D Values for active color sensors */
+				 break;
+			 case COLOR_EXIT:
+				 /* Continue Exiting */
+		    	 p->bus_state = COLORBUS_CALSTART;
+				 break;
+			 case COLOR_NOTFOUND:
+			 default:
+				 /* Turn off Color Bus */
+		    	 p->bus_state = COLORBUS_OFF;
+				 break;
+
+		   }
+    	 break;
+       case COLORBUS_SCL_LOW:
+    	 break;
+       };
+  };
+}
 
 #if 0
 /** Add a I2C sub transaction.
@@ -781,6 +888,3 @@ static void i2c_isr(void) {
 #endif
 
 
-/** Interrupt handler. */
-static void color_isr(void) {
-}

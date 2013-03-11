@@ -26,15 +26,6 @@
  */
 void nx__color_init(void);
 
-/** Get the actual configuration status of the LEGO Color Sensor on port @a sensor.
- *
- * @param sensor The sensor port number.
- * *
- * @return Returns the actual status of the LEGO Color Sensor on the
- * given sensor port.
- */
-color_status nx__color_update_status(U32 sensor);
-
 
 /*@}*/
 /*@}*/

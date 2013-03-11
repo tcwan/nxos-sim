@@ -22,6 +22,9 @@
  */
 #define PIT_BASE_FREQUENCY (NXT_CLOCK_FREQ/16)
 
+/* PIT count for 1 us */
+#define US_COUNT (PIT_BASE_FREQUENCY/1000000L)
+
 /* We want a timer interrupt 1000 times per second. */
 #define SYSIRQ_FREQ 1000
 
@@ -137,6 +140,21 @@ void nx_systick_wait_ms(U32 ms) {
   while ((long) (systick_time - final) < 0);
 #endif
 
+}
+
+void nx_systick_wait_us(U32 us) {
+
+  U32 pittime = (*AT91C_PITC_PIIR);
+  U32 final = pittime + (US_COUNT * us);
+
+  /* Dealing with systick_time rollover:
+   * http://www.arduino.cc/playground/Code/TimingRollover
+   * Exit only if (long)( pittime - final ) >= 0
+   *    Note: This used signed compare to come up with the correct decision
+   */
+  while ((long) (pittime - final) < 0) {
+	  pittime = (*AT91C_PITC_PIIR);
+	}
 }
 
 void nx_systick_wait_ns(U32 ns) {

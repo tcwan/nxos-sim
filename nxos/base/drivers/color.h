@@ -70,13 +70,35 @@ typedef enum
   COLOR_EXIT,
 } color_status;
 
+/** Color Sensor config. */
 typedef struct {
 	color_mode mode;		/* Color Sensor LED mode */
 	color_status status;	/* Color Sensor current status */
 } color_config;
 
-typedef struct {
+/** Color Sensor calibration point enums. */
+typedef enum
+{
+	CAL_POINT0 = 0,
+	CAL_POINT1,
+	CAL_POINT2,
+	NO_OF_CALPOINTS
+} calibration_points;
 
+/** Color Sensor calibration color enums. */
+typedef enum
+{
+	CAL_RED = 0,
+	CAL_GREEN,
+	CAL_BLUE,
+	CAL_NONE,
+	NO_OF_CALCOLORS
+} calibration_colors;
+
+/** Color Sensor calibration data structure. */
+typedef struct {
+    U32 calibration[NO_OF_CALPOINTS][NO_OF_CALCOLORS];		/* 3 Cal Points x 4 Cal Colors = 12 32-bit values */
+    U16 calibration_limits[NO_OF_CALPOINTS - 1];			/* 2 16-bit cal limits */
 } color_cal_data;
 
 #if 0
