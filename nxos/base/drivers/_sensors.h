@@ -41,7 +41,7 @@ typedef struct {
  */
 typedef struct {
   U32 chn; /**< DIGI1 - ADC Channel Number. */
-  U32 *ptr; /**< DIGI1 - ADC Channel Data Register Address. */
+  volatile U32 *ptr; /**< DIGI1 - ADC Channel Data Register Address. */
 } nx__sensors_adcmap;
 
 /** Initialize the sensors driver. */

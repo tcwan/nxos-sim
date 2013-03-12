@@ -14,6 +14,7 @@
 #include "base/util.h"
 #include "base/display.h"
 #include "base/drivers/aic.h"
+#include "base/drivers/systick.h"
 #include "base/drivers/_avr.h"
 #include "base/drivers/_sensors.h"
 #include "base/drivers/_color.h"
@@ -21,23 +22,16 @@
 /** The frequency of the Color Sensor SoftMAC processing loop in Hz. */
 #define COLOR_SOFTMAC_FREQUENCY 1000				/* 1 ms per SoftMAC loop */
 
-#if 0
-struct color_txn_info
-{
+#define TIME_400MS	400								/* Using systick to measure 400 ms */
+#define TIME_100MS	100								/* Using systick to measure 100 ms */
+#define TIME_10MS	 10								/* Using systick to measure 10 ms */
+#define TIME_30US	 30								/* Using PIT Timer to measure 30 us */
+#define TIME_20US	 20								/* Using PIT Timer to measure 20 us */
+#define TIME_2US	  2								/* Using PIT Timer to measure 2 us */
 
-  /* Sub transaction mode, tells whether data will be writen or
-   * read to/from the bus.
-   */
-  color_bus_txn_mode mode;
-
-  /* Data to be sent or to buffer for reception. */
-  U8 *data;
-  U8 data_size;
-
-  /* Sub transaction result. */
-  color_bus_txn_status result;
-};
-#endif
+/** Maximum transmitable data size. */
+#define COLOR_CAL_DATA_SIZE 52						/* sizeof color_cal_data */
+#define COLOR_CAL_CRC_SIZE   2						/* sizeof caldata_crc */
 
 /* Internal Color Bus Data Structure.
  * This should be updated only by the ISR */
@@ -45,29 +39,19 @@ static volatile struct color_port {
   enum {
     COLORBUS_OFF = 0, /* Port not initialized in I2C mode. */
     COLORBUS_IDLE,    /* No transaction in progress. */
-    COLORBUS_CALSTART,
-    COLORBUS_SCL_LOW,
+    COLORBUS_CALSTART0,
+    COLORBUS_CALSTART1,
+    COLORBUS_CALSTART2,
+    COLORBUS_CALSTART3,
     COLORBUS_PAUSE,
     COLORBUS_WRITEBYTE,
     COLORBUS_READBYTE,
-//    COLORBUS_SAMPLE0,
-//    COLORBUS_SAMPLE1,
-//    COLORBUS_SAMPLE2,
-//    COLORBUS_SAMPLE3,
+    COLORBUS_WAITREADY,
+    COLORBUS_WAITRECAL,
+    COLORBUS_WAITSAMPLE0,
+    COLORBUS_WAITSAMPLE1,
+    COLORBUS_SAMPLEINPUTS,
   } bus_state;
-
-
-#if 0
-  enum {
-    TXN_NONE = 0,
-    TXN_WAITING,
-    TXN_START,
-    TXN_TRANSMIT_BYTE,
-    TXN_WRITE_ACK,
-    TXN_READ_ACK,
-    TXN_STOP,
-  } txn_state;
-#endif
 
   /* Actual Status of the Color Sensor Bus */
   color_status colorbus_status;
@@ -78,10 +62,12 @@ static volatile struct color_port {
   /* Pointer to Calibration Data Buffer (pre-allocated) */
   color_cal_data *caldataptr;
 
+  U16 caldata_crc;	/* 16-bit CRC value */
+
   /* A/D Values
    * indexed based on color_mode enum
    */
-  U32 advals[COLOR_NUM_MODES];
+  color_values advals;
 
   /* Data flow tracking values : currently processed bytes, the
    * currently transmitted byte, and the position of the bit currently
@@ -91,13 +77,6 @@ static volatile struct color_port {
   U8 current_byte;
   S8 current_pos;
 
-  /* Pause mechanism for non-I2C compliant sensors (like the LEGO
-   * Ultrasonic radar): number of interrupts to let pass, and bus
-   * state to reach after the pause.
-   */
-  U8 p_ticks;
-  U8 p_next;
-
 } color_bus_state[NXT_N_SENSORS];
 
 /* Forward declarations. */
@@ -105,7 +84,7 @@ static void color_isr(void);
 
 /* Configuration parameter for initializing Color Sensor device */
 static const U8 color_mode_setup[COLOR_NUM_MODES] = {
-		17, /* COLOR_NONE */
+		17, /* COLOR_MODE_NONE */
 		13, /* COLOR_FULL */
 		14, /* COLOR_RED */
 		15, /* COLOR_GREEN */
@@ -114,10 +93,10 @@ static const U8 color_mode_setup[COLOR_NUM_MODES] = {
 
 /* Color Sensor Default to None (LEDs off) */
 static color_config sensors_colorconfig[NXT_N_SENSORS] = {
-		{COLOR_NONE, COLOR_NOTFOUND },
-		{COLOR_NONE, COLOR_NOTFOUND },
-		{COLOR_NONE, COLOR_NOTFOUND },
-		{COLOR_NONE, COLOR_NOTFOUND },
+		{COLOR_MODE_NONE, COLOR_NOTFOUND },
+		{COLOR_MODE_NONE, COLOR_NOTFOUND },
+		{COLOR_MODE_NONE, COLOR_NOTFOUND },
+		{COLOR_MODE_NONE, COLOR_NOTFOUND },
 };
 
 #if (COLOR_LOG == TRUE)
@@ -130,6 +109,8 @@ static void colorbus_log_uint(U32 val);
  * and set the interrupt handler.
  */
 void nx__color_init(void) {
+
+	NX_ASSERT(sizeof(color_cal_data) == COLOR_CAL_DATA_SIZE);	/* Sanity Check */
 
 	memset((void*)color_bus_state, 0, sizeof(color_bus_state));
 	nx_interrupts_disable();
@@ -188,16 +169,21 @@ static void colorbus_log_uint(U32 val)
  *
  * Get the actual configuration status of the LEGO Color Sensor on the given port
  */
-static color_status nx__color_update_status(U32 sensor) {
+static color_status nx__color_get_status(U32 sensor) {
 
-  color_status actual_status = color_bus_state[sensor].colorbus_status;
-
-  if ((sensors_colorconfig[sensor].status == COLOR_EXIT) && (actual_status != COLOR_NOTFOUND))
-	return COLOR_EXIT;
-  else
-	return actual_status;
+	return color_bus_state[sensor].colorbus_status;
 }
 
+void nx__color_check_disable_isr(void) {
+  U32 sensor;
+
+  for (sensor=0; sensor<NXT_N_SENSORS; sensor++) {
+	if (color_bus_state[sensor].colorbus_status != COLOR_NOTFOUND)
+		return;
+  }
+  *AT91C_TC1_IDR = AT91C_TC_CPCS;		/* Disable color_isr if no active sensors */
+
+}
 
 
 /** Initialize a color sensor for the given mode on the given sensor port. */
@@ -218,12 +204,15 @@ void nx_color_init(U32 sensor, color_mode mode, color_cal_data *caldata) {
    * Lego Color Sensor on the given port
    */
   p->caldataptr = caldata;
-  memset((U8 *)p->advals, 0, (sizeof(U32)*COLOR_NUM_MODES));
+  memset((U8 *)&(p->advals), 0, sizeof(color_values));
 
   p->bus_state = COLORBUS_IDLE;			/* Initial state, will be updated once ISR kicks in. Note: This violates the
    	   	   	   	   	   	   	   	   	   	 * critical section separation where only the ISR updates color_bus_state[sensor],
    	   	   	   	   	   	   	   	   	   	 * but since we're initializing the sensor, it is safe to do so.
    	   	   	   	   	   	   	   	   	   	 */
+  /* Enable the color_isr interrupt unconditionally. */
+  *AT91C_TC1_IER = AT91C_TC_CPCS;
+
 }
 
 /** Close the link to the color sensor and disable the color sensor on the given sensor port. */
@@ -232,8 +221,7 @@ void nx_color_close(U32 sensor) {
   if (sensor >= NXT_N_SENSORS)
     return;
 
-  nx__sensors_disable(sensor);
-  sensors_colorconfig[sensor].mode = COLOR_NONE;
+  sensors_colorconfig[sensor].mode = COLOR_MODE_NONE;
   sensors_colorconfig[sensor].status = COLOR_EXIT;	/* Trigger Color Sensor Cleanup */
 }
 
@@ -245,10 +233,10 @@ color_status nx_color_detect(U32 sensor) {
   /* If AVR Co-processor A/D Value is above threshold, it means that some other sensor is attached */
   if (nx__avr_get_sensor_value(sensor) > 50) {
 	  nx__sensors_disable(sensor);
-	  sensors_colorconfig[sensor].mode = COLOR_NONE;
+	  sensors_colorconfig[sensor].mode = COLOR_MODE_NONE;
 	  sensors_colorconfig[sensor].status = COLOR_NOTFOUND;
   } else	/* TODO: Can we handle sensor reconnection? */
-	  sensors_colorconfig[sensor].status = nx__color_update_status(sensor);
+	  sensors_colorconfig[sensor].status = nx__color_get_status(sensor);
 
   return sensors_colorconfig[sensor].status;
 }
@@ -265,6 +253,125 @@ void nx_color_reset(U32 sensor, color_mode mode) {
 
 }
 
+/** Display the color sensor's information. */
+void nx_color_info(U32 sensor) {
+	/* FIXME */
+}
+
+
+/** Get the current LED mode of the given LEGO Color Sensor */
+color_mode nx_color_get_mode(U32 sensor) {
+  return sensors_colorconfig[sensor].mode;
+}
+
+/** Read all color sensor raw values */
+bool color_read_all_raw(U32 sensor, color_values* rawvalues) {
+  volatile struct color_port *p;
+
+  if ((sensor >= NXT_N_SENSORS) || (nx_color_detect(sensor) != COLOR_READY))
+	return FALSE;
+
+  p = &color_bus_state[sensor];
+
+  memcpy(rawvalues, (void *)&(p->advals), sizeof(color_values));
+  return TRUE;
+
+}
+
+/** Read color sensor raw value for given mode */
+U32 color_read_mode_raw(U32 sensor) {
+  volatile struct color_port *p;
+  U32 sensorval = 0;
+
+  if ((sensor < NXT_N_SENSORS) && (nx_color_detect(sensor) == COLOR_READY)) {
+	p = &color_bus_state[sensor];
+
+	switch (sensors_colorconfig[sensor].mode) {
+	case COLOR_MODE_NONE:
+	case COLOR_MODE_FULL:
+	  sensorval = p->advals.colorval[COLOR_NONE];
+	  break;
+	case COLOR_MODE_RED:
+	  sensorval = p->advals.colorval[COLOR_RED];
+	  break;
+	case COLOR_MODE_GREEN:
+	  sensorval = p->advals.colorval[COLOR_GREEN];
+	  break;
+	case COLOR_MODE_BLUE:
+	  sensorval = p->advals.colorval[COLOR_BLUE];
+	  break;
+	default:
+	  sensorval = 0;
+	  break;
+	};
+  }
+  return sensorval;
+}
+
+/* [Internal Routine]
+ * Initiate A/D conversion for all active Color Sensors
+ */
+void nx__color_adc_get(U32 aden, color_struct_colors index) {
+
+  int	sensor;
+
+  volatile struct color_port *p;
+
+  /* First sample */
+  *AT91C_ADC_CR = AT91C_ADC_START;
+
+  for (sensor=0; sensor<NXT_N_SENSORS; sensor++) {
+	  p = &color_bus_state[sensor];
+	  const nx__sensors_adcmap *adchan = nx__sensors_get_adcmap(sensor);
+	  if (adchan->chn & aden) {
+		  while (!((*AT91C_ADC_SR) & adchan->chn));
+		  p->advals.colorval[index] = *(adchan->ptr);
+	  }
+  }
+
+  /* Second sample, average */
+  *AT91C_ADC_CR = AT91C_ADC_START;
+
+  for (sensor=0; sensor<NXT_N_SENSORS; sensor++) {
+	  p = &color_bus_state[sensor];
+	  const nx__sensors_adcmap *adchan = nx__sensors_get_adcmap(sensor);
+	  if (adchan->chn & aden) {
+		  while (!((*AT91C_ADC_SR) & adchan->chn));
+		  p->advals.colorval[index] += *(adchan->ptr);
+		  p->advals.colorval[index] = (p->advals.colorval[index] >> 1);		/* averaged reading */
+	  }
+  }
+}
+
+/* [Internal Routine]
+ * Retrieve A/D samples for all active Color Sensors
+ */
+void nx__color_adc_get_samples(U32 aden, U32 adclk) {
+  int colorindex;
+
+  if ((aden == 0) || (adclk == 0))
+	return;
+
+  *AT91C_ADC_CHER = aden;							/* Enable ADC Channels */
+
+  for (colorindex = 0; colorindex < NO_OF_COLORS; colorindex++) {
+
+	  nx__color_adc_get(aden, colorindex);
+
+	  if ((colorindex & 0x01) == 0)
+	    *AT91C_PIOA_SODR = adclk;					/* Even ADC Clock Edge */
+	  else
+	    *AT91C_PIOA_CODR = adclk;					/* Odd ADC Clock Edge */
+	  nx_systick_wait_us(TIME_20US);				/* ADC Settling Time */
+  }
+
+  *AT91C_ADC_CHDR = aden;							/* Disable ADC Channels */
+
+}
+
+/* [Internal Routine]
+ * Setup transmission parameters for Color Bus
+ */
 void nx__colorbus_setup_txbyte(U32 sensor, U8 val) {
 
   volatile struct color_port *p;
@@ -276,14 +383,60 @@ void nx__colorbus_setup_txbyte(U32 sensor, U8 val) {
 
 }
 
+/* [Internal Routine]
+ * Setup reception parameters for Color Bus
+ */
+void nx__colorbus_setup_rxbyte(U32 sensor) {
+
+  volatile struct color_port *p;
+  p = &color_bus_state[sensor];
+
+  p->current_pos = 0;
+  p->current_byte = 0;
+
+}
+
+/** [Internal Routine]
+ * Verify CRC for Calibration Data
+ * Code taken from LEGO NXT Firmware
+ * If caldataptr is NULL (i.e., no calibration data buffer), return TRUE
+ */
+bool nx__color_calibration_crc(color_cal_data *caldataptr, U16 crcval) {
+
+	U8 *dataptr = (U8 *) caldataptr;
+	U16 crc_checkval = 0x5AA5;
+	int counter;
+
+	if (caldataptr == NULL)
+		return TRUE;
+
+	for (counter = 0; counter < (COLOR_CAL_DATA_SIZE+COLOR_CAL_CRC_SIZE); counter++) {
+
+		int i, j;
+		U8 c;
+
+		c = dataptr[counter];
+		for (i=0; i != 8; c >>= 1, i++) {
+			j = (c ^ crc_checkval) & 1;
+			crc_checkval >>= 1;
+			if (j)
+				crc_checkval ^= 0xA001;
+
+		}
+	}
+	return (crc_checkval == crcval);
+}
+
+
 /** Interrupt handler. */
 static void color_isr(void) {
 
   volatile struct color_port *p;
   volatile U32 dummy __attribute__ ((unused));
-  volatile U32 lines = *AT91C_PIOA_PDSR;
   U32 codr = 0;
   U32 sodr = 0;
+  U32 aden = 0;
+  U32 adclk = 0;
   U32 sensor;
 
   /* Read the TC1 status register to ack the TC1 timer and allow this
@@ -293,6 +446,8 @@ static void color_isr(void) {
 
   for (sensor=0; sensor<NXT_N_SENSORS; sensor++) {
     const nx__sensors_pins *pins = nx__sensors_get_pins(sensor);
+    const nx__sensors_adcmap *adchan = nx__sensors_get_adcmap(sensor);
+
     p = &color_bus_state[sensor];
 
     switch (p->bus_state)
@@ -321,13 +476,16 @@ static void color_isr(void) {
     		    	 break;
     		     case COLOR_EXIT:
     		    	 if (p->colorbus_status != COLOR_NOTFOUND) {
-    		    		 /* Perform Calibration for mode == COLOR_NONE */
-    		    		 nx__colorbus_setup_txbyte(sensor, COLOR_NONE);
+    		    		 /* Perform Calibration for mode == COLOR_MODE_NONE */
+    		    		 nx__colorbus_setup_txbyte(sensor, COLOR_MODE_NONE);
     		    		 p->colorbus_status = p->colorbus_target_status;
     		    	 }
     		    	 break;
     		     case COLOR_READY:
     		    	 /* Remain in current state */
+    		    	  NX_ASSERT(p->colorbus_status == p->colorbus_target_status);
+    		    	  /* We should be in this state only after colorbus_status has been updated to COLOR_READY */
+
     		    	 break;
     		   }
     	   }
@@ -336,555 +494,177 @@ static void color_isr(void) {
 		   switch (p->colorbus_status) {
 			 case COLOR_CALIBRATE:
 				 /* Continue Calibration */
-		    	 p->bus_state = COLORBUS_CALSTART;
+		    	 p->bus_state = COLORBUS_CALSTART0;
 				 break;
 			 case COLOR_READY:
-				 /* Read A/D Values for active color sensors */
+				 /* Prepare A/D for read */
+		    	 p->bus_state = COLORBUS_WAITSAMPLE0;
 				 break;
 			 case COLOR_EXIT:
 				 /* Continue Exiting */
-		    	 p->bus_state = COLORBUS_CALSTART;
+		    	 p->bus_state = COLORBUS_CALSTART0;
 				 break;
 			 case COLOR_NOTFOUND:
 			 default:
 				 /* Turn off Color Bus */
 		    	 p->bus_state = COLORBUS_OFF;
+		    	 nx__sensors_disable(sensor);			/* Disable sensor */
+		    	 nx__color_check_disable_isr();
 				 break;
 
 		   }
     	 break;
-       case COLORBUS_SCL_LOW:
+	   case COLORBUS_CALSTART0:
+		 /* The Color Sensor Initialization/Calibration sequence is done as follows:
+		  * Data line (output) HIGH
+		  * Serial Clock (output) toggling HIGH (1 ms)->LOW (1 ms)->HIGH (1 ms)->LOW (wait 100 ms)
+		  */
+         sodr |= pins->sda;
+		 sodr |= pins->scl;
+		 p->bus_state = COLORBUS_CALSTART1;
+		 break;
+	   case COLORBUS_CALSTART1:
+		 codr |= pins->scl;
+		 p->bus_state = COLORBUS_CALSTART2;
+		 break;
+	   case COLORBUS_CALSTART2:
+		 sodr |= pins->scl;
+		 p->bus_state = COLORBUS_CALSTART3;
+		 break;
+	   case COLORBUS_CALSTART3:
+		 codr |= pins->scl;
+		 p->bus_state = COLORBUS_PAUSE;
+		 p->advals.colorval[COLOR_NONE] = nx_systick_get_ms() + TIME_100MS;	/* Use advals to store timestamp temporarily */
+		 break;
+       case COLORBUS_PAUSE:
+    	 /* Wait for 100 ms */
+	     /* Dealing with systick_time rollover:
+		  * http://www.arduino.cc/playground/Code/TimingRollover
+		  * Exit only if (long)( systick_time - timestamp ) >= 0
+		  *    Note: This used signed compare to come up with the correct decision
+		  */
+    	 if ((long) (nx_systick_get_ms() - p->advals.colorval[COLOR_NONE]) >= 0)
+    		p->bus_state = COLORBUS_WRITEBYTE;
     	 break;
+       case COLORBUS_WRITEBYTE:
+    	 /* We write out the byte directly here, due to the timing required */
+   		 *AT91C_PIOA_OER = pins->sda;					/* Switch to data output on color bus */
+    	 while (p->current_pos < 8) {
+    		 *AT91C_PIOA_SODR = pins->scl;				/* Start with Clk HIGH */
+    		 nx_systick_wait_us(TIME_2US);				/* Clock Settling Time */
+    		 /* Set Data output bit */
+    		 if ((p->current_byte & (1 << p->current_pos))) {
+				 *AT91C_PIOA_SODR = pins->sda;
+#if (COLOR_LOG == TRUE)
+				 color_log_uint(1);
+#endif
+			 } else {
+				 *AT91C_PIOA_CODR = pins->sda;
+#if (COLOR_LOG == TRUE)
+				 color_log_uint(0);
+#endif
+			 }
+			 ++p->current_pos;
+			 nx_systick_wait_us(TIME_30US);				/* Data Settling Time */
+    		 *AT91C_PIOA_CODR = pins->scl;				/* Clock HIGH->LOW Transition (latch data bit) */
+    		 nx_systick_wait_us(TIME_2US+TIME_30US);	/* Clock Settling Time + Next Bit Wait Time */
+    	   }
+  		 codr |= pins->scl;								/* Make sure that Clock is LOW when done */
+  		 p->processed = 0;								/* Setup for Calibration Data input */
+  		 *AT91C_PIOA_ODR = pins->sda;					/* Switch to data input on color bus */
+  		 p->bus_state = COLORBUS_READBYTE;
+      	 break;
+       case COLORBUS_READBYTE:
+    	 *AT91C_PIOA_ODR = pins->sda;					/* Switch to data input on color bus */
+  		 nx__colorbus_setup_rxbyte(sensor);				/* Setup for byte input */
+    	 while (p->current_pos < 8) {
+    		 *AT91C_PIOA_SODR = pins->scl;				/* Start with Clk HIGH */
+    		 nx_systick_wait_us(TIME_2US+TIME_2US+TIME_2US); /* Clock Settling Time */
+
+    		 *AT91C_PIOA_CODR = pins->scl;				/* Clock HIGH->LOW Transition (latch data bit) */
+    		 nx_systick_wait_us(TIME_2US);				/* Clock Settling Time */
+
+    		 U8 value = (*AT91C_PIOA_PDSR & pins->sda) ? 1 : 0;	/* Read Bit value and store it */
+    		 nx_systick_wait_us(TIME_2US);				/* Data Settling Time */
+
+    		 p->current_byte |= (value << p->current_pos);	/* Accumulate byte value */
+#if (COLOR_LOG == TRUE)
+             color_log_uint(value);
+#endif
+			 ++p->current_pos;
+    	   }
+  		 codr |= pins->scl;								/* Make sure that Clock is LOW when done */
+
+  		 if (p->caldataptr && (p->processed < COLOR_CAL_DATA_SIZE)) {
+  			 /* Store calibration data if pointer is valid (non-NULL) */
+  	  		 U8 *dataptr = (U8 *) p->caldataptr;
+  	         dataptr[p->processed] = p->current_byte;
+  		 } else if (p->processed == COLOR_CAL_DATA_SIZE) {
+  			 p->caldata_crc = p->current_byte << 8;		/* MSByte of CRC */
+  		 } else if (p->processed == COLOR_CAL_DATA_SIZE+1) {
+  			 p->caldata_crc |= p->current_byte;			/* LSByte of CRC */
+  		 }
+  		 ++p->processed;								/* Get ready for next byte */
+
+  		 /* Check for End of Calibration Phase */
+    	 if (p->processed >= COLOR_CAL_DATA_SIZE+COLOR_CAL_CRC_SIZE) {
+      		p->bus_state = COLORBUS_IDLE;			/* Default bus next state */
+
+    		if (p->colorbus_status == COLOR_EXIT) {
+    			/* Nothing to so, complete exit */
+    		    p->colorbus_status = COLOR_NOTFOUND;
+    		 } else {
+    	   		if (nx__color_calibration_crc(p->caldataptr, p->caldata_crc)) {
+    	   		  /* CRC Valid */
+    	          if (p->colorbus_status == COLOR_CALIBRATE) {
+    	        	p->bus_state = COLORBUS_WAITREADY;
+    	            p->advals.colorval[COLOR_NONE] = nx_systick_get_ms() + TIME_10MS;	/* Use advals to store timestamp temporarily */
+    	          }
+    	   		} else {
+    	   			/* CRC Error */
+    	        	p->bus_state = COLORBUS_WAITRECAL;
+    	            p->advals.colorval[COLOR_NONE] = nx_systick_get_ms() + TIME_400MS;	/* Use advals to store timestamp temporarily */
+    	   		}
+    		 }
+    	 }
+    	 break;
+       case COLORBUS_WAITREADY:
+      	 if ((long) (nx_systick_get_ms() - p->advals.colorval[COLOR_NONE]) >= 0) {
+      		p->bus_state = COLORBUS_IDLE;
+      		p->colorbus_status = COLOR_READY;
+      	 }
+      	 break;
+       case COLORBUS_WAITRECAL:
+      	 if ((long) (nx_systick_get_ms() - p->advals.colorval[COLOR_NONE]) >= 0) {
+      		p->bus_state = COLORBUS_IDLE;
+      		p->colorbus_status = COLOR_CALIBRATE;
+      	 }
+      	 break;
+       case COLORBUS_WAITSAMPLE0:
+     	 p->bus_state = COLORBUS_WAITSAMPLE1;
+    	 codr |= pins->scl;							/* Make sure that Clock is LOW */
+         break;
+       case COLORBUS_WAITSAMPLE1:
+     	 p->bus_state = COLORBUS_SAMPLEINPUTS;
+         break;
+       case COLORBUS_SAMPLEINPUTS:
+    	 aden |= adchan->chn;						/* Enable A/D Conversion for given port */
+    	 adclk |= pins->scl;
+    	 codr |= pins->scl;							/* Make sure that Clock is LOW when done */
+     	 p->bus_state = COLORBUS_WAITSAMPLE0;
+         break;
+
        };
   };
+  /** Perform AD Sampling for all active Color Sensors */
+  if (aden)
+	nx__color_adc_get_samples(aden, adclk);
+
+  /** Update CODR and SODR to reflect changes for all active sensors' pins. */
+  if (codr)
+    *AT91C_PIOA_CODR = codr;
+  if (sodr)
+    *AT91C_PIOA_SODR = sodr;
 }
-
-#if 0
-/** Add a I2C sub transaction.
- *
- * Adds a sub transaction for the given sensor. The given data (along with its
- * size) will be writen or read from the bus. Additionnal pre control and
- * post control can be performed (see enum i2c_control).
- */
-static i2c_txn_err i2c_add_txn(U32 sensor, i2c_txn_mode mode,
-			       U8 *data, int size,
-			       i2c_control pre_control, i2c_control post_control)
-{
-  volatile struct i2c_txn_info *t;
-
-  if (sensor >= NXT_N_SENSORS)
-    return I2C_ERR_UNKNOWN_SENSOR;
-
-  if (i2c_state[sensor].n_txns == I2C_MAX_TXN)
-    return I2C_ERR_TXN_FULL;
-
-  /* Retrieve the sub transaction i2c_txn_info structure. */
-  t = &(i2c_state[sensor].txns[i2c_state[sensor].n_txns]);
-
-  /* Set the transaction parameters. */
-  t->pre_control = pre_control;
-  t->post_control = post_control;
-  t->mode = mode;
-  t->data = data;
-  t->data_size = size;
-
-  i2c_state[sensor].n_txns++;
-
-  /* TODO: find how to make this a critical code section. */
-  i2c_txn_count++;
-
-  return I2C_ERR_OK;
-}
-
-/** Triggers the configured I2C transactions.
- *
- * Returns I2C_ERR_NOT_READY if the bus is busy.
- */
-static i2c_txn_err i2c_trigger(U32 sensor) {
-  i2c_state[sensor].txn_state = TXN_WAITING;
-  i2c_state[sensor].bus_state = I2C_IDLE;
-
-  return I2C_ERR_OK;
-}
-
-/** Start a new I2C transaction.
- *
- * If the I2C bus is available, a new transaction (consisting in 2 to 4
- * sub transactions) will be performed.
- *
- * For a write transaction, two sub transactions will be performed. The data
- * and data_size parameters must be provided, initialized and containing the
- * data to be sent on the bus (in most cases, the internal address in the
- * remote device and the value to put in this address).
- *
- * For a read transaction, four sub transactions will be performed. In
- * addition to the data and data_size parameters, the recv_buf and recv_size
- * parameters must be initialized. The recv_buf must be able to contain the
- * recv_size bytes that will be read from the bus.
- *
- * Returns an i2c_txn_err error code.
- */
-i2c_txn_err nx_i2c_start_transaction(U32 sensor, i2c_txn_mode mode,
-				     const U8 *data, U32 data_size,
-				     U8 *recv_buf, U32 recv_size)
-{
-  volatile struct i2c_txn_info *t;
-
-  if (sensor >= NXT_N_SENSORS)
-    return I2C_ERR_UNKNOWN_SENSOR;
-
-  if (nx_i2c_busy(sensor))
-    return I2C_ERR_NOT_READY;
-
-  /* In any case, data must be initialized, and with a known data size. */
-  if (!data || !data_size)
-    return I2C_ERR_DATA;
-
-  if (mode == TXN_MODE_READ && (!recv_buf || !recv_size))
-    return I2C_ERR_DATA;
-
-  i2c_state[sensor].bus_state = I2C_CONFIG;
-
-  t = i2c_state[sensor].txns;
-  i2c_state[sensor].current_txn = 0;
-  i2c_state[sensor].n_txns = 0;
-  memset((U8 *)t, 0, I2C_MAX_TXN*sizeof(struct i2c_txn_info));
-
-  /* In any case, write the device address and the given data
-   * (can be an internal address, or an internal address followed
-   * by a value, etc). This second sub transaction is ended by a
-   * STOP if the device works in degraded mode or if this transaction
-   * is only a write transaction.
-   */
-  i2c_add_txn(sensor, TXN_MODE_WRITE,
-              (U8*)&(i2c_state[sensor].addr[TXN_MODE_WRITE]), 1,
-              I2C_CONTROL_START, I2C_CONTROL_NONE);
-  i2c_add_txn(sensor, TXN_MODE_WRITE, (U8*)data, data_size, I2C_CONTROL_NONE,
-              (i2c_state[sensor].lego_compat || mode == TXN_MODE_WRITE)
-                ? I2C_CONTROL_STOP
-                : I2C_CONTROL_NONE);
-
-  /* If this is a read transaction, write the device address on the bus
-   * and switch to read mode, storing the received bytes in the provided
-   * buffer ; ending with a STOP.
-   */
-  if (mode == TXN_MODE_READ) {
-    i2c_add_txn(sensor, TXN_MODE_WRITE,
-                (U8*)&(i2c_state[sensor].addr[TXN_MODE_READ]), 1,
-                I2C_CONTROL_RESTART, I2C_CONTROL_NONE);
-    i2c_add_txn(sensor, TXN_MODE_READ, recv_buf, recv_size, I2C_CONTROL_NONE,
-                I2C_CONTROL_STOP);
-  }
-
-  /* Enable the I2C interrupt inconditonnaly. */
-  *AT91C_TC0_IER = AT91C_TC_CPCS;
-
-  i2c_trigger(sensor);
-  return I2C_ERR_OK;
-}
-
-/** Retrieve the transaction status for the given sensor.
- */
-i2c_txn_status nx_i2c_get_txn_status(U32 sensor)
-{
-  volatile struct i2c_port *p;
-
-  if (sensor >= NXT_N_SENSORS)
-    return TXN_STAT_UNKNOWN;
-
-  p = &i2c_state[sensor];
-
-  /* If the transaction is not failed, it's in progress until the
-   * current_txn number reaches the number of sub transactions (minus 1
-   * because indexes start at 0).
-   */
-  if (p->current_txn < p->n_txns)
-    return TXN_STAT_IN_PROGRESS;
-  else if (p->current_txn)
-     /* When everything's done, simply return the last sub transaction
-     * result.
-     */
-    return p->txns[p->current_txn-1].result;
-  else
-    return TXN_STAT_SUCCESS; /* current_txn = n_txns = 0 => nothing to do */
-}
-
-bool nx_i2c_busy(U32 sensor)
-{
-  if (sensor >= NXT_N_SENSORS)
-    return FALSE;
-
-  return i2c_state[sensor].bus_state > I2C_IDLE
-    || i2c_state[sensor].current_txn < i2c_state[sensor].n_txns;
-}
-
-/** Sets the I2C bus state for the given sensor to the provided state.
- *
- * This function takes into account the lego_compat parameter of the given
- * I2C port and will include a pause before going to 'next_state' if the
- * port is configured for lego I2C radar compatibility.
- *
- * Note: only use this function to change the I2C bus state when a pause
- * is required in compat mode.
- */
-static void i2c_set_bus_state(U32 sensor, U32 next_state) {
-  volatile struct i2c_port *p;
-
-  if (sensor >= NXT_N_SENSORS)
-    return;
-
-  p = &i2c_state[sensor];
-
-  if (p->lego_compat) {
-    p->bus_state = I2C_PAUSE;
-    p->p_ticks = next_state == I2C_IDLE
-      ? 10 * I2C_PAUSE_LEN
-      : I2C_PAUSE_LEN;
-    p->p_next = next_state;
-    return;
-  }
-
-  p->bus_state = next_state;
-}
-
-
-/** Interrupt handler. */
-static void i2c_isr(void) {
-  volatile struct i2c_port *p;
-  volatile struct i2c_txn_info *t;
-  volatile U32 dummy __attribute__ ((unused));
-  volatile U32 lines = *AT91C_PIOA_PDSR;
-  U32 codr = 0;
-  U32 sodr = 0;
-  short sensor;
-
-  /* Read the TC0 status register to ack the TC0 timer and allow this
-   * interrupt handler to be called again.
-   */
-  dummy = *AT91C_TC0_SR;
-
-  for (sensor=0; sensor<NXT_N_SENSORS; sensor++) {
-    const nx__sensors_pins *pins = nx__sensors_get_pins(sensor);
-    p = &i2c_state[sensor];
-    t = &(p->txns[p->current_txn]);
-
-    switch (p->bus_state)
-      {
-      case I2C_OFF:
-      case I2C_CONFIG:
-        /* Port is OFF or in txn configuration mode, do nothing. */
-        break;
-
-      case I2C_RECLOCK0:
-        /* First step of reclocking: pull SCL low. */
-        codr |= pins->scl;
-        p->bus_state = I2C_RECLOCK1;
-        break;
-
-      case I2C_RECLOCK1:
-        /* Second and last step of reclocking: set SCL high again, and
-         * retry transaction.
-         */
-        sodr |= pins->scl;
-        p->bus_state = I2C_SEND_START_BIT0;
-        break;
-
-      case I2C_READ_ACK0:
-        /* Issue a clock pulse by releasing SCL. */
-        sodr |= pins->scl;
-        p->bus_state = I2C_READ_ACK1;
-        break;
-
-      case I2C_READ_ACK1:
-        /* Wait for SCL to go up and let it stabilize. */
-        if (lines & pins->scl) {
-          p->bus_state = I2C_READ_ACK2;
-        }
-        break;
-
-      case I2C_READ_ACK2:
-        if (lines & pins->sda) {
-          /* SDA is still high, this is a ACK fault. Setting
-           * transaction status to TXN_STAT_FAILED and sending stop
-           * bit.
-           */
-          i2c_log(" no-ack!\n");
-
-          t->result = TXN_STAT_FAILED;
-
-          /* Always issue a STOP bit after a ACK fault. */
-          p->bus_state = I2C_SEND_STOP_BIT0;
-          p->txn_state = TXN_STOP;
-
-          /* Bypass remaining sub transactions, leaving the status failed */
-          p->n_txns = ++(p->current_txn);
-        } else {
-          if (p->processed < t->data_size) {
-            p->bus_state = I2C_SCL_LOW;
-            p->txn_state = TXN_TRANSMIT_BYTE;
-          } else {
-            t->result = TXN_STAT_SUCCESS;
-            p->current_txn++;
-
-            if (t->post_control == I2C_CONTROL_STOP) {
-              p->bus_state = I2C_SCL_LOW;
-              p->txn_state = TXN_STOP;
-            } else {
-              p->bus_state = I2C_IDLE;
-              p->txn_state = TXN_WAITING;
-            }
-          }
-
-          /* Pull SCL low to complete the clock pulse. SDA should be
-           * released by the slave after that.
-           */
-          codr |= pins->scl;
-
-          i2c_log(" r-ack.\n");
-        }
-
-        break;
-
-      case I2C_WRITE_ACK0:
-        /* Release SCL to do a clock pulse. */
-        sodr |= pins->scl;
-        p->bus_state = I2C_WRITE_ACK1;
-        break;
-
-      case I2C_WRITE_ACK1:
-        /* Pull SCL low again to complete the clock pulse. */
-        codr |= pins->scl;
-        p->bus_state = I2C_WRITE_ACK2;
-        break;
-
-      case I2C_WRITE_ACK2:
-        /* Release SDA for the slave to regain control of it. */
-        sodr |= pins->sda;
-        p->bus_state = I2C_SCL_LOW;
-        p->txn_state = TXN_TRANSMIT_BYTE;
-
-        i2c_log(" w-ack.\n");
-        break;
-
-      case I2C_IDLE:
-        /* If current_txn < n_txns, we have work to do. */
-        if (p->txn_state == TXN_WAITING && p->current_txn < p->n_txns) {
-          if (t->pre_control == I2C_CONTROL_NONE) {
-            p->txn_state = TXN_TRANSMIT_BYTE;
-            p->bus_state = I2C_SCL_LOW;
-          } else {
-            /* Before issuing a START bit, set both pins high, just to be
-             * sure, and proceed to SEND_START_BIT.
-             */
-            sodr |= pins->sda | pins->scl;
-
-            if (t->pre_control == I2C_CONTROL_RESTART && p->lego_compat) {
-              /* In LEGO compatibility mode, issue a reclock before the
-               * restart (which is just a new START bit).
-               */
-              p->bus_state = I2C_RECLOCK0;
-            } else {
-              p->bus_state = I2C_SEND_START_BIT0;
-            }
-
-            p->txn_state = TXN_START;
-          }
-
-          /* Prepare the first bit to be sent. */
-          p->processed = 0;
-          p->current_byte = t->data[p->processed];
-          p->current_pos = 7;
-        }
-
-        if (p->current_txn >= p->n_txns) {
-          p->txn_state = TXN_NONE;
-        }
-
-        break;
-
-      case I2C_PAUSE:
-        p->p_ticks--;
-        if (p->p_ticks == 0) {
-          p->bus_state = p->p_next;
-        }
-        break;
-
-      case I2C_SEND_START_BIT0:
-        if (lines & pins->sda) {
-          /* Pull SDA low. */
-          codr |= pins->sda;
-
-          i2c_set_bus_state(sensor, I2C_SEND_START_BIT1);
-        } else {
-          /* Something is holding SDA low. Reclock until we get our data
-           * line back.
-           */
-          p->bus_state = I2C_RECLOCK0;
-        }
-
-        break;
-
-      case I2C_SEND_START_BIT1:
-        /* Pull SCL low. */
-        codr |= pins->scl;
-
-        i2c_set_bus_state(sensor, I2C_SCL_LOW);
-        p->txn_state = TXN_TRANSMIT_BYTE;
-        break;
-
-      case I2C_SCL_LOW:
-        /* SCL is low. */
-
-        switch (p->txn_state) {
-        case TXN_TRANSMIT_BYTE:
-          /* In write mode, it's time to set SDA to the bit
-           * value we want. In read mode, let the remote device set
-           * SDA.
-           */
-          if (t->mode == TXN_MODE_WRITE) {
-            if ((p->current_byte & (1 << p->current_pos))) {
-              sodr |= pins->sda;
-              i2c_log_uint(1);
-            } else {
-              codr |= pins->sda;
-              i2c_log_uint(0);
-            }
-          }
-
-          p->bus_state = I2C_SAMPLE0;
-          break;
-
-        case TXN_WRITE_ACK:
-          if (lines & pins->sda) {
-            /* SDA is high: the slave has released SDA. Pull it low
-             * and reclock.
-             */
-            codr |= pins->sda;
-            p->bus_state = I2C_WRITE_ACK0;
-          }
-
-          /* Stay in the same state until the slave release SDA. */
-          break;
-
-        case TXN_READ_ACK:
-          /* Release SDA and pull SCL low to prepare for the clock
-           * pulse.
-           */
-          sodr |= pins->sda;
-          codr |= pins->scl;
-          p->bus_state = I2C_READ_ACK0;
-          break;
-
-        case TXN_STOP:
-          /* Pull SDA low, to be able to release it up after SCL went
-           * up.
-           */
-          codr |= pins->sda;
-          i2c_set_bus_state(sensor, I2C_SEND_STOP_BIT0);
-          break;
-
-        default:
-          break;
-        }
-
-        break;
-
-      case I2C_SAMPLE0:
-        /* Start sampling, rising SCL. */
-        sodr |= pins->scl;
-        p->bus_state = I2C_SAMPLE1;
-        break;
-
-      case I2C_SAMPLE1:
-        /* End sampling.  In write mode, let the remote device read
-         * the bit set in I2C_SCL_LOW. In read mode, retrieve SDA
-         * value and store it.
-         */
-        if (t->mode == TXN_MODE_READ) {
-          U8 value = (lines & pins->sda) ? 1 : 0;
-          t->data[p->processed] |= (value << p->current_pos);
-          i2c_log_uint(value);
-        }
-
-        p->bus_state = I2C_SAMPLE2;
-        break;
-
-      case I2C_SAMPLE2:
-        /* Finally, pull SCL low. */
-        codr |= pins->scl;
-
-        --p->current_pos;
-        if (p->current_pos < 0) {
-          p->processed++;
-          p->current_pos = 7;
-
-          if (t->mode == TXN_MODE_WRITE) {
-            /* In write mode, update the current_byte being
-             * processed so it can be send next until we reach
-             * data_size. Now, we expect a ACK from the slave.
-             */
-            if (p->processed < t->data_size) {
-              p->current_byte = t->data[p->processed];
-            }
-
-            p->txn_state = TXN_READ_ACK;
-          } else {
-            /* In read mode, we need to give ACK to the slave so it can
-             * continue transmission.
-             */
-            if (p->processed < t->data_size) {
-              p->txn_state = TXN_WRITE_ACK;
-            } else {
-              if (t->post_control == I2C_CONTROL_STOP) {
-                p->txn_state = TXN_STOP;
-              } else {
-                p->bus_state = I2C_IDLE;
-                p->txn_state = TXN_WAITING;
-              }
-
-              t->result = TXN_STAT_SUCCESS;
-              p->current_txn++;
-            }
-          }
-        }
-
-        p->bus_state = I2C_SCL_LOW;
-        break;
-
-      case I2C_SEND_STOP_BIT0:
-        /* First, rise SCL. */
-        sodr |= pins->scl;
-
-        i2c_set_bus_state(sensor, I2C_SEND_STOP_BIT1);
-        break;
-
-      case I2C_SEND_STOP_BIT1:
-        /* Finally, release SDA. */
-        sodr |= pins->sda;
-
-        i2c_set_bus_state(sensor, I2C_IDLE);
-        p->txn_state = TXN_WAITING;
-
-        /* When the sub-transaction is done, decrement i2c_txn_count.
-         * If it reaches 0, disable the I2C interrupt.
-         *
-         * TODO: find how to make this a critical code section.
-         */
-        i2c_txn_count--;
-        if (i2c_txn_count == 0)
-          *AT91C_TC0_IDR = AT91C_TC_CPCS;
-
-        break;
-      }
-
-    /** Update CODR and SODR to reflect changes for this sensor's
-     * pins. */
-    if (codr)
-      *AT91C_PIOA_CODR = codr;
-    if (sodr)
-      *AT91C_PIOA_SODR = sodr;
-  }
-}
-#endif
 
 

@@ -27,10 +27,10 @@ static const nx__sensors_pins sensors_pinmap[NXT_N_SENSORS] = {
 };
 
 static const nx__sensors_adcmap sensors_adcmap[NXT_N_SENSORS] = {
-  { AT91C_ADC_CH1, (U32 *) AT91C_ADC_CDR1 },
-  { AT91C_ADC_CH2, (U32 *) AT91C_ADC_CDR2 },
-  { AT91C_ADC_CH3, (U32 *) AT91C_ADC_CDR3 },
-  { AT91C_ADC_CH7, (U32 *) AT91C_ADC_CDR7 },
+  { AT91C_ADC_CH1, (volatile U32 *) AT91C_ADC_CDR1 },
+  { AT91C_ADC_CH2, (volatile U32 *) AT91C_ADC_CDR2 },
+  { AT91C_ADC_CH3, (volatile U32 *) AT91C_ADC_CDR3 },
+  { AT91C_ADC_CH7, (volatile U32 *) AT91C_ADC_CDR7 },
 };
 
 static enum {
@@ -98,9 +98,7 @@ void nx__sensors_color_enable(U32 sensor) {
 
   sensors_mode[sensor] = LEGOCOLOR;
 
-  /* In color sensor mode, the DIGI outputs (SDA and SCL) are left up, and
-   * enabled in multi-drive mode.
-   */
+  /* In color sensor mode, the DIGI outputs (SDA and SCL) are left up. */
   pinmask = sensors_pinmap[sensor].sda |
     sensors_pinmap[sensor].scl;
 

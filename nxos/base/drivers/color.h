@@ -28,17 +28,6 @@
 /*@{*/
 
 #if 0
-/** Maximum transmitable data size. */
-#define I2C_MAX_DATA_SIZE 16
-
-/** I2C return codes. */
-typedef enum {
-  I2C_ERR_OK = 0,
-  I2C_ERR_UNKNOWN_SENSOR,
-  I2C_ERR_NOT_READY,
-  I2C_ERR_TXN_FULL,
-  I2C_ERR_DATA,
-} i2c_txn_err;
 
 /** Transaction mode definitions. */
 typedef enum
@@ -52,11 +41,11 @@ typedef enum
 /** Color Sensor mode. */
 typedef enum
 {
-  COLOR_NONE = 0,
-  COLOR_FULL,
-  COLOR_RED,
-  COLOR_GREEN,
-  COLOR_BLUE,
+  COLOR_MODE_NONE = 0,
+  COLOR_MODE_FULL,
+  COLOR_MODE_RED,
+  COLOR_MODE_GREEN,
+  COLOR_MODE_BLUE,
 
   COLOR_NUM_MODES,
 } color_mode;
@@ -70,10 +59,16 @@ typedef enum
   COLOR_EXIT,
 } color_status;
 
-/** Color Sensor config. */
+/** Color Sensor config.
+ *
+ * These parameters are configuration requests to the actual SoftMAC driver
+ *
+ * mode	Color sensing mode (NONE, FULL, RED, GREEN, BLUE)
+ * status Color sensor status request (updated by nx_color_detect())
+ */
 typedef struct {
 	color_mode mode;		/* Color Sensor LED mode */
-	color_status status;	/* Color Sensor current status */
+	color_status status;	/* Color Sensor status */
 } color_config;
 
 /** Color Sensor calibration point enums. */
@@ -85,43 +80,26 @@ typedef enum
 	NO_OF_CALPOINTS
 } calibration_points;
 
-/** Color Sensor calibration color enums. */
+/** Color Sensor data structure enums. */
 typedef enum
 {
-	CAL_RED = 0,
-	CAL_GREEN,
-	CAL_BLUE,
-	CAL_NONE,
-	NO_OF_CALCOLORS
-} calibration_colors;
+	COLOR_NONE = 0,
+	COLOR_RED,
+	COLOR_GREEN,
+	COLOR_BLUE,
+	NO_OF_COLORS
+} color_struct_colors;
 
 /** Color Sensor calibration data structure. */
 typedef struct {
-    U32 calibration[NO_OF_CALPOINTS][NO_OF_CALCOLORS];		/* 3 Cal Points x 4 Cal Colors = 12 32-bit values */
+    U32 calibration[NO_OF_CALPOINTS][NO_OF_COLORS];			/* 3 Cal Points x 4 Cal Colors = 12 32-bit values */
     U16 calibration_limits[NO_OF_CALPOINTS - 1];			/* 2 16-bit cal limits */
 } color_cal_data;
 
-#if 0
-/** I2C bus control parameters.
- *
- * Note that in practice, on the bus, a RESTART is the same as a new
- * START bit (when running in normal bus mode).
- *
- * Pre (resp post) control values must only be used in pre_control
- * (resp post_control).
- */
-typedef enum {
-  I2C_CONTROL_NONE = 0,
-
-  /* Pre control bits. */
-  I2C_CONTROL_START,
-  I2C_CONTROL_RESTART,
-
-  /* Post control bits. */
-  I2C_CONTROL_STOP,
-} i2c_control;
-#endif
-
+/** Color Sensor A/D values data structure. */
+typedef struct {
+    U32 colorval[NO_OF_COLORS];								/* 4 32-bit Colors (10 bit significance) */
+} color_values;
 
 /** Initialize a LEGO Color Sensor on port @a sensor.
  *
@@ -171,34 +149,6 @@ void nx_color_reset(U32 sensor, color_mode mode);
  */
 void nx_color_info(U32 sensor);
 
-#if 0
-/** Perform a I2C transaction with the device on port @a sensor.
- *
- * @param sensor The sensor port number.
- * @param mode The transaction mode (reading or writing form/to the device).
- * @param data The data to send to the device. In a read transaction, the data
- * contains the command to send to the device before reading from it.
- * @param data_size The size of the data to be sent.
- * @param recv_buf A receive buffer that will hold the received data.
- * @param recv_size The expected size of the received data.
- *
- * @note This function actually creates a series of asynchronous sub
- * transactions and immediately returns. Use nx_i2c_busy() and
- * nx_i2c_get_txn_status() to track the transaction's state.
- *
- * @warning The reception buffer @a recv_buf must be pre-allocated to hold at
- * least @a recv_size bytes.
- *
- * @return This function returns an I2C error code. I2C_ERR_OK will be returned
- * if the transaction has been successfully setup. Otherwise, the appropriate
- * error codes are returned (see i2c_txn_err).
- */
-i2c_txn_err nx_i2c_start_transaction(U32 sensor, i2c_txn_mode mode,
-                                     const U8 *data, U32 data_size,
-                                     U8 *recv_buf, U32 recv_size);
-#endif
-
-
 /** Get the current LED mode of the LEGO Color Sensor on port @a sensor.
  *
  * @param sensor The sensor port number.
@@ -207,6 +157,35 @@ i2c_txn_err nx_i2c_start_transaction(U32 sensor, i2c_txn_mode mode,
  * given sensor port.
  */
 color_mode nx_color_get_mode(U32 sensor);
+
+/** Read all color sensor raw values
+ *
+ *  The color_values structure contain all channels (RED, GREEN, BLUE, NONE) regardless of
+ *  the color_mode setting. Only the values for the active color_mode are valid.
+ *
+ *    Note: The values are only updated once every 3 ms
+ *
+ * @param sensor The sensor port number.
+ * @param rawvalues A pointer to an object of color_values where the
+ *   read values will be stored.
+ *
+ * @return True if values could be read, false otherwise (e.g., in Calibration mode).
+ */
+bool color_read_all_raw(U32 sensor, color_values* rawvalues);
+
+/** Read color sensor raw value for given mode
+ *
+ *  Return the raw value for the given color_mode.
+ *  Only the value for the active color_mode are valid.
+ *  For COLOR_MODE_FULL, the value for NONE is returned.
+ *
+ *    Note: The values are only updated once every 3 ms
+ *
+ * @param sensor The sensor port number.
+ *
+ * @returns 0 value if values cannot be read (e.g., in Calibration mode).
+ */
+U32 color_read_mode_raw(U32 sensor);
 
 
 /*@}*/

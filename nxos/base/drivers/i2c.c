@@ -727,12 +727,11 @@ static void i2c_isr(void) {
 
         break;
       }
-
-    /** Update CODR and SODR to reflect changes for this sensor's
-     * pins. */
-    if (codr)
-      *AT91C_PIOA_CODR = codr;
-    if (sodr)
-      *AT91C_PIOA_SODR = sodr;
   }
+  /** Update CODR and SODR to reflect changes for this sensor's
+   * pins. */
+  if (codr)
+    *AT91C_PIOA_CODR = codr;
+  if (sodr)
+    *AT91C_PIOA_SODR = sodr;
 }

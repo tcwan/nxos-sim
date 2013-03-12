@@ -26,6 +26,29 @@
  */
 void nx__color_init(void);
 
+/** Disable color_isr if no active color sensor.
+ */
+void nx__color_check_disable_isr(void);
+
+/* Initiate A/D conversion for all active Color Sensors
+ */
+void nx__color_adc_get(U32 aden, color_struct_colors index);
+
+/** Retrieve A/D samples for all active Color Sensors
+ */
+void nx__color_adc_get_samples(U32 aden, U32 adclk);
+
+/** Setup transmission parameters for Color Bus.
+ */
+void nx__colorbus_setup_txbyte(U32 sensor, U8 val);
+
+/** Setup reception parameters for Color Bus.
+ */
+void nx__colorbus_setup_rxbyte(U32 sensor);
+
+/** Verify CRC for Calibration Data.
+ */
+bool nx__color_calibration_crc(color_cal_data *caldataptr, U16 crcval);
 
 /*@}*/
 /*@}*/
