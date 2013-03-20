@@ -508,6 +508,7 @@ static void color_isr(void) {
 			 default:
 				 /* Turn off Color Bus */
 		    	 p->bus_state = COLORBUS_OFF;
+		    	 p->caldataptr = NULL;
 		    	 nx__sensors_disable(sensor);			/* Disable sensor */
 		    	 nx__color_check_disable_isr();
 				 break;
