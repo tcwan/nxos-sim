@@ -37,7 +37,7 @@
 /* To disable Avoid Obstacles Behavior Debugging, change the following to #undef DEBUG_AVOID_OBSTACLE */
 #define DEBUG_PID
 /* To use normal PID Convergence behavior, change the following to #undef ENABLE_PID_ABORT */
-#undef ENABLE_PID_ABORT
+#define ENABLE_PID_ABORT
 
 .syntax unified
 
@@ -1248,8 +1248,8 @@ exit_has_claw_fully_stopped:
  */
 	thumb_interwork advanced_jump_table_dispatcher
     PUSH    {R4, R5, LR}
-    MOV		R4, R2
-    MOV		R5, R3
+    MOVS	R4, R2
+    MOVS	R5, R3
 
 jump_table_loop:
     CMP    R4, R5
@@ -1637,7 +1637,7 @@ speaker_outputs_unchanged:
 	cmp		r3, r0					/* Check against TONE_INHIBITED in R0 */
 	beq		exit_speaker_controller	/* Skip update since we're already inhibited */
 
-	mov		r0, r6					/* Setup Pointer to speaker_timestamp, R1 already has current Tone Duration */
+	movs	r0, r6					/* Setup Pointer to speaker_timestamp, R1 already has current Tone Duration */
 	bl		has_timer_elapsed
 	cmp		r0, #FALSE
 	beq		exit_speaker_controller	/* Has not reached target update time interval yet, exit */
@@ -2116,7 +2116,7 @@ bbr_avoid_obstacle_pid_converge:
 	ldr		r0, =pid
 	ldrb	r1, [r6]							/* Retrieve ultrasound value again */
 	bl		PIDController						/* Activate PID Controller */
-	mov		r4, r0								/* Keep PID Controller Output in R4 for later use */
+	movs	r4, r0								/* Keep PID Controller Output in R4 for later use */
 
 #ifdef DEBUG_PID
 	movs	r0, #0
@@ -2125,7 +2125,7 @@ bbr_avoid_obstacle_pid_converge:
 	ldr		r0, =pidstr
 	bl		nx_display_string
 
-	mov		r0, r4
+	movs	r0, r4
 	bl		nx_display_int
 
 	ldr		r0, =pidunits
@@ -2181,7 +2181,7 @@ clamp_output_min:
 	ldr		r2, =WHEEL_SPEED_MIN
 	cmp		r1, r2
 	bgt		done_clamp_output
-	mov		r1, r2						/* Clamp to WHEEL_SPEED_MIN if less */
+	movs	r1, r2						/* Clamp to WHEEL_SPEED_MIN if less */
 
 done_clamp_output:
 	movs	r0, #BBR_AVOID_OBSTACLE
