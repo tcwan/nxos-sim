@@ -37,7 +37,7 @@
 /* To disable Avoid Obstacles Behavior Debugging, change the following to #undef DEBUG_AVOID_OBSTACLE */
 #define DEBUG_PID
 /* To use normal PID Convergence behavior, change the following to #undef ENABLE_PID_ABORT */
-#define ENABLE_PID_ABORT
+#undef ENABLE_PID_ABORT
 
 .syntax unified
 
