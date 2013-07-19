@@ -33,24 +33,28 @@
 #define COLOR_CAL_DATA_SIZE 52						/* sizeof color_cal_data */
 #define COLOR_CAL_CRC_SIZE   2						/* sizeof caldata_crc */
 
+typedef struct {
+    U8 colorval[NO_OF_COLORS];								/* 4 32-bit Colors (10 bit significance) */
+} color_threshvals;
+
 /* Internal Color Detector Data Structure */
-static color_values min_rawcolor_lowthresh = {
+static color_threshvals min_rawcolor_lowthresh = {
 		{ 0, 65, 40, 48 }
 };
-static color_values min_rawcolor_highthresh = {
+static color_threshvals min_rawcolor_highthresh = {
 		{ 0, 110, 70, 85 }
 };
-static color_values min_rawambience_highthresh = {
+static color_threshvals min_rawambience_highthresh = {
 		{ 0, 40, 30, 25 }
 };
 
-static color_values max_rawcolor_lowthresh = {
+static color_threshvals max_rawcolor_lowthresh = {
 		{ 0, 70, 70, 60 }
 };
-static color_values max_rawcolor_highthresh = {
+static color_threshvals max_rawcolor_highthresh = {
 		{ 0, 140, 140, 120 }
 };
-static color_values max_rawambience_highthresh = {
+static color_threshvals max_rawambience_highthresh = {
 		{ 0, 140, 140, 110 }
 };
 
