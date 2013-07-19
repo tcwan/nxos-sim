@@ -38,6 +38,18 @@ typedef enum
 } i2c_txn_mode;
 #endif
 
+/** Color Detected enums. */
+typedef enum
+{
+  COLOR_DETECT_UNKNOWN = 0,
+  COLOR_DETECT_BLACK,
+  COLOR_DETECT_BLUE,
+  COLOR_DETECT_GREEN,
+  COLOR_DETECT_YELLOW,
+  COLOR_DETECT_RED,
+  COLOR_DETECT_WHITE,
+} color_detected;
+
 /** Color Sensor mode. */
 typedef enum
 {
@@ -187,6 +199,17 @@ bool color_read_all_raw(U32 sensor, color_values* rawvalues);
  */
 U32 color_read_mode_raw(U32 sensor);
 
+/** Detect color given raw inputs
+ *
+ *  Return the detected color enum for the given raw inputs.
+ *  Only the value for the active color_mode are valid.
+ *
+ * @param rawvalues A pointer to an object of color_values where the
+ *   read values will be stored.
+ *
+ * @returns COLOR_DETECT_UNKNOWN if color no recognized
+ */
+color_detected color_detector(color_values* rawvalues);
 
 /*@}*/
 /*@}*/

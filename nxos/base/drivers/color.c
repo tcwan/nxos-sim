@@ -308,6 +308,67 @@ U32 color_read_mode_raw(U32 sensor) {
   return sensorval;
 }
 
+/** Detect Colors given raw input values
+ * Algorithm reverse engineered from
+ * NXT Firmware code in c_input.c
+ *
+ * The available LEGO brick colors are:
+ *   BLACK, BLUE, GREEN, YELLOW, RED, WHITE
+ *
+ * RED, GREEN, BLUE are primary colors.
+ * YELLOW is a combination of RED and GREEN.
+ *
+ * The color sensor activates each R, G, B LED
+ * in turn to read the response from the surface,
+ * as well as an ambience level reading (unlighted)
+ * This means that the reflected color response depends
+ * on the LED light color, as well as the specific color
+ * reflectance of the surface. The roughness of the surface
+ * will also play a part.
+ *
+ * e.g., BLUE surfaces would tend to reflect BLUE light
+ * more than other colors.
+ *
+ * The algorithm assumes two modes for color detection.
+ * First is for rough surfaces with lower reflectance,
+ * and second for smooth surfaces with high reflectance.
+ *
+ * The detection process is divided into 5 thresholds
+ * where low reflectance values would result in either BLACK
+ * or one of the primary color, as well as YELLOW if
+ * the LED light is RED or GREEN.
+ * High reflectance values would either result in BLACK
+ * if the various colors do not exceed the given thresholds
+ * (emphasis on the ambience level readings), or else
+ * it is detected as WHITE, except for the case of the BLUE
+ * LED light where BLUE surfaces could give high reflectance
+ * readings.
+ *
+ * It appears that the thresholds chosen in the NXT Firmware
+ * code are empirical based on experimental data.
+ */
+
+color_detected color_detector(color_values* rawvalues) {
+
+	color_detected theColor = COLOR_NONE;
+
+	if ((rawvalues[COLOR_RED] > rawvalues[COLOR_BLUE]) &&
+			(rawvalues[COLOR_RED] > rawvalues[COLOR_GREEN])) {
+		/* Red is Dominant */
+		/* Possible colors are: Red, Yellow, White, Black */
+
+	} else if (rawvalues[COLOR_GREEN] > rawvalues[COLOR_BLUE])) {
+		/* Green is Dominant */
+		/* Possible colors are: Green, Yellow, White, Black */
+
+	} else {
+		/* Blue is Dominant */
+		/* Possible colors are: Blue, White, Black */
+
+	}
+	return theColor;
+}
+
 /* [Internal Routine]
  * Initiate A/D conversion for all active Color Sensors
  */
