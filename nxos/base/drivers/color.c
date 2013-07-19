@@ -344,7 +344,7 @@ U32 nx_color_scale_input(U32 rawvalue) {
 	U32 scaled;
 
 	/* Clamp to zero or positive value */
-	scaled = (rawvalue > ADC_COLOR_MINVOLTAGE) ? (rawvalue - normalized) : 0;
+	scaled = (rawvalue > ADC_COLOR_MINVOLTAGE) ? (rawvalue - ADC_COLOR_MINVOLTAGE) : 0;
 
 	scaled = scaled * ADC_SCALED_RATIO;		/* Expand value to full ADC Range */
 
