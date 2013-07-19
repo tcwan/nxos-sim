@@ -36,7 +36,7 @@
 /* Color Sensor Input Voltage Calibration. */
 #define ADC_COLOR_MINVOLTAGE  214L					/* Min color sensor voltage (mV). */
 #define ADC_MAXVOLTAGE  	 3300L					/* Max ADC voltage (mV) */
-#define ADC_NORMALIZED_RATIO ADC_MAXVOLTAGE/(ADC_MAXVOLTAGE - ADC_COLOR_MINVOLTAGE)
+#define ADC_SCALED_RATIO	 ADC_MAXVOLTAGE/(ADC_MAXVOLTAGE - ADC_COLOR_MINVOLTAGE)
 #define ADC_MAXLEVEL		 1023L					/* 10 bit resolution */
 
 typedef struct {
@@ -339,19 +339,19 @@ U32 nx_color_read_mode_raw(U32 sensor) {
   return sensorval;
 }
 
-/** Normalize Raw Color Inputs to full ADC range. */
-U32 nx_color_normalize_input(U32 rawvalue) {
-	U32 normalized;
+/** Scale Raw Color Inputs to full ADC range. */
+U32 nx_color_scale_input(U32 rawvalue) {
+	U32 scaled;
 
 	/* Clamp to zero or positive value */
-	normalized = (rawvalue > ADC_COLOR_MINVOLTAGE) ? (rawvalue - normalized) : 0;
+	scaled = (rawvalue > ADC_COLOR_MINVOLTAGE) ? (rawvalue - normalized) : 0;
 
-	normalized = normalized * ADC_NORMALIZED_RATIO;		/* Expand value to full ADC Range */
+	scaled = scaled * ADC_SCALED_RATIO;		/* Expand value to full ADC Range */
 
 	/* Clamp to ADC_MAXLEVEL */
-	normalized = (normalized < ADC_MAXLEVEL) ? normalized : ADC_MAXLEVEL;
+	scaled = (scaled < ADC_MAXLEVEL) ? scaled : ADC_MAXLEVEL;
 
-	return normalized;
+	return scaled;
 }
 
 

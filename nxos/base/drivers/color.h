@@ -199,12 +199,12 @@ bool nx_color_read_all_raw(U32 sensor, color_values* rawvalues);
  */
 U32 nx_color_read_mode_raw(U32 sensor);
 
-/** Normalize Raw Color Inputs to full ADC range.
+/** Scale Raw Color Inputs to full ADC range.
  *
- * @param rawvalue Raw Color Value from ADC (unormalized).
+ * @param rawvalue Raw Color Value from ADC (unnormalized).
  *
  */
-U32 nx_color_normalize_input(U32 rawvalue);
+U32 nx_color_scale_input(U32 rawvalue);
 
 /** Detect color given raw inputs
  *
