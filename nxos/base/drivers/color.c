@@ -33,6 +33,27 @@
 #define COLOR_CAL_DATA_SIZE 52						/* sizeof color_cal_data */
 #define COLOR_CAL_CRC_SIZE   2						/* sizeof caldata_crc */
 
+/* Internal Color Detector Data Structure */
+static color_values min_rawcolor_lowthresh = {
+		{ 0, 65, 40, 48 }
+};
+static color_values min_rawcolor_highthresh = {
+		{ 0, 110, 70, 85 }
+};
+static color_values min_rawambience_highthresh = {
+		{ 0, 40, 30, 25 }
+};
+
+static color_values max_rawcolor_lowthresh = {
+		{ 0, 70, 70, 60 }
+};
+static color_values max_rawcolor_highthresh = {
+		{ 0, 140, 140, 120 }
+};
+static color_values max_rawambience_highthresh = {
+		{ 0, 140, 140, 110 }
+};
+
 /* Internal Color Bus Data Structure.
  * This should be updated only by the ISR */
 static volatile struct color_port {
@@ -348,24 +369,96 @@ U32 color_read_mode_raw(U32 sensor) {
  * code are empirical based on experimental data.
  */
 
-color_detected color_detector(color_values* rawvalues) {
+color_detected color_detector(color_values *rawvalues) {
 
-	color_detected theColor = COLOR_NONE;
+	color_detected theColor = COLOR_DETECT_UNKNOWN;
+	color_struct_colors dominantColor = COLOR_NONE;
+	color_struct_colors secondaryColor1 = COLOR_NONE, secondaryColor2 = COLOR_NONE;
 
-	if ((rawvalues[COLOR_RED] > rawvalues[COLOR_BLUE]) &&
-			(rawvalues[COLOR_RED] > rawvalues[COLOR_GREEN])) {
+	/* Determine Dominant Color */
+	if ((rawvalues->colorval[COLOR_RED] > rawvalues->colorval[COLOR_BLUE]) &&
+			(rawvalues->colorval[COLOR_RED] > rawvalues->colorval[COLOR_GREEN])) {
 		/* Red is Dominant */
-		/* Possible colors are: Red, Yellow, White, Black */
+		dominantColor = COLOR_RED;		/* Possible detected colors are: Red, Yellow, White, Black */
+		secondaryColor1 = COLOR_GREEN;
+		secondaryColor2 = COLOR_BLUE;
 
-	} else if (rawvalues[COLOR_GREEN] > rawvalues[COLOR_BLUE])) {
+	} else if (rawvalues->colorval[COLOR_GREEN] > rawvalues->colorval[COLOR_BLUE]) {
 		/* Green is Dominant */
-		/* Possible colors are: Green, Yellow, White, Black */
+		dominantColor = COLOR_GREEN;	/* Possible detected colors are: Green, Yellow, White, Black */
+		secondaryColor1 = COLOR_RED;
+		secondaryColor2 = COLOR_BLUE;
 
 	} else {
 		/* Blue is Dominant */
-		/* Possible colors are: Blue, White, Black */
-
+		dominantColor = COLOR_BLUE;		/* Possible detected colors are: Blue, White, Black */
+		secondaryColor1 = COLOR_RED;
+		secondaryColor2 = COLOR_GREEN;
 	}
+
+
+	/* Detect Black
+	 * < min dominant color threshold for low reflectance objects
+	 * else < mid ambience threhold(s) for high reflectance objects
+	 */
+	if ((rawvalues->colorval[dominantColor] < min_rawcolor_lowthresh.colorval[dominantColor]) ||
+		((rawvalues->colorval[dominantColor] < min_rawcolor_highthresh.colorval[dominantColor]) &&
+		(rawvalues->colorval[COLOR_NONE] < min_rawambience_highthresh.colorval[dominantColor])))
+			theColor = COLOR_DETECT_BLACK;
+	/* mid intensity (color differential exceeds thresholds) */
+	else {
+		switch (dominantColor) {
+		case COLOR_RED:
+			if ((((rawvalues->colorval[COLOR_BLUE] * 11) / 8) < rawvalues->colorval[COLOR_GREEN]) &&
+				  ((rawvalues->colorval[COLOR_GREEN] * 2) > rawvalues->colorval[COLOR_RED]))
+				theColor = COLOR_DETECT_YELLOW;
+			else if (((rawvalues->colorval[COLOR_GREEN] * 7) / 4) < rawvalues->colorval[COLOR_RED])
+				theColor = COLOR_DETECT_RED;
+			break;
+
+		case COLOR_GREEN:
+			if ((rawvalues->colorval[COLOR_BLUE] * 2) < rawvalues->colorval[COLOR_RED])
+				theColor = COLOR_DETECT_YELLOW;
+			else if ((((rawvalues->colorval[COLOR_RED] * 5) / 4) < rawvalues->colorval[COLOR_GREEN]) ||
+					 (((rawvalues->colorval[COLOR_BLUE] * 5) / 4) < rawvalues->colorval[COLOR_GREEN]))
+				theColor = COLOR_DETECT_GREEN;
+			break;
+
+		case COLOR_BLUE:
+					/* Low Reflectance */
+			if (((((rawvalues->colorval[COLOR_RED] * 48) / 32) < rawvalues->colorval[COLOR_BLUE]) &&
+				  (((rawvalues->colorval[COLOR_GREEN] * 48) / 32) < rawvalues->colorval[COLOR_BLUE])) ||
+					/* High Reflectance */
+				((((rawvalues->colorval[COLOR_RED] * 58) / 32) < rawvalues->colorval[COLOR_BLUE]) &&
+				  (((rawvalues->colorval[COLOR_GREEN] * 58) / 32) < rawvalues->colorval[COLOR_BLUE])))
+				theColor = COLOR_DETECT_BLUE;
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	/* High Reflectance, insufficient color differentials */
+	if (theColor == COLOR_DETECT_UNKNOWN) {
+		if ((rawvalues->colorval[secondaryColor1] < max_rawcolor_lowthresh.colorval[dominantColor]) ||
+			(rawvalues->colorval[secondaryColor2] < max_rawcolor_lowthresh.colorval[dominantColor]) ||
+			((rawvalues->colorval[dominantColor] < max_rawcolor_highthresh.colorval[dominantColor]) &&
+			(rawvalues->colorval[COLOR_NONE] < max_rawambience_highthresh.colorval[dominantColor])))
+
+				theColor = COLOR_DETECT_BLACK;
+
+		else if ((dominantColor == COLOR_BLUE) &&
+				 ((((rawvalues->colorval[secondaryColor1] * 9) / 8) < rawvalues->colorval[dominantColor]) ||
+				  (((rawvalues->colorval[secondaryColor2] * 9) / 8) < rawvalues->colorval[dominantColor])))
+
+				theColor = COLOR_DETECT_BLUE;
+		else
+			/* High intensity for all LED color channels */
+				theColor = COLOR_DETECT_WHITE;
+
+		}
+
 	return theColor;
 }
 
@@ -376,6 +469,7 @@ void nx__color_adc_get(U32 aden, color_struct_colors index) {
 
   int	sensor;
 
+  const nx__sensors_adcmap *adchan;
   volatile struct color_port *p;
 
   /* First sample */
@@ -383,7 +477,7 @@ void nx__color_adc_get(U32 aden, color_struct_colors index) {
 
   for (sensor=0; sensor<NXT_N_SENSORS; sensor++) {
 	  p = &color_bus_state[sensor];
-	  const nx__sensors_adcmap *adchan = nx__sensors_get_adcmap(sensor);
+	  adchan = nx__sensors_get_adcmap(sensor);
 	  if (adchan->chn & aden) {
 		  while (!((*AT91C_ADC_SR) & adchan->chn));
 		  p->advals.colorval[index] = *(adchan->ptr);
@@ -395,7 +489,7 @@ void nx__color_adc_get(U32 aden, color_struct_colors index) {
 
   for (sensor=0; sensor<NXT_N_SENSORS; sensor++) {
 	  p = &color_bus_state[sensor];
-	  const nx__sensors_adcmap *adchan = nx__sensors_get_adcmap(sensor);
+	  adchan = nx__sensors_get_adcmap(sensor);
 	  if (adchan->chn & aden) {
 		  while (!((*AT91C_ADC_SR) & adchan->chn));
 		  p->advals.colorval[index] += *(adchan->ptr);
