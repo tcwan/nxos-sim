@@ -183,7 +183,7 @@ color_mode nx_color_get_mode(U32 sensor);
  *
  * @return True if values could be read, false otherwise (e.g., in Calibration mode).
  */
-bool color_read_all_raw(U32 sensor, color_values* rawvalues);
+bool nx_color_read_all_raw(U32 sensor, color_values* rawvalues);
 
 /** Read color sensor raw value for given mode
  *
@@ -197,19 +197,32 @@ bool color_read_all_raw(U32 sensor, color_values* rawvalues);
  *
  * @returns 0 value if values cannot be read (e.g., in Calibration mode).
  */
-U32 color_read_mode_raw(U32 sensor);
+U32 nx_color_read_mode_raw(U32 sensor);
+
+/** Normalize Raw Color Inputs to full ADC range.
+ *
+ * @param rawvalue Raw Color Value from ADC (unormalized).
+ *
+ */
+U32 nx_color_normalize_input(U32 rawvalue);
 
 /** Detect color given raw inputs
  *
  *  Return the detected color enum for the given raw inputs.
- *  Only the value for the active color_mode are valid.
+ *  The color mode is assumed to be COLOR_MODE_FULL as all
+ *  channels are used for the detection.
  *
  * @param rawvalues A pointer to an object of color_values where the
- *   read values will be stored.
+ *   uncalibrated read values will be stored.
+ *   NOTE: The values will be modified if color calibration desired
+ *         (i.e., caldata is not NULL)
  *
- * @returns COLOR_DETECT_UNKNOWN if color no recognized
+ * @param caldata A pointer to the calibration data for the color sensor.
+ *                NULL means that no calibration is required.
+ *
+ * @returns COLOR_DETECT_UNKNOWN if color is not recognized
  */
-color_detected color_detector(color_values* rawvalues);
+color_detected nx_color_detector(color_values* rawvalues, color_cal_data *caldata);
 
 /*@}*/
 /*@}*/

@@ -50,6 +50,10 @@ void nx__colorbus_setup_rxbyte(U32 sensor);
  */
 bool nx__color_calibration_crc(color_cal_data *caldataptr, U16 crcval);
 
+/** Adjust Raw Inputs using Color Calibration Data.
+ */
+void nx__color_calibrate_inputs(color_values *rawvalues, color_cal_data *caldata);
+
 /*@}*/
 /*@}*/
 

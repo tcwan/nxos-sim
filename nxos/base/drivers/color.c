@@ -33,8 +33,14 @@
 #define COLOR_CAL_DATA_SIZE 52						/* sizeof color_cal_data */
 #define COLOR_CAL_CRC_SIZE   2						/* sizeof caldata_crc */
 
+/* Color Sensor Input Voltage Calibration. */
+#define ADC_COLOR_MINVOLTAGE  214L					/* Min color sensor voltage (mV). */
+#define ADC_MAXVOLTAGE  	 3300L					/* Max ADC voltage (mV) */
+#define ADC_NORMALIZED_RATIO ADC_MAXVOLTAGE/(ADC_MAXVOLTAGE - ADC_COLOR_MINVOLTAGE)
+#define ADC_MAXLEVEL		 1023L					/* 10 bit resolution */
+
 typedef struct {
-    U8 colorval[NO_OF_COLORS];								/* 4 32-bit Colors (10 bit significance) */
+    U8 colorval[NO_OF_COLORS];								/* 4 8-bit thresholds */
 } color_threshvals;
 
 /* Internal Color Detector Data Structure */
@@ -290,7 +296,7 @@ color_mode nx_color_get_mode(U32 sensor) {
 }
 
 /** Read all color sensor raw values */
-bool color_read_all_raw(U32 sensor, color_values* rawvalues) {
+bool nx_color_read_all_raw(U32 sensor, color_values* rawvalues) {
   volatile struct color_port *p;
 
   if ((sensor >= NXT_N_SENSORS) || (nx_color_detect(sensor) != COLOR_READY))
@@ -304,7 +310,7 @@ bool color_read_all_raw(U32 sensor, color_values* rawvalues) {
 }
 
 /** Read color sensor raw value for given mode */
-U32 color_read_mode_raw(U32 sensor) {
+U32 nx_color_read_mode_raw(U32 sensor) {
   volatile struct color_port *p;
   U32 sensorval = 0;
 
@@ -333,9 +339,28 @@ U32 color_read_mode_raw(U32 sensor) {
   return sensorval;
 }
 
+/** Normalize Raw Color Inputs to full ADC range. */
+U32 nx_color_normalize_input(U32 rawvalue) {
+	U32 normalized;
+
+	/* Clamp to zero or positive value */
+	normalized = (rawvalue > ADC_COLOR_MINVOLTAGE) ? (rawvalue - normalized) : 0;
+
+	normalized = normalized * ADC_NORMALIZED_RATIO;		/* Expand value to full ADC Range */
+
+	/* Clamp to ADC_MAXLEVEL */
+	normalized = (normalized < ADC_MAXLEVEL) ? normalized : ADC_MAXLEVEL;
+
+	return normalized;
+}
+
+
 /** Detect Colors given raw input values
  * Algorithm reverse engineered from
  * NXT Firmware code in c_input.c
+ *
+ * Pass a valid Calibration Data structure pointer
+ * if calibration should be done (default case).
  *
  * The available LEGO brick colors are:
  *   BLACK, BLUE, GREEN, YELLOW, RED, WHITE
@@ -373,11 +398,14 @@ U32 color_read_mode_raw(U32 sensor) {
  * code are empirical based on experimental data.
  */
 
-color_detected color_detector(color_values *rawvalues) {
+color_detected nx_color_detector(color_values *rawvalues, color_cal_data *caldata) {
 
 	color_detected theColor = COLOR_DETECT_UNKNOWN;
 	color_struct_colors dominantColor = COLOR_NONE;
 	color_struct_colors secondaryColor1 = COLOR_NONE, secondaryColor2 = COLOR_NONE;
+
+	if (caldata)
+		nx__color_calibrate_inputs(rawvalues, caldata);
 
 	/* Determine Dominant Color */
 	if ((rawvalues->colorval[COLOR_RED] > rawvalues->colorval[COLOR_BLUE]) &&
@@ -465,6 +493,7 @@ color_detected color_detector(color_values *rawvalues) {
 
 	return theColor;
 }
+
 
 /* [Internal Routine]
  * Initiate A/D conversion for all active Color Sensors
@@ -584,6 +613,31 @@ bool nx__color_calibration_crc(color_cal_data *caldataptr, U16 crcval) {
 		}
 	}
 	return (crc_checkval == crcval);
+}
+
+/** [Internal Routine]
+ * Adjust Raw Inputs using Color Calibration Data
+ * Code adapted from LEGO NXT Firmware
+ */
+void nx__color_calibrate_inputs(color_values *rawvalues, color_cal_data *caldata) {
+	int calrange;
+	color_struct_colors color_iter;
+	U32 colorval_none = rawvalues->colorval[COLOR_NONE];
+
+	calrange = (colorval_none < caldata->calibration_limits[1]) ? 2 :
+			   ((colorval_none < caldata->calibration_limits[0]) ? 1 : 0);
+
+	for (color_iter = COLOR_RED; color_iter < NO_OF_COLORS; color_iter++) {
+		if (rawvalues->colorval[color_iter] > colorval_none)
+			rawvalues->colorval[color_iter] = ((rawvalues->colorval[color_iter] - colorval_none)
+												* caldata->calibration[calrange][color_iter]) / 65536;
+	}
+
+	/* Convert COLOR_NONE raw reading to full scale */
+	// FIXME
+	rawvalues->colorval[COLOR_NONE] = (rawvalues->colorval[COLOR_NONE]
+	                                   * caldata->calibration[calrange][COLOR_NONE]) / 65536;
+
 }
 
 
