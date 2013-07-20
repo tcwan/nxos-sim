@@ -39,6 +39,21 @@
 #define ADC_SCALED_RATIO	 ADC_MAXVOLTAGE/(ADC_MAXVOLTAGE - ADC_COLOR_MINVOLTAGE)
 #define ADC_MAXLEVEL		 1023L					/* 10 bit resolution */
 
+static char colormode_str[COLOR_NUM_MODES][3] = {
+  "Off",
+  "RGB",
+  "[R]",
+  "[G]",
+  "[B]"
+};
+
+static char colorstatus_str[4][5] = {
+  " N/A ",
+  " Cal ",
+  "Ready",
+  "Exit "
+};
+
 typedef struct {
     U8 colorval[NO_OF_COLORS];								/* 4 8-bit thresholds */
 } color_threshvals;
@@ -112,15 +127,6 @@ static volatile struct color_port {
 
 /* Forward declarations. */
 static void color_isr(void);
-
-/* Configuration parameter for initializing Color Sensor device */
-static const U8 color_mode_setup[COLOR_NUM_MODES] = {
-		17, /* COLOR_MODE_NONE */
-		13, /* COLOR_FULL */
-		14, /* COLOR_RED */
-		15, /* COLOR_GREEN */
-		16, /* COLOR_BLUE */
-};
 
 /* Color Sensor Default to None (LEDs off) */
 static color_config sensors_colorconfig[NXT_N_SENSORS] = {
@@ -286,13 +292,41 @@ void nx_color_reset(U32 sensor, color_mode mode) {
 
 /** Display the color sensor's information. */
 void nx_color_info(U32 sensor) {
-	/* FIXME */
+
+	color_cal_data *caldataptr;
+
+	if (sensor >= NXT_N_SENSORS)
+	   return;
+
+	caldataptr = color_bus_state[sensor].caldataptr;
+	nx_display_string("LEGO Color Sensor\n");
+	nx_display_string("Mode: LED ");
+	nx_display_string(colormode_str[nx_color_get_mode(sensor)]);
+	nx_display_end_line();
+	nx_display_string("Status: ");
+	nx_display_string(colorstatus_str[nx_color_get_status(sensor)]);
+	if (caldataptr) {
+		nx_display_string("Cal Limits:\n");
+		nx_display_string(" [0] = ");
+		nx_display_uint(caldataptr->calibration_limits[0]);
+		nx_display_end_line();
+		nx_display_string(" [1] = ");
+		nx_display_uint(caldataptr->calibration_limits[1]);
+		nx_display_end_line();
+
+	}
+
 }
 
 
 /** Get the current LED mode of the given LEGO Color Sensor */
-color_mode nx_color_get_mode(U32 sensor) {
+inline color_mode nx_color_get_mode(U32 sensor) {
   return sensors_colorconfig[sensor].mode;
+}
+
+/** Get the current status of the given LEGO Color Sensor */
+inline color_status nx_color_get_status(U32 sensor) {
+  return sensors_colorconfig[sensor].status;
 }
 
 /** Read all color sensor raw values */

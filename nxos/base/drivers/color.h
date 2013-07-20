@@ -75,8 +75,8 @@ typedef enum
  *
  * These parameters are configuration requests to the actual SoftMAC driver
  *
- * mode	Color sensing mode (NONE, FULL, RED, GREEN, BLUE)
- * status Color sensor status request (updated by nx_color_detect())
+ * @mode	Color sensing mode (NONE, FULL, RED, GREEN, BLUE)
+ * @status  Color sensor status request (updated by nx_color_detect())
  */
 typedef struct {
 	color_mode mode;		/* Color Sensor LED mode */
@@ -169,6 +169,15 @@ void nx_color_info(U32 sensor);
  * given sensor port.
  */
 color_mode nx_color_get_mode(U32 sensor);
+
+/** Get the current status of the LEGO Color Sensor on port @a sensor.
+ *
+ * @param sensor The sensor port number.
+ * *
+ * @return Returns the status of the LEGO Color Sensor on the
+ * given sensor port.
+ */
+color_status nx_color_get_status(U32 sensor);
 
 /** Read all color sensor raw values
  *
