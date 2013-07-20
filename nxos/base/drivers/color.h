@@ -20,7 +20,7 @@
 /** @addtogroup driver */
 /*@{*/
 
-/** @defgroup color color sensor SoftMAC driver
+/** @defgroup color Lego Color Sensor SoftMAC driver
  *
  * The Color Sensor SoftMAC driver controls the LEGO Color Sensor over the NXT sensor
  * ports.
@@ -48,7 +48,7 @@ typedef enum
   COLOR_DETECT_YELLOW,
   COLOR_DETECT_RED,
   COLOR_DETECT_WHITE,
-  NUM_COLOR_DETECT,
+  NO_OF_DETECTED_COLORS,
 } color_detected;
 
 /** Color Sensor mode. */
@@ -100,7 +100,7 @@ typedef enum
 	COLOR_RED,
 	COLOR_GREEN,
 	COLOR_BLUE,
-	NO_OF_COLORS
+	NO_OF_COLOR_CHANNELS
 } color_struct_colors;
 
 /** Color Sensor calibration data structure.
@@ -109,7 +109,7 @@ typedef enum
  *
  */
 typedef struct {
-    U32 calibration[NO_OF_CALPOINTS][NO_OF_COLORS];			/**< 3 Cal Points x 4 Cal Colors = 12 32-bit values */
+    U32 calibration[NO_OF_CALPOINTS][NO_OF_COLOR_CHANNELS];	/**< 3 Cal Points x 4 Cal Colors = 12 32-bit values */
     U16 calibration_limits[NO_OF_CALPOINTS - 1];			/**< 2 16-bit cal limits */
 } color_cal_data;
 
@@ -120,7 +120,7 @@ typedef struct {
  * @note The raw values are not scaled. Scaled valued are obtained via nx_color_scale_input()
  */
 typedef struct {
-    U32 colorval[NO_OF_COLORS];								/**< 4 32-bit Colors (10 bit significance) */
+    U32 colorval[NO_OF_COLOR_CHANNELS];						/**< 4 32-bit Colors (10 bit significance) */
 } color_values;
 
 /** Initialize a LEGO Color Sensor on port @a sensor.

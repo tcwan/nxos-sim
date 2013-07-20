@@ -54,7 +54,7 @@ static char colorstatus_str[4][6] = {
   "Exit "
 };
 
-static char colordetected_str[NUM_COLOR_DETECT][8] = {
+static char colordetected_str[NO_OF_DETECTED_COLORS][8] = {
   "Unknown",
   "Black  ",
   "Blue   ",
@@ -65,7 +65,7 @@ static char colordetected_str[NUM_COLOR_DETECT][8] = {
 };
 
 typedef struct {
-    U8 colorval[NO_OF_COLORS];								/* 4 8-bit thresholds */
+    U8 colorval[NO_OF_COLOR_CHANNELS];							/* 4 8-bit thresholds */
 } color_threshvals;
 
 /* Internal Color Detector Data Structure */
@@ -541,7 +541,7 @@ color_detected nx_color_detector(color_values *rawvalues, color_cal_data *caldat
 /** Convert detected color to string for display
  */
 char *nx_color2str(color_detected thecolor) {
-	if (thecolor < NUM_COLOR_DETECT)
+	if (thecolor < NO_OF_DETECTED_COLORS)
 		return colordetected_str[thecolor];
 	else
 		return NULL;
@@ -594,7 +594,7 @@ void nx__color_adc_get_samples(U32 aden, U32 adclk) {
 
   *AT91C_ADC_CHER = aden;							/* Enable ADC Channels */
 
-  for (colorindex = 0; colorindex < NO_OF_COLORS; colorindex++) {
+  for (colorindex = 0; colorindex < NO_OF_COLOR_CHANNELS; colorindex++) {
 
 	  nx__color_adc_get(aden, colorindex);
 
@@ -679,7 +679,7 @@ void nx__color_calibrate_inputs(color_values *rawvalues, color_cal_data *caldata
 	calrange = (colorval_none < caldata->calibration_limits[1]) ? 2 :
 			   ((colorval_none < caldata->calibration_limits[0]) ? 1 : 0);
 
-	for (color_iter = COLOR_RED; color_iter < NO_OF_COLORS; color_iter++) {
+	for (color_iter = COLOR_RED; color_iter < NO_OF_COLOR_CHANNELS; color_iter++) {
 		if (rawvalues->colorval[color_iter] > colorval_none)
 			rawvalues->colorval[color_iter] = ((rawvalues->colorval[color_iter] - colorval_none)
 												* caldata->calibration[calrange][color_iter]) / 65536;

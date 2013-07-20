@@ -19,7 +19,7 @@
 /** @addtogroup driverinternal */
 /*@{*/
 
-/** @defgroup colorinternal Color interface */
+/** @defgroup colorinternal Lego Color Sensor Interface */
 /*@{*/
 
 /** Initialize the NXT to allow Color Sensor Support.
