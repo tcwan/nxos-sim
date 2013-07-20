@@ -39,7 +39,7 @@
 #define ADC_SCALED_RATIO	 ADC_MAXVOLTAGE/(ADC_MAXVOLTAGE - ADC_COLOR_MINVOLTAGE)
 #define ADC_MAXLEVEL		 1023L					/* 10 bit resolution */
 
-static char colormode_str[COLOR_NUM_MODES][3] = {
+static char colormode_str[COLOR_NUM_MODES][4] = {
   "Off",
   "RGB",
   "[R]",
@@ -47,11 +47,21 @@ static char colormode_str[COLOR_NUM_MODES][3] = {
   "[B]"
 };
 
-static char colorstatus_str[4][5] = {
+static char colorstatus_str[4][6] = {
   " N/A ",
   " Cal ",
   "Ready",
   "Exit "
+};
+
+static char colordetected_str[NUM_COLOR_DETECT][8] = {
+  "Unknown",
+  "Black  ",
+  "Blue   ",
+  "Green  ",
+  "Yellow ",
+  "Red    ",
+  "White  ",
 };
 
 typedef struct {
@@ -528,6 +538,14 @@ color_detected nx_color_detector(color_values *rawvalues, color_cal_data *caldat
 	return theColor;
 }
 
+/** Convert detected color to string for display
+ */
+char *nx_color2str(color_detected thecolor) {
+	if (thecolor < NUM_COLOR_DETECT)
+		return colordetected_str[thecolor];
+	else
+		return NULL;
+}
 
 /* [Internal Routine]
  * Initiate A/D conversion for all active Color Sensors

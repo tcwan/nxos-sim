@@ -48,6 +48,7 @@ typedef enum
   COLOR_DETECT_YELLOW,
   COLOR_DETECT_RED,
   COLOR_DETECT_WHITE,
+  NUM_COLOR_DETECT,
 } color_detected;
 
 /** Color Sensor mode. */
@@ -241,6 +242,14 @@ U32 nx_color_scale_input(U32 rawvalue);
  * @returns COLOR_DETECT_UNKNOWN if color is not recognized
  */
 color_detected nx_color_detector(color_values* rawvalues, color_cal_data *caldata);
+
+/** Convert detected color to string for display
+ *
+ * @param thecolor	color_detected enum
+ *
+ * @returns	The detected color string for the given enum.
+ */
+char *nx_color2str(color_detected thecolor);
 
 /*@}*/
 /*@}*/
