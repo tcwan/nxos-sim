@@ -75,12 +75,12 @@ typedef enum
  *
  * These parameters are configuration requests to the actual SoftMAC driver
  *
- * @mode	Color sensing mode (NONE, FULL, RED, GREEN, BLUE)
- * @status  Color sensor status request (updated by nx_color_detect())
+ * mode	Color sensing mode (NONE, FULL, RED, GREEN, BLUE)
+ * status  Color sensor status request (updated by nx_color_detect())
  */
 typedef struct {
-	color_mode mode;		/* Color Sensor LED mode */
-	color_status status;	/* Color Sensor status */
+	color_mode mode;		/**< Color Sensor LED mode */
+	color_status status;	/**< Color Sensor status */
 } color_config;
 
 /** Color Sensor calibration point enums. */
@@ -102,25 +102,34 @@ typedef enum
 	NO_OF_COLORS
 } color_struct_colors;
 
-/** Color Sensor calibration data structure. */
+/** Color Sensor calibration data structure.
+ *
+ * Returned by the LEGO Color Sensor
+ *
+ */
 typedef struct {
-    U32 calibration[NO_OF_CALPOINTS][NO_OF_COLORS];			/* 3 Cal Points x 4 Cal Colors = 12 32-bit values */
-    U16 calibration_limits[NO_OF_CALPOINTS - 1];			/* 2 16-bit cal limits */
+    U32 calibration[NO_OF_CALPOINTS][NO_OF_COLORS];			/**< 3 Cal Points x 4 Cal Colors = 12 32-bit values */
+    U16 calibration_limits[NO_OF_CALPOINTS - 1];			/**< 2 16-bit cal limits */
 } color_cal_data;
 
-/** Color Sensor A/D values data structure. */
+/** Color Sensor A/D values data structure.
+ *
+ * Read from LEGO Color Sensor
+ *
+ * @note The raw values are not scaled. Scaled valued are obtained via nx_color_scale_input()
+ */
 typedef struct {
-    U32 colorval[NO_OF_COLORS];								/* 4 32-bit Colors (10 bit significance) */
+    U32 colorval[NO_OF_COLORS];								/**< 4 32-bit Colors (10 bit significance) */
 } color_values;
 
 /** Initialize a LEGO Color Sensor on port @a sensor.
  *
  * @param sensor The sensor port number.
  * @param mode   The color sensing mode (NONE, FULL, RED, GREEN, BLUE)
- * @param color_cal_data Calibration data pointer (must be pre-allocated)
+ * @param caldata Calibration data pointer (must be pre-allocated)
  *
- * @note If no Color Sensor device were registered, a call to nx_color_register()
- * will setup the Color isr.
+ * @note If no Color Sensor device were registered, a call to nx_color_init()
+ * will enable the Color isr.
  */
 void nx_color_init(U32 sensor, color_mode mode, color_cal_data *caldata);
 

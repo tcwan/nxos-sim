@@ -30,7 +30,7 @@ void nx__color_init(void);
  */
 void nx__color_check_disable_isr(void);
 
-/* Initiate A/D conversion for all active Color Sensors
+/** Initiate A/D conversion for all active Color Sensors
  */
 void nx__color_adc_get(U32 aden, color_struct_colors index);
 
