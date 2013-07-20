@@ -40,6 +40,7 @@
 #include "base/drivers/motors.h"
 #include "base/drivers/usb.h"
 #include "base/drivers/radar.h"
+#include "base/drivers/color.h"
 #include "base/drivers/ht_compass.h"
 #include "base/drivers/ht_accel.h"
 #include "base/drivers/ht_gyro.h"
@@ -565,6 +566,8 @@ static int tests_command(char *buffer) {
     tests_tachy();
   else if (streq(buffer, "radar"))
     tests_radar();
+  else if (streq(buffer, "legocolor"))
+    tests_legocolor();
   else if (streq(buffer, "ht_compass"))
     tests_ht_compass();
   else if (streq(buffer, "ht_accel"))
@@ -927,6 +930,64 @@ void tests_radar(void) {
   }
 
   nx_radar_close(sensor);
+  goodbye();
+}
+
+void tests_legocolor(void) {
+#ifdef TEST_PORT4_I2C
+  U32 sensor = 3;
+#else
+  U32 sensor = 2;
+#endif
+
+  color_cal_data calibration_data;
+  color_mode mode;
+  color_values rawColor;
+  color_detected theColor;
+
+  hello();
+
+
+  /* Test all modes */
+  for (mode = COLOR_MODE_NONE;  mode < COLOR_NUM_MODES; mode++) {
+	nx_display_clear();
+	nx_display_cursor_set_pos(0, 0);
+	nx_display_string("Discovering...\n");
+
+	nx_color_init(sensor, mode, &calibration_data);
+	while (COLOR_NOTFOUND == nx_color_detect(sensor)) {
+	  nx_display_string("Error! Retrying\n");
+	  nx_systick_wait_ms(500);
+
+	  nx_display_clear();
+	  nx_display_cursor_set_pos(0, 0);
+	  nx_display_string("Discovering...\n");
+    }
+
+	while (COLOR_READY != nx_color_detect(sensor)) {
+	  nx_color_info(sensor);
+	  nx_systick_wait_ms(500);
+	  nx_display_cursor_set_pos(0, 1);
+	}
+	nx_color_info(sensor);
+
+	while (nx_avr_get_button() != BUTTON_OK);
+
+	while (nx_avr_get_button() != BUTTON_RIGHT) {
+	    // Go on and read and display the values.
+
+		nx_color_read_all_raw(sensor, &rawColor);
+		theColor = nx_color_detector(&rawColor, &calibration_data);
+	    nx_display_cursor_set_pos(0, 6);
+	    nx_display_string("Color: ");
+	    nx_display_string(nx_color2str(theColor));
+	    nx_systick_wait_ms(1000);
+	}
+
+	nx_color_close(sensor);
+
+  }
+
   goodbye();
 }
 
@@ -1378,6 +1439,7 @@ void tests_all(void) {
   tests_sensors();
   tests_sysinfo();
   tests_radar();
+  tests_legocolor();
   tests_fs();
   tests_ht_compass();
   tests_ht_accel();

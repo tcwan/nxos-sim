@@ -22,6 +22,7 @@ void tests_tachy(void);
 void tests_usb(void);
 void tests_usb_hardcore(void);
 void tests_radar(void);
+void tests_legocolor(void);
 void tests_ht_compass(void);
 void tests_ht_accel(void);
 void tests_ht_gyro(void);
