@@ -23,7 +23,7 @@
  * sensor from LEGO does not.
  *
  */
-#define TEST_PORT4_I2C
+#undef TEST_PORT4_I2C
 
 #include "base/types.h"
 #include "base/interrupts.h"
@@ -43,11 +43,13 @@
 #include "base/drivers/color.h"
 #include "base/drivers/ht_compass.h"
 #include "base/drivers/ht_accel.h"
+#include "base/drivers/ht_color.h"
 #include "base/drivers/ht_gyro.h"
 #include "base/drivers/ht_irlink.h"
 #include "base/drivers/digitemp.h"
 #include "base/drivers/bt.h"
 #include "base/drivers/_uart.h"
+#include "base/drivers/i2c_memory.h"
 
 #include "base/lib/fantom/fantom.h"
 #include "armdebug/Debugger/debug_stub.h"
@@ -572,6 +574,8 @@ static int tests_command(char *buffer) {
     tests_ht_compass();
   else if (streq(buffer, "ht_accel"))
     tests_ht_accel();
+  else if (streq(buffer, "ht_color"))
+    tests_ht_color();
   else if (streq(buffer, "ht_gyro"))
     tests_ht_gyro();
   else if (streq(buffer, "ht_irlink"))
@@ -1022,7 +1026,11 @@ void tests_ht_compass(void) {
 }
 
 void tests_ht_accel(void) {
+#ifdef TEST_PORT4_I2C
+  U32 sensor = 3;
+#else
   U32 sensor = 2;
+#endif
   hello();
   nx_display_clear();
   nx_display_cursor_set_pos(0, 0);
@@ -1060,6 +1068,178 @@ void tests_ht_accel(void) {
   }
 
   ht_accel_close(sensor);
+  goodbye();
+}
+
+bool ht_color_perform_calibration(U32 sensor, U8 mode) {
+
+	U8 str[1] = { mode };
+
+	switch (mode) {
+	case HT_COLOR_CAL_WHITEPOINT:
+	case HT_COLOR_CAL_BLACKPOINT:
+		return (nx_i2c_memory_write(sensor, HT_COLOR_COMMAND, str, 1) == I2C_ERR_OK);
+		break;
+	default:
+		nx_display_string("Unknown Cal. Command!\n");
+	    nx_systick_wait_ms(1000);
+	    return FALSE;
+		break;
+	}
+}
+
+/** Calibrate the HT Color Sensor
+ *
+ * @param sensor The sensor port number.
+ *
+ * Note: This function is DANGEROUS!
+ */
+void ht_color_calibrate(void) {
+   /** Reference:
+    * 	   http://www.mindstorms.rwth-aachen.de/subversion/branches/livecd/RWTHMindstormsNXT/CalibrateColor.m
+    *
+	* Description
+	*   Do not use this function with the HiTechnic Color Sensor V2. It has a
+	*   bright white flashing LED.
+	*   This function is intended for the HiTechnic Color Sensor V1 (milky,
+	*   weak white LED).
+	*
+	*   Calibrate the color sensor with white and black reference value.
+	*   It's not known whether calibration of the color sensor makes sense.
+	*   HiTechnic doku says nothing, some people say it is necessary,
+	*   but it works and has effect ;-). The sensor LEDs make a short flash
+	*   after successful calibration. When calibrated, the sensor keeps this
+	*   information in non-volatile memory.
+	*   There are two different modes for calibration:
+	* * mode = 1: white balance calibration
+	*          Puts the sensor into white balance calibration mode. For best results
+	*          the sensor should be pointed at a diffuse white surface at a distance
+	*          of approximately 15mm before calling this method. After a fraction of
+	*          a second the sensor lights will flash and the calibration is
+	*          done.
+	* * mode = 2: black level calibration
+	*          Puts the sensor into black/ambient level calibration mode. For best
+	*          results the sensor should be pointed in a direction with no obstacles
+	*          for 50cm or so. This reading the sensor will use as a base level for
+	*          other readings. After a fraction of a second the sensor lights will
+	*          flash and the calibration is done. When calibrated, the sensor keeps
+	*          this information in non-volatile memory.
+	*
+	*   Author: Rainer Schnitzler, Linus Atorf (see AUTHORS)
+	*   Date: 2010/09/16
+	*   Copyright: 2007-2011, RWTH Aachen University
+	*/
+#ifdef TEST_PORT4_I2C
+  U32 sensor = 3;
+#else
+  U32 sensor = 2;
+#endif
+
+	  bool status;
+
+	  nx_display_clear();
+	  nx_display_cursor_set_pos(0, 0);
+	  nx_display_string("HT Color Sensor\n");
+	  nx_display_string("Cal on Port ");
+	  nx_display_int(sensor);
+	  nx_display_end_line();
+	  nx_display_string("* For V1 Only *\n\n");
+
+
+
+	  nx_display_string("White Point Cal:\n");
+	  nx_display_string("15 mm (dif surf)\n");
+	  nx_display_string("Press OK...\n");
+	  while(nx_avr_get_button() != BUTTON_OK);
+
+	  nx_display_clear();
+	  nx_display_cursor_set_pos(0, 0);
+
+	  ht_color_init(sensor);
+	  if( ! ht_color_detect(sensor) ) {
+	    nx_display_string("No color!\n");
+	    goodbye();
+	    return;
+	  }
+
+	  status = ht_color_perform_calibration(sensor, HT_COLOR_CAL_WHITEPOINT);
+	  if (! status) {
+		  nx_display_string("White Point Cal failed!\n");
+		  nx_systick_wait_ms(1000);
+		  while(nx_avr_get_button() != BUTTON_OK);
+		  return;
+	  }
+
+	  nx_systick_wait_ms(1000);
+	  nx_display_string("Black Point Cal:\n");
+	  nx_display_string(">50 cm (no obs)\n");
+	  nx_display_string("Press OK...\n");
+	  while(nx_avr_get_button() != BUTTON_OK);
+	  status = ht_color_perform_calibration(sensor, HT_COLOR_CAL_BLACKPOINT);
+	  if (! status) {
+		  nx_display_string("Black Point Cal failed!\n");
+		  nx_systick_wait_ms(1000);
+		  while(nx_avr_get_button() != BUTTON_OK);
+		  return;
+	  }
+
+	  nx_display_string("Calibration done!\n");
+	  nx_systick_wait_ms(1000);
+	  ht_color_close(sensor);
+
+	return;
+}
+
+void tests_ht_color(void) {
+#ifdef TEST_PORT4_I2C
+  U32 sensor = 3;
+#else
+  U32 sensor = 2;
+#endif
+  hello();
+  nx_display_clear();
+  nx_display_cursor_set_pos(0, 0);
+  nx_display_string("Test of ht_color\n\n");
+  //nx_i2c_init();
+  nx_display_string("Press OK to stop\n");
+  ht_color_init(sensor);
+
+  if( ! ht_color_detect(sensor) ) {
+    nx_display_string("No color!\n");
+    goodbye();
+    return;
+  }
+
+  ht_color_info(sensor);
+
+  ht_color_values values;
+  while(nx_avr_get_button() != BUTTON_OK) {
+    if ( ! ht_color_read_values(sensor, &values) ) {
+        nx_display_string("Error reading!");
+        break;
+    }
+    nx_display_cursor_set_pos(0, 5);
+    nx_display_string("#: ");
+    nx_display_int(values.colornum);
+    nx_display_string("      ");
+    nx_display_cursor_set_pos(9, 5);
+    nx_display_string("R: ");
+    nx_display_int(values.redval);
+    nx_display_string("      ");
+    nx_display_cursor_set_pos(0, 6);
+    nx_display_string("G: ");
+    nx_display_int(values.greenval);
+    nx_display_string("      ");
+    nx_display_cursor_set_pos(9, 6);
+    nx_display_string("B: ");
+    nx_display_int(values.blueval);
+    nx_display_string("      ");
+    nx_display_end_line();
+
+    nx_systick_wait_ms(100);
+  }
+
+  ht_color_close(sensor);
   goodbye();
 }
 
