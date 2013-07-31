@@ -966,7 +966,9 @@ void tests_legocolor(void) {
 	  nx_display_clear();
 	  nx_display_cursor_set_pos(0, 0);
 	  nx_display_string("Discovering...\n");
-    }
+	  nx_color_init(sensor, mode, &calibration_data);
+
+	}
 
 	while (COLOR_READY != nx_color_detect(sensor)) {
 	  nx_color_info(sensor);

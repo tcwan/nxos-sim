@@ -33,14 +33,14 @@ void main(void) {
   //tests_usb();
   //tests_bt();
   //tests_usb_hardcore();
-  //tests_legocolor();
+  tests_legocolor();
   //tests_radar();
   //tests_util();
   //tests_defrag();
   //tests_ht_compass();
   //tests_ht_accel();
   //ht_color_calibrate();
-  tests_ht_color();
+  //tests_ht_color();
   //tests_ht_gyro();
   //tests_ht_irlink();
   //tests_digitemp();

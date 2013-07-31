@@ -5,7 +5,7 @@
 
 #include "base/at91sam7s256.h"
 
-#define COLOR_LOG FALSE
+#define COLOR_LOG TRUE
 
 #include "base/types.h"
 #include "base/nxt.h"
@@ -159,7 +159,7 @@ void nx__color_init(void) {
 
 	NX_ASSERT(sizeof(color_cal_data) == COLOR_CAL_DATA_SIZE);	/* Sanity Check */
 
-	memset((void*)color_bus_state, 0, sizeof(color_bus_state));
+	memset((void*)color_bus_state, 0, sizeof(struct color_port) * NXT_N_SENSORS);
 	nx_interrupts_disable();
 
   /* We need power for both the PIO controller and the second TC (Timer
@@ -201,6 +201,9 @@ void nx__color_init(void) {
 }
 
 #if (COLOR_LOG == TRUE)
+static void colorbus_log(const char *s);
+static void colorbus_log_uint(U32 val);
+
 static void colorbus_log(const char *s)
 {
   nx_display_string(s);
@@ -722,6 +725,9 @@ static void color_isr(void) {
          /* Port is OFF, do nothing. */
          break;
        case COLORBUS_IDLE:
+#if (COLOR_LOG == TRUE)
+				 colorbus_log(".");
+#endif
     	   if (p->colorbus_target_status != sensors_colorconfig[sensor].status) {
     		   /* State Changed */
     		   p->colorbus_target_status = sensors_colorconfig[sensor].status;
@@ -813,6 +819,10 @@ static void color_isr(void) {
     		p->bus_state = COLORBUS_WRITEBYTE;
     	 break;
        case COLORBUS_WRITEBYTE:
+#if (COLOR_LOG == TRUE)
+				 colorbus_log(" WR=");
+#endif
+
     	 /* We write out the byte directly here, due to the timing required */
    		 *AT91C_PIOA_OER = pins->sda;					/* Switch to data output on color bus */
     	 while (p->current_pos < 8) {
@@ -822,12 +832,12 @@ static void color_isr(void) {
     		 if ((p->current_byte & (1 << p->current_pos))) {
 				 *AT91C_PIOA_SODR = pins->sda;
 #if (COLOR_LOG == TRUE)
-				 color_log_uint(1);
+				 colorbus_log_uint(1);
 #endif
 			 } else {
 				 *AT91C_PIOA_CODR = pins->sda;
 #if (COLOR_LOG == TRUE)
-				 color_log_uint(0);
+				 colorbus_log_uint(0);
 #endif
 			 }
 			 ++p->current_pos;
@@ -843,6 +853,9 @@ static void color_isr(void) {
        case COLORBUS_READBYTE:
     	 *AT91C_PIOA_ODR = pins->sda;					/* Switch to data input on color bus */
   		 nx__colorbus_setup_rxbyte(sensor);				/* Setup for byte input */
+#if (COLOR_LOG == TRUE)
+				 colorbus_log(" RD=");
+#endif
     	 while (p->current_pos < 8) {
     		 *AT91C_PIOA_SODR = pins->scl;				/* Start with Clk HIGH */
     		 nx_systick_wait_us(TIME_2US+TIME_2US+TIME_2US); /* Clock Settling Time */
@@ -855,7 +868,7 @@ static void color_isr(void) {
 
     		 p->current_byte |= (value << p->current_pos);	/* Accumulate byte value */
 #if (COLOR_LOG == TRUE)
-             color_log_uint(value);
+             colorbus_log_uint(value);
 #endif
 			 ++p->current_pos;
     	   }
