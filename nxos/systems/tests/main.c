@@ -38,7 +38,7 @@ void main(void) {
   //tests_defrag();
   //tests_ht_compass();
   //tests_ht_accel();
-  ht_color_calibrate();
+  //ht_color_calibrate();
   tests_ht_color();
   //tests_ht_gyro();
   //tests_ht_irlink();
