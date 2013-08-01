@@ -68,7 +68,7 @@ typedef struct {
     U8 colorval[NO_OF_COLOR_CHANNELS];							/* 4 8-bit thresholds */
 } color_threshvals;
 
-/* Internal Color Detector Data Structure */
+/* Internal Color Classifier Data Structure */
 static color_threshvals min_rawcolor_lowthresh = {
 		{ 0, 65, 40, 48 }
 };
@@ -112,8 +112,8 @@ static volatile struct color_port {
   /* Actual Status of the Color Sensor Bus */
   color_status colorbus_status;
 
-  /* Target Status of the Color Sensor Bus */
-  color_status colorbus_target_status;
+  /* Target State of the Color Sensor Bus */
+  color_status colorbus_target_state;
 
   /* Pointer to Calibration Data Buffer (pre-allocated) */
   color_cal_data *caldataptr;
@@ -215,20 +215,11 @@ static void colorbus_log_uint(U32 val)
 }
 #endif
 
-/** [Internal Routine]
- *
- * Get the actual configuration status of the LEGO Color Sensor on the given port
- */
-static color_status nx__color_get_status(U32 sensor) {
-
-	return color_bus_state[sensor].colorbus_status;
-}
-
 void nx__color_check_disable_isr(void) {
   U32 sensor;
 
   for (sensor=0; sensor<NXT_N_SENSORS; sensor++) {
-	if (color_bus_state[sensor].colorbus_status != COLOR_NOTFOUND)
+	if (color_bus_state[sensor].bus_state != COLORBUS_OFF)
 		return;
   }
   *AT91C_TC1_IDR = AT91C_TC_CPCS;		/* Disable color_isr if no active sensors */
@@ -246,7 +237,7 @@ void nx_color_init(U32 sensor, color_mode mode, color_cal_data *caldata) {
 
   nx__sensors_color_enable(sensor);
   sensors_colorconfig[sensor].mode = mode;
-  sensors_colorconfig[sensor].status = COLOR_CALIBRATE;
+  sensors_colorconfig[sensor].statereq = COLOR_CALIBRATE;
 
   p = &color_bus_state[sensor];
 
@@ -272,23 +263,27 @@ void nx_color_close(U32 sensor) {
     return;
 
   sensors_colorconfig[sensor].mode = COLOR_MODE_NONE;
-  sensors_colorconfig[sensor].status = COLOR_EXIT;	/* Trigger Color Sensor Cleanup */
+  sensors_colorconfig[sensor].statereq = COLOR_EXIT;	/* Trigger Color Sensor Cleanup */
 }
 
 /** Check the presence and status of a lego color sensor on the given sensor port. */
 color_status nx_color_detect(U32 sensor) {
 
   NX_ASSERT(sensor < NXT_N_SENSORS);
+  U32 sensorval;
+
+  sensorval = nx__avr_get_sensor_value(sensor);
 
   /* If AVR Co-processor A/D Value is above threshold, it means that some other sensor is attached */
-  if (nx__avr_get_sensor_value(sensor) > 50) {
+  if (sensorval > 50) {
+#if 0
 	  nx__sensors_disable(sensor);
 	  sensors_colorconfig[sensor].mode = COLOR_MODE_NONE;
-	  sensors_colorconfig[sensor].status = COLOR_NOTFOUND;
-  } else	/* TODO: Can we handle sensor reconnection? */
-	  sensors_colorconfig[sensor].status = nx__color_get_status(sensor);
-
-  return sensors_colorconfig[sensor].status;
+	  sensors_colorconfig[sensor].statereq = COLOR_NOTFOUND;
+#endif
+	  return COLOR_NOTFOUND;
+  }	else /* TODO: Can we handle sensor reconnection? */
+	  return nx_color_get_status(sensor);
 }
 
 /** Recalibrate the lego color sensor on the given sensor port. */
@@ -296,10 +291,10 @@ void nx_color_reset(U32 sensor, color_mode mode) {
   if (sensor >= NXT_N_SENSORS)
     return;
 
-  NX_ASSERT(sensors_colorconfig[sensor].status != COLOR_NOTFOUND);
+  NX_ASSERT(sensors_colorconfig[sensor].statereq != COLOR_NOTFOUND);
 
   sensors_colorconfig[sensor].mode = mode;
-  sensors_colorconfig[sensor].status = COLOR_CALIBRATE;	/* Trigger Color Sensor Recalibration */
+  sensors_colorconfig[sensor].statereq = COLOR_CALIBRATE;	/* Trigger Color Sensor Recalibration */
 
 }
 
@@ -312,12 +307,13 @@ void nx_color_info(U32 sensor) {
 	   return;
 
 	caldataptr = color_bus_state[sensor].caldataptr;
-	nx_display_string("LEGO Color Sensor\n");
-	nx_display_string("Mode: LED ");
+	nx_display_string("LEGO ColorSensor\n\n");
+	nx_display_string(" Mode: LED ");
 	nx_display_string(colormode_str[nx_color_get_mode(sensor)]);
 	nx_display_end_line();
-	nx_display_string("Status: ");
+	nx_display_string("State: ");
 	nx_display_string(colorstatus_str[nx_color_get_status(sensor)]);
+	nx_display_end_line();
 	if (caldataptr) {
 		nx_display_string("Cal Limits:\n");
 		nx_display_string(" [0] = ");
@@ -337,9 +333,14 @@ inline color_mode nx_color_get_mode(U32 sensor) {
   return sensors_colorconfig[sensor].mode;
 }
 
+/** Get the current status request of the given LEGO Color Sensor */
+inline color_status nx_color_get_statereq(U32 sensor) {
+  return sensors_colorconfig[sensor].statereq;
+}
+
 /** Get the current status of the given LEGO Color Sensor */
 inline color_status nx_color_get_status(U32 sensor) {
-  return sensors_colorconfig[sensor].status;
+  return color_bus_state[sensor].colorbus_status;
 }
 
 /** Read all color sensor raw values */
@@ -445,7 +446,7 @@ U32 nx_color_scale_input(U32 rawvalue) {
  * code are empirical based on experimental data.
  */
 
-color_detected nx_color_detector(color_values *rawvalues, color_cal_data *caldata) {
+color_detected nx_color_classifier(color_values *rawvalues, color_cal_data *caldata) {
 
 	color_detected theColor = COLOR_DETECT_UNKNOWN;
 	color_struct_colors dominantColor = COLOR_NONE;
@@ -725,38 +726,36 @@ static void color_isr(void) {
          /* Port is OFF, do nothing. */
          break;
        case COLORBUS_IDLE:
-#if (COLOR_LOG == TRUE)
-				 colorbus_log(".");
-#endif
-    	   if (p->colorbus_target_status != sensors_colorconfig[sensor].status) {
+    	   if (p->colorbus_target_state != sensors_colorconfig[sensor].statereq) {
     		   /* State Changed */
-    		   p->colorbus_target_status = sensors_colorconfig[sensor].status;
+    		   p->colorbus_target_state = sensors_colorconfig[sensor].statereq;
     		   /* Configure new state */
-    		   switch (p->colorbus_target_status) {
-    		     default:
-    		     case COLOR_NOTFOUND:
+    		   switch (p->colorbus_target_state) {
+    		   	 default:
+   		     	 case COLOR_NOTFOUND:
     		    	 /* Disable Color Sensor */
-    		    	 p->colorbus_status = p->colorbus_target_status;
+    		    	 p->colorbus_status = COLOR_NOTFOUND;
     		    	 break;
     		     case COLOR_CALIBRATE:
-    		    	 if ((p->colorbus_status != COLOR_NOTFOUND) && (p->colorbus_status != COLOR_READY)) {
+    		    	 /* This state request occurs from Init (status == COLOR_NOTFOUND) or Reset (status == COLOR_READY) */
+    		    	 if ((p->colorbus_status == COLOR_NOTFOUND) || (p->colorbus_status == COLOR_READY)) {
     		    		 /* Perform Calibration for given mode */
     		    		 nx__colorbus_setup_txbyte(sensor, sensors_colorconfig[sensor].mode);
-    		    		 p->colorbus_status = p->colorbus_target_status;
+    		    		 p->colorbus_status = COLOR_CALIBRATE;
     		    	 }
     		    	 break;
     		     case COLOR_EXIT:
-    		    	 if (p->colorbus_status != COLOR_NOTFOUND) {
+    		    	 /* This state request occurs from Close (status == COLOR_CALIBRATE or COLOR_READY) */
+    		    	 if ((p->colorbus_status == COLOR_CALIBRATE) || (p->colorbus_status == COLOR_READY)) {
     		    		 /* Perform Calibration for mode == COLOR_MODE_NONE */
     		    		 nx__colorbus_setup_txbyte(sensor, COLOR_MODE_NONE);
-    		    		 p->colorbus_status = p->colorbus_target_status;
+    		    		 p->colorbus_status = COLOR_EXIT;
     		    	 }
     		    	 break;
     		     case COLOR_READY:
-    		    	 /* Remain in current state */
-    		    	  NX_ASSERT(p->colorbus_status == p->colorbus_target_status);
+    		    	 /* This state should never be requested */
+    		    	  NX_ASSERT(p->colorbus_status == p->colorbus_target_state);
     		    	  /* We should be in this state only after colorbus_status has been updated to COLOR_READY */
-
     		    	 break;
     		   }
     	   }
@@ -853,7 +852,7 @@ static void color_isr(void) {
        case COLORBUS_READBYTE:
     	 *AT91C_PIOA_ODR = pins->sda;					/* Switch to data input on color bus */
   		 nx__colorbus_setup_rxbyte(sensor);				/* Setup for byte input */
-#if (COLOR_LOG == TRUE)
+#if (COLOR_LOG1 == TRUE)
 				 colorbus_log(" RD=");
 #endif
     	 while (p->current_pos < 8) {
@@ -867,7 +866,7 @@ static void color_isr(void) {
     		 nx_systick_wait_us(TIME_2US);				/* Data Settling Time */
 
     		 p->current_byte |= (value << p->current_pos);	/* Accumulate byte value */
-#if (COLOR_LOG == TRUE)
+#if (COLOR_LOG1 == TRUE)
              colorbus_log_uint(value);
 #endif
 			 ++p->current_pos;

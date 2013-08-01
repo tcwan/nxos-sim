@@ -77,11 +77,11 @@ typedef enum
  * These parameters are configuration requests to the actual SoftMAC driver
  *
  * mode	Color sensing mode (NONE, FULL, RED, GREEN, BLUE)
- * status  Color sensor status request (updated by nx_color_detect())
+ * statereq  Color sensor state request
  */
 typedef struct {
 	color_mode mode;		/**< Color Sensor LED mode */
-	color_status status;	/**< Color Sensor status */
+	color_status statereq;	/**< Color Sensor state request */
 } color_config;
 
 /** Color Sensor calibration point enums. */
@@ -180,11 +180,20 @@ void nx_color_info(U32 sensor);
  */
 color_mode nx_color_get_mode(U32 sensor);
 
+/** Get the current (user) requested state of the LEGO Color Sensor on port @a sensor.
+ *
+ * @param sensor The sensor port number.
+ * *
+ * @return Returns the (user) requested state of the LEGO Color Sensor on the
+ * given sensor port.
+ */
+color_status nx_color_get_statereq(U32 sensor);
+
 /** Get the current status of the LEGO Color Sensor on port @a sensor.
  *
  * @param sensor The sensor port number.
  * *
- * @return Returns the status of the LEGO Color Sensor on the
+ * @return Returns the actual status of the LEGO Color Sensor on the
  * given sensor port.
  */
 color_status nx_color_get_status(U32 sensor);
@@ -225,9 +234,9 @@ U32 nx_color_read_mode_raw(U32 sensor);
  */
 U32 nx_color_scale_input(U32 rawvalue);
 
-/** Detect color given raw inputs
+/** Classify color given raw inputs
  *
- *  Return the detected color enum for the given raw inputs.
+ *  Return the classified color enum for the given raw inputs.
  *  The color mode is assumed to be COLOR_MODE_FULL as all
  *  channels are used for the detection.
  *
@@ -241,7 +250,7 @@ U32 nx_color_scale_input(U32 rawvalue);
  *
  * @returns COLOR_DETECT_UNKNOWN if color is not recognized
  */
-color_detected nx_color_detector(color_values* rawvalues, color_cal_data *caldata);
+color_detected nx_color_classifier(color_values* rawvalues, color_cal_data *caldata);
 
 /** Convert detected color to string for display
  *
