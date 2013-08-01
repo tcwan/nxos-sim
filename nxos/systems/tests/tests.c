@@ -953,7 +953,8 @@ void tests_legocolor(void) {
 
 
   /* Test all modes */
-  for (mode = COLOR_MODE_NONE;  mode < COLOR_NUM_MODES; mode++) {
+//  for (mode = COLOR_MODE_NONE;  mode < COLOR_NUM_MODES; mode++) {
+  for (mode = COLOR_MODE_FULL;  mode < COLOR_NUM_MODES; mode++) {
 	nx_display_clear();
 	nx_display_cursor_set_pos(0, 0);
 	nx_display_string("Discovering...\n");
@@ -966,24 +967,29 @@ void tests_legocolor(void) {
 	  nx_display_clear();
 	  nx_display_cursor_set_pos(0, 0);
 	  nx_display_string("Discovering...\n");
-	  nx_color_init(sensor, mode, &calibration_data);
 
 	}
 
+#if 1
+	nx_color_info(sensor);
+	while (nx_avr_get_button() != BUTTON_OK);
+
+#else
 	while (COLOR_READY != nx_color_detect(sensor)) {
 	  nx_color_info(sensor);
-	  nx_systick_wait_ms(500);
+	  nx_systick_wait_ms(1000);
 	  nx_display_cursor_set_pos(0, 1);
 	}
 	nx_color_info(sensor);
 
 	while (nx_avr_get_button() != BUTTON_OK);
+#endif
 
 	while (nx_avr_get_button() != BUTTON_RIGHT) {
 	    // Go on and read and display the values.
 
 		nx_color_read_all_raw(sensor, &rawColor);
-		theColor = nx_color_detector(&rawColor, &calibration_data);
+		theColor = nx_color_classifier(&rawColor, &calibration_data);
 	    nx_display_cursor_set_pos(0, 6);
 	    nx_display_string("Color: ");
 	    nx_display_string(nx_color2str(theColor));
