@@ -12,17 +12,17 @@ DARWINVER=`uname -r |cut -f 1 -d .`
 PYTHON=python
 PYTHONVER=`$PYTHON --version`
 
-# Mountain Lion (10.8) hack support using 10.7 IOBluetooth framework
+# Mountain Lion (10.8) and Mavericks (10.9) hack support using 10.7 IOBluetooth framework
 #IOBLUETOOTH_DIR=$( cd "$( dirname "$0" )" && pwd )
 IOBLUETOOTH_DIR=$HOME/Library
-DYLDPATH="DYLD_LIBRARY_PATH=$IOBLUETOOTH_DIR"
+DYLDPATH="DYLD_INSERT_LIBRARIES=$IOBLUETOOTH_DIR/IOBluetooth"
 
 GDBSERVER=../nxos/armdebug/Host/nxt-gdb-server.py
 if [ $DARWIN == "Darwin" ]; then
 	echo "$PYTHONVER Running on Mac OSX Platform!"
 	EXP="export VERSIONER_PYTHON_PREFER_32_BIT=yes"
 	# Mountain Lion hack 
-	if [ $DARWINVER == "12" ]; then
+	if [ $DARWINVER == "12" ] || [ $DARWINVER == "13" ]; then
 	    echo " Using Lion (10.7) IOBluetooth Framework hack!"
 	    DYLDMOD="export $DYLDPATH"
 	else
