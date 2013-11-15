@@ -1,0 +1,7 @@
+IOBluetooth-Compat.dylib
+========================
+
+This Dynamic Library is needed for Mac OS X 10.8 (Mountain Lion) and newer 
+due to missing symbols in the recent Mac OS X releases.
+
+Copy this file into the ~/Library folder before running armnxtgdbserver.
