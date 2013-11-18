@@ -27,8 +27,10 @@ if [ $DARWIN == "Darwin" ]; then
 	    #DYLDMOD="export DYLD_FORCE_FLAT_NAMESPACE=1; export $DYLDPATH"
 	    echo " Using IOBluetooth-Compat Framework hack!"
 	    DYLDMOD="export DYLD_FORCE_FLAT_NAMESPACE=1"
+	    DYLDUNMOD="unset DYLD_FORCE_FLAT_NAMESPACE"
 	else
 	    DYLDMOD=
+	    DYLDUNMOD=
 	fi
 	ARCH="arch -i386"
 else
@@ -41,5 +43,5 @@ fi
 # echo "dirname:" `dirname $0`
 # echo "basename:" `basename $0`
 cd `dirname $0`
-#echo $DYLDMOD; $EXP; $ARCH $PYTHON $GDBSERVER $*
-$DYLDMOD; $EXP; $ARCH $PYTHON $GDBSERVER $*
+#echo $DYLDMOD; $EXP; $ARCH $PYTHON $GDBSERVER $*; $DYLDUNMOD
+$DYLDMOD; $EXP; $ARCH $PYTHON $GDBSERVER $*; $DYLDUNMOD
