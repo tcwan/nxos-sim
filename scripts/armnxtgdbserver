@@ -8,30 +8,16 @@
 # export VERSIONER_PYTHON_PREFER_32_BIT="yes"
 
 DARWIN=`uname`
-DARWINVER=`uname -r |cut -f 1 -d .`
 PYTHON=python
 PYTHONVER=`$PYTHON --version`
-
-# Mountain Lion (10.8) hack support using 10.7 IOBluetooth framework
-#IOBLUETOOTH_DIR=$( cd "$( dirname "$0" )" && pwd )
-IOBLUETOOTH_DIR=$HOME/Library
-DYLDPATH="DYLD_LIBRARY_PATH=$IOBLUETOOTH_DIR"
 
 GDBSERVER=../nxos/armdebug/Host/nxt-gdb-server.py
 if [ $DARWIN == "Darwin" ]; then
 	echo "$PYTHONVER Running on Mac OSX Platform!"
 	EXP="export VERSIONER_PYTHON_PREFER_32_BIT=yes"
-	# Mountain Lion hack 
-	if [ $DARWINVER == "12" ]; then
-	    echo " Using Lion (10.7) IOBluetooth Framework hack!"
-	    DYLDMOD="export $DYLDPATH"
-	else
-	    DYLDMOD=
-	fi
 	ARCH="arch -i386"
 else
 	echo "$PYTHONVER Running on Default Platform!"
-	DYLDMOD=
 	EXP=
 	ARCH=
 fi
@@ -39,5 +25,5 @@ fi
 # echo "dirname:" `dirname $0`
 # echo "basename:" `basename $0`
 cd `dirname $0`
-#echo $DYLDMOD; $EXP; $ARCH $PYTHON $GDBSERVER $*
-$DYLDMOD; $EXP; $ARCH $PYTHON $GDBSERVER $*
+#echo $EXP; $ARCH $PYTHON $GDBSERVER $*
+$EXP; $ARCH $PYTHON $GDBSERVER $*
