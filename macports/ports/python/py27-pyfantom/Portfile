@@ -5,7 +5,7 @@ PortGroup           python27 1.0
 name                py27-pyfantom
 license             GPL
 version             0.1
-revision            3
+revision            6
 epoch               1
 categories          python devel
 maintainers         tcwan
@@ -19,8 +19,8 @@ homepage            http://git.ni.fr.eu.org/\?p=pyfantom.git\;a=summary
 
 fetch.type          git
 git.url             http://git.ni.fr.eu.org/pyfantom.git
-git.branch          e6d314586ea9e9b4d36efdf8568f0204cfd72f66 
-#git.branch          5928af73eb66a731aa85658a4dbbf0a4f32fe212
+#git.branch          35eeb729b54f1ae92b350b79f0334be0707519da
+git.branch	    e0f3e3c72ab56b3e8d5cb7194613f06ac7cd1d67
 
 #distname            pyfantom-${version}
 #
