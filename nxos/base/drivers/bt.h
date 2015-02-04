@@ -38,15 +38,26 @@
  */
 #define BT_PIN_MAX_LNG  16
 
+/** @addtogroup driver */
+/*@{*/
 
+/** @defgroup bluetooth Lego NXT Bluecore (Bluetooth Module) driver
+ *
+ * The Lego Bluecore (Bluetooth Module) Driver for NXT.
+ */
+/*@{*/
 
+/** Bluetooth Module Device Definition */
 typedef struct bt_device {
+  /** BT MAC Address */
   U8 addr[BT_ADDR_SIZE];
+  /** Name String */
   char name[BT_NAME_MAX_LNG+1];
+  /** Device Type */
   U8 class[BT_CLASS_SIZE];
 } bt_device_t;
 
-
+/** Bluetooth Module States */
 typedef enum {
   BT_STATE_WAITING = 0x0,
   BT_STATE_INQUIRING,
@@ -54,6 +65,7 @@ typedef enum {
   BT_STATE_STREAMING
 } bt_state_t;
 
+/** Bluetooth Module return Values */
 typedef enum {
   BT_NOTHING = 0x0, /* can mean no answer from the bluecore */
   BT_LR_SUCCESS = 0x50,
@@ -63,6 +75,7 @@ typedef enum {
   BT_LR_UNKNOWN_ADDR
 } bt_return_value_t;
 
+/** Bluetooth Module Disconnection  Status */
 typedef enum {
   BT_DISCONNECTION_SUCCESS,
   BT_DISCONNECTION_LINK_LOSS,
@@ -71,8 +84,11 @@ typedef enum {
   BT_DISCONNECTION_ERROR
 } bt_disconnection_status_t;
 
+/** Bluetooth Module Version */
 typedef struct bt_version {
+  /** BT Module Major Version */
   U8 major;
+  /** BT Module Minor Version */
   U8 minor;
 } bt_version_t;
 
@@ -83,19 +99,35 @@ typedef struct bt_version {
  */
 void nx_bt_init(void);
 
+/**
+ * Bluecore Reset Routine
+ */
 void nx_bt_reset(void);
 
+/**
+ * Access Bluecore State
+ */
 bt_state_t nx_bt_get_state(void);
 
 
 /**
- * @param[in] name Max 16 char. !
+ * Bluecore Set Broadcast Name
+ * 	@param[in] name Max 16 char. !
  */
 void nx_bt_set_friendly_name(char *name);
+
+/**
+ * Bluecore retrieve Discoverability status
+ */
 bool nx_bt_get_discoverable(void);
+
+/**
+ * Bluecore configure Discoverability
+ */
 void nx_bt_set_discoverable(bool d);
 
 /**
+ * Bluecore Begin Inquiry
  * @param max_devices
  * @param timeout unit: 1.28s ; min : 0x01 (1.28s) ; max: 0x30 (61.44s)
  * @param bt_remote_class
@@ -103,23 +135,49 @@ void nx_bt_set_discoverable(bool d);
 void nx_bt_begin_inquiry(U8 max_devices,
 			 U8 timeout,
 			 U8 bt_remote_class[BT_CLASS_SIZE]);
+
+/**
+ * Bluecore has found device status
+ */
 bool nx_bt_has_found_device(void);
 
 /**
- * @param[out] dev will fill in the structure
+ * Bluecore Get Discovered Device
+ *  @param[out] dev will fill in the structure
  */
 bool nx_bt_get_discovered_device(bt_device_t *dev);
+
+/**
+ * Bluecore Cancel Inquiry
+ */
 void nx_bt_cancel_inquiry(void);
 
 
+/**
+ * Output Known devices list via UART
+ */
 void nx_bt_begin_known_devices_dumping(void);
+
+/**
+ * Iteration termination Check
+ */
 bool nx_bt_has_known_device(void);
+
+/**
+ * Output Iterator for Known devices
+ */
 bool nx_bt_get_known_device(bt_device_t *dev);
 
 /**
- * @param[in] dev need to be fully filled in
+ * Add Known Device
+ *  @param[in] dev need to be fully filled in
  */
 bt_return_value_t nx_bt_add_known_device(bt_device_t *dev);
+
+/**
+ * Remove Known Device
+ *  @param[in] dev_addr BT Address of known device
+ */
 bt_return_value_t nx_bt_remove_known_device(U8 dev_addr[BT_ADDR_SIZE]);
 
 
@@ -185,11 +243,16 @@ void nx_bt_accept_connection(bool accept);
 
 
 /**
- * @return -1 if no new connexion has been established, else it
- * returns the corresponding handle (only returned once !)
+ * Bluetooth Connection Established
+ *  @return -1 if no new connexion has been established, else it
+ *  returns the corresponding handle (only returned once !)
  */
 int nx_bt_connection_established(void);
 
+/**
+ * Get Link Quality
+ *  @param handle link reference
+ */
 U8 nx_bt_get_link_quality(int handle);
 
 /**
@@ -258,8 +321,10 @@ bool nx_bt_get_brick_status_byte(U8 *data);
 bool nx_bt_set_brick_status_byte(U8 value1, U8 value2);
 
 
-/* to remove */
+/** Bluecore Debuging function: to remove */
 void nx_bt_debug(void);
 
+/*@}*/
+/*@}*/
 
 #endif

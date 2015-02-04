@@ -19,7 +19,7 @@
 /** @addtogroup driverinternal */
 /*@{*/
 
-/** @defgroup colorinternal Color interface */
+/** @defgroup i2cinternal I2C interface */
 /*@{*/
 
 /** I2C bus control parameters.

@@ -33,7 +33,9 @@
 
 /** HT Color Sensor Color Calibration Magic Numbers
  */
+/** WHite Point Calibration */
 #define HT_COLOR_CAL_WHITEPOINT 0x43
+/** Black Point Calibration */
 #define HT_COLOR_CAL_BLACKPOINT 0x42
 
 /** A type for the returned color values (8 bit)*/

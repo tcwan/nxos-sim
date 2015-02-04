@@ -63,7 +63,7 @@ FUNCDEF void nx_progcontent2(char *string);     /* Display Content string on LCD
 /**
  * Display Content string on LCD (Row row)
  *    @param string: Null-terminated string
- *    @row int: Row Index
+ *    @param row int: Row Index
  */
 FUNCDEF void nx_progcontentX(char *string, int row);     /* Display Content string on LCD Screen */
 
