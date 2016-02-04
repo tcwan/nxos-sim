@@ -27,14 +27,14 @@
 
 #undef PORT4_I2C_OK
 	/* Sensor Port Assignments */
-	.equ	TOUCH_PORT, 3		/* Sensor 1 */
+	.equ	TOUCH_PORT, 0		/* Sensor 1 */
 	.equ	SOUND_PORT, 1		/* Sensor 2 */
 
 #ifdef PORT4_I2C_OK
 	.equ	LIGHT_PORT, 2		/* Sensor 3 */
 	.equ	ULSND_PORT, 3		/* Sensor 4 */
 #else
-	.equ	LIGHT_PORT, 0		/* Sensor 4 */
+	.equ	LIGHT_PORT, 3		/* Sensor 4 */
 	.equ	ULSND_PORT, 2		/* Sensor 3 */
 #endif
 	/* sensors.h enum */
