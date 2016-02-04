@@ -23,7 +23,7 @@
  * sensor from LEGO does not.
  *
  */
-#undef TEST_PORT4_I2C
+#define TEST_PORT4_I2C
 
 #include "base/types.h"
 #include "base/interrupts.h"

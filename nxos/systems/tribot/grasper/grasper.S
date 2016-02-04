@@ -55,9 +55,9 @@
 
 	/* Wheel Control Constants */
 	.equ	STOP_SPEED, 0
-	.equ	FWD_SPEED, 30
-	.equ	FASTROT_SPEED, 40
-	.equ	SLOWROT_SPEED, 20
+	.equ	FWD_SPEED, 100
+	.equ	FASTROT_SPEED, 80
+	.equ	SLOWROT_SPEED, 70
 
 	/* Claw Control Constants
 	 *    Open and Close Speeds are directional (signed)
