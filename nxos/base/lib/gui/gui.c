@@ -7,6 +7,7 @@
 #include "base/display.h"
 #include "base/drivers/avr.h"
 #include "base/drivers/systick.h"
+#include "base/drivers/sound.h"
 #include "base/lib/gui/gui.h"
 
 #define LCD_LINES 8
@@ -81,6 +82,10 @@ U8 nx_gui_text_menu(gui_text_menu_t menu) {
       case BUTTON_OK:
         done = TRUE;
         break;
+      case BUTTON_CANCEL:
+    	  nx_sound_freq(1000, 100);
+    	  nx_systick_wait_ms(50);
+    	  break;
       default:
         break;
     }

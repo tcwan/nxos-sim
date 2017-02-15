@@ -21,6 +21,10 @@
 const char avr_init_handshake[] =
   "\xCC" "Let's samba nxt arm in arm, (c)LEGO System A/S";
 
+#define MINPRESS_THRESH 33	/* 3 ms x 33 = 99 ms */
+static U8 lastbutton = BUTTON_NONE;
+static U8 numPress = 0;
+
 static volatile struct {
   /* The current mode of the AVR state machine. */
   enum {
@@ -180,6 +184,7 @@ static inline U16 unpack_word(U8 *word) {
  */
 static void avr_unpack_from_avr(void) {
   U8 checksum = 0;
+  U8 newbutton = BUTTON_NONE;
   U16 word;
   U32 voltage;
   U32 i;
@@ -211,16 +216,38 @@ static void avr_unpack_from_avr(void) {
   word = unpack_word(p);
   p += 2;
 
-  if (word > 1023)
-    from_avr.buttons = BUTTON_OK;
-  else if (word > 720)
-    from_avr.buttons = BUTTON_CANCEL;
-  else if (word > 270)
-    from_avr.buttons = BUTTON_RIGHT;
-  else if (word > 60)
-    from_avr.buttons = BUTTON_LEFT;
+
+
+  if (word > 0x5ff)
+	  newbutton = BUTTON_OK;
+  else if (word > 0x1ff)
+	  newbutton = BUTTON_CANCEL;
+  else if (word > 0x100)
+	  newbutton = BUTTON_RIGHT;
+  else if (word > 0x40)
+	  newbutton = BUTTON_LEFT;
   else
-    from_avr.buttons = BUTTON_NONE;
+	  newbutton = BUTTON_NONE;
+
+	/* Basic Debouncing to prevent spurious button presses.
+	 * We must see the same button press MINPRESS_THRESH times
+	 */
+	if (newbutton == lastbutton) {
+		if (numPress > MINPRESS_THRESH) {
+			/* Passed debouncing threshold */
+			numPress = 0;
+			from_avr.buttons = newbutton;
+		} else {
+			/* Still debouncing */
+			numPress++;
+		}
+
+	} else {
+		/* New button detected */
+		lastbutton = newbutton;
+		numPress = 0;
+		/* Wait for next input */
+	}
 
   /* Process the last word, which is a mix and match of many
    * values.
