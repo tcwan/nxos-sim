@@ -75,3 +75,9 @@ FUNCDEF void nx_progcontentX(char *string, int row) {
   nx_display_string(string);
 
 }
+
+FUNCDEF nxt_button_t nx_getbutton(void) {
+	/* Retrieve enum value of NXT Button press */
+	return nx_avr_get_button();
+
+}
