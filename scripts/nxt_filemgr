@@ -16,8 +16,29 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
+WIN_WIDTH = 800
+WIN_HEIGHT = 400
+
+FILENAME_MINWIDTH = 100
+FILENAME_MAXWIDTH = 400
+FILENAME_WIDTH = 200
+FILESIZE_MINWIDTH = 40
+FILESIZE_MAXWIDTH = 120
+FILESIZE_WIDTH = 80
+
+FILELIST_MINWIDTH = 0.6 * WIN_WIDTH
+FILELIST_MAXWIDTH = 0.8 * WIN_WIDTH
+FILELIST_HEIGHT = 100
+
 import cStringIO
-import gtk
+# Use Gtk+ 2.x
+#import gtk
+# Use Gtk+ 3.x
+import gi
+gi.require_version("Gtk", "3.0")
+from gi.repository import GObject
+from gi.repository import Gtk
+
 import os.path
 import urllib2
 import sys
@@ -32,11 +53,11 @@ def read_file(b, fname):
             for data in r:
                 f.write(data)
 
-class NXTListing(gtk.ListStore):
+class NXTListing(Gtk.ListStore):
 
     def __init__(self, brick):
-        gtk.ListStore.__init__(self, str, str)
-        self.set_sort_column_id(0, gtk.SORT_ASCENDING)
+        Gtk.ListStore.__init__(self, str, str)
+        self.set_sort_column_id(0, Gtk.SortType(Gtk.SortType.ASCENDING))
         self.populate(brick, '*.*')
 
     def populate(self, brick, pattern):
@@ -65,53 +86,86 @@ def write_files(b, names):
             print 'name %s, size: %d ' % (bname, len(data))
             write_file(b, bname, data)
 
-class NXT_Filer(gtk.Window):
-    TARGETS = gtk.target_list_add_uri_targets()
+class NXT_FileMgr(Gtk.Window):
+ ### FIXME
+ ###   TARGETS = Gtk.target_list_add_uri_targets()
 
     def __init__(self, brick):
-        gtk.Window.__init__(self)
+        Gtk.Window.__init__(self)
+        self.set_default_size(WIN_WIDTH, WIN_HEIGHT)
         self.brick = brick
         self.set_border_width(6)
-        self.nxt_model = NXTListing(brick)
-        h = gtk.HBox()
-        h.pack_start(self.make_file_panel(str(brick.sock),
-            self.nxt_model), True)
+
+        self.nxt_filelist = NXTListing(brick)
+###        print '''Socket = %s''' % str(brick.sock)
+        h = Gtk.Box(Gtk.Orientation.VERTICAL, 10)
+
+        h.add(self.make_file_panel(str(brick.sock), self.nxt_filelist))
+        h.add(self.make_button_panel())
+        
         self.add(h)
         self.connect('destroy', self.quit)
 
+    def make_button_panel(self):
+        vb = Gtk.Box(Gtk.Orientation.VERTICAL, 0)     
+ 
+        self.delete_button = Gtk.Button(label="Delete")
+        self.delete_button.connect("clicked", self.delete_file)
+        vb.pack_start(self.delete_button, True, True, 10)
+
+        self.add_button = Gtk.Button(label="Add")
+        self.add_button.connect("clicked", self.add_file)
+        vb.pack_start(self.add_button, True, True, 10)
+
+        self.exec_button = Gtk.Button(label="Execute")
+        self.exec_button.connect("clicked", self.execute_file)
+        vb.pack_start(self.exec_button, True, True, 10)
+
+        return vb
+
     def make_file_list(self):
-        tv = gtk.TreeView()
+        tv = Gtk.TreeView()
         tv.set_headers_visible(True)
         tv.set_property('fixed_height_mode', True)
-        r = gtk.CellRendererText()
-        c = gtk.TreeViewColumn('File name', r, text=0)
-        c.set_fixed_width(200)
-        c.set_sizing(gtk.TREE_VIEW_COLUMN_FIXED)
+        r = Gtk.CellRendererText()
+        c = Gtk.TreeViewColumn('File name', r, text=0)
+        c.set_fixed_width(FILENAME_WIDTH)
+        c.set_min_width(FILENAME_MINWIDTH)
+        c.set_max_width(FILENAME_MAXWIDTH)
+        c.set_resizable(True)
+        c.set_sizing(Gtk.TreeViewColumnSizing.FIXED)
         tv.append_column(c)
-        r = gtk.CellRendererText()
-        c = gtk.TreeViewColumn('Bytes', r, text=1)
-        c.set_sizing(gtk.TREE_VIEW_COLUMN_FIXED)
-        c.set_fixed_width(80)
+        r = Gtk.CellRendererText()
+        c = Gtk.TreeViewColumn('Bytes', r, text=1)
+        c.set_resizable(True)
+        c.set_fixed_width(FILESIZE_WIDTH)
+        c.set_min_width(FILESIZE_MINWIDTH)
+        c.set_max_width(FILESIZE_MAXWIDTH)
+        c.set_sizing(Gtk.TreeViewColumnSizing.FIXED)
         tv.append_column(c)
 
-#            tv.enable_model_drag_source(gtk.gdk.BUTTON1_MASK, self.TARGETS,
-#            gtk.gdk.ACTION_DEFAULT | gtk.gdk.ACTION_MOVE)
-        tv.enable_model_drag_dest(self.TARGETS, gtk.gdk.ACTION_COPY)
+#            tv.enable_model_drag_source(Gtk.gdk.BUTTON1_MASK, self.TARGETS,
+#            Gtk.gdk.ACTION_DEFAULT | Gtk.gdk.ACTION_MOVE)
+### FIXME
+###        tv.enable_model_drag_dest(self.TARGETS, Gtk.gdk.ACTION_COPY)
 #        tv.connect("drag_data_get", self.drag_data_get_data)
         tv.connect("drag_data_received", self.drag_data_received_data)
 
         return tv
 
     def make_file_panel(self, name, model):
-        v = gtk.VBox()
-        v.pack_start(gtk.Label(name), False)
+        v = Gtk.Box(Gtk.Orientation.VERTICAL, 0)     
+###        v.pack_start(Gtk.Label(name), True, True, 0)
         tv = self.make_file_list()
         tv.set_model(model)
-        s = gtk.ScrolledWindow()
-        s.set_policy(gtk.POLICY_NEVER, gtk.POLICY_ALWAYS)
+        s = Gtk.ScrolledWindow()
+        s.set_min_content_width(FILELIST_MINWIDTH)
+        s.set_max_content_width(min(FILENAME_MAXWIDTH+FILESIZE_MAXWIDTH, FILELIST_MAXWIDTH))
+        s.set_min_content_height(FILELIST_HEIGHT)
+        s.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         s.add(tv)
         s.set_border_width(2)
-        v.pack_start(s, True)
+        v.pack_start(s, True, False, 0)
         return v
 
     def drag_data_get_data(self, treeview, context, selection, target_id,
@@ -124,26 +178,35 @@ class NXT_Filer(gtk.Window):
 
     def drag_data_received_data(self, treeview, context, x, y, selection,
         info, etime):
-        if context.action == gtk.gdk.ACTION_COPY:
+        if context.action == Gtk.gdk.ACTION_COPY:
             write_files(self.brick, selection.data)
         # FIXME: update file listing after writing files
         # FIXME: finish context
 
+    def	execute_file(self, widget):
+        print("Running file...")
+        
+    def	delete_file(self, widget):
+        print("Deleting file...")
+
+    def	add_file(self, widget):
+        print("Adding file...")
+
     def quit(self, w):
         'Quit the program'
         self.brick.sock.close()
-        gtk.main_quit()
+        Gtk.main_quit()
 
 if __name__ == '__main__':
     # FIXME: add dialog with progress bar when scanning bluetooth devices
     arguments, keyword_arguments = parse_command_line_arguments(sys.argv)
 
     if '--help' in arguments:
-        print '''nxt_filer -- Simple GUI to manage files on a LEGO Mindstorms NXT
-Usage:	nxt_filer [--host <macaddress>]'''
+        print '''nxt_filemgr -- Simple GUI to manage files on a LEGO Mindstorms NXT
+Usage:	nxt_filemgr [--host <macaddress>]'''
         exit(0)
 
     brick = nxt.locator.find_one_brick(keyword_arguments.get('host',None))
-    win = NXT_Filer(brick)
+    win = NXT_FileMgr(brick)
     win.show_all()
-    gtk.main()
+    Gtk.main()
