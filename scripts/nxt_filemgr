@@ -16,28 +16,33 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-WIN_WIDTH = 800
-WIN_HEIGHT = 400
 
 FILENAME_MINWIDTH = 100
-FILENAME_MAXWIDTH = 400
+FILENAME_MAXWIDTH = 300
 FILENAME_WIDTH = 200
 FILESIZE_MINWIDTH = 40
 FILESIZE_MAXWIDTH = 120
 FILESIZE_WIDTH = 80
+FILELIST_HEIGHT = 300
 
-FILELIST_MINWIDTH = 0.6 * WIN_WIDTH
-FILELIST_MAXWIDTH = 0.8 * WIN_WIDTH
-FILELIST_HEIGHT = 100
+### WIN_WIDTH = 400
+### WIN_HEIGHT = 300
+WIN_WIDTH = FILENAME_MAXWIDTH + FILESIZE_MAXWIDTH
+WIN_HEIGHT = FILELIST_HEIGHT
+
+FILELIST_MINWIDTH = 1.0 * WIN_WIDTH
+FILELIST_MAXWIDTH = 1.0 * WIN_WIDTH
 
 import cStringIO
-# Use Gtk+ 2.x
-#import gtk
 # Use Gtk+ 3.x
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GObject
 from gi.repository import Gtk
+from gi.repository import GLib
+
+from nxt.error import FileNotFound, ModuleNotFound
+from nxt.telegram import OPCODES, Telegram
 
 import os.path
 import urllib2
@@ -47,6 +52,18 @@ import nxt.locator
 from nxt.brick import FileFinder, FileReader, FileWriter
 from nxt.utils import parse_command_line_arguments
 
+def play_soundfile(b, fname):
+    print("Playing soundfile %s" % fname)
+    b.play_sound_file(0,fname)
+
+def run_program(b, fname):
+    print("Running %s" % fname)
+    b.start_program(fname)
+    
+def delete_file(b, fname):
+    b.delete(fname)
+    print("Deleted %s" % fname)
+    
 def read_file(b, fname):
     with FileReader(b, fname) as r:
         with open(fname, 'wb') as f:
@@ -93,13 +110,18 @@ class NXT_FileMgr(Gtk.Window):
     def __init__(self, brick):
         Gtk.Window.__init__(self)
         self.set_default_size(WIN_WIDTH, WIN_HEIGHT)
+        self.set_resizable(False)
         self.brick = brick
         self.set_border_width(6)
+        self.selected_file = None
 
         self.nxt_filelist = NXTListing(brick)
-###        print '''Socket = %s''' % str(brick.sock)
-        h = Gtk.Box(Gtk.Orientation.VERTICAL, 10)
+        h = Gtk.Grid()
+        h.set_orientation(Gtk.Orientation.VERTICAL)
 
+        self.brick_button = Gtk.Button(label=str(brick.sock))
+        self.brick_button.connect("clicked", self.reload_filelist)
+        h.add(self.brick_button)
         h.add(self.make_file_panel(str(brick.sock), self.nxt_filelist))
         h.add(self.make_button_panel())
         
@@ -107,10 +129,10 @@ class NXT_FileMgr(Gtk.Window):
         self.connect('destroy', self.quit)
 
     def make_button_panel(self):
-        vb = Gtk.Box(Gtk.Orientation.VERTICAL, 0)     
+        vb = Gtk.Box(Gtk.Orientation.HORIZONTAL, 0)     
  
-        self.delete_button = Gtk.Button(label="Delete")
-        self.delete_button.connect("clicked", self.delete_file)
+        self.delete_button = Gtk.Button(label="Remove")
+        self.delete_button.connect("clicked", self.remove_file)
         vb.pack_start(self.delete_button, True, True, 10)
 
         self.add_button = Gtk.Button(label="Add")
@@ -144,20 +166,23 @@ class NXT_FileMgr(Gtk.Window):
         c.set_sizing(Gtk.TreeViewColumnSizing.FIXED)
         tv.append_column(c)
 
-#            tv.enable_model_drag_source(Gtk.gdk.BUTTON1_MASK, self.TARGETS,
-#            Gtk.gdk.ACTION_DEFAULT | Gtk.gdk.ACTION_MOVE)
 ### FIXME
-###        tv.enable_model_drag_dest(self.TARGETS, Gtk.gdk.ACTION_COPY)
+#        tv.enable_model_drag_source(Gtk.gdk.BUTTON1_MASK, self.TARGETS,
+#        Gtk.gdk.ACTION_DEFAULT | Gtk.gdk.ACTION_MOVE)
+#        tv.enable_model_drag_dest(self.TARGETS, Gtk.gdk.ACTION_COPY)
 #        tv.connect("drag_data_get", self.drag_data_get_data)
-        tv.connect("drag_data_received", self.drag_data_received_data)
 
+        tv.connect("drag_data_received", self.drag_data_received_data)
+        tv.connect("row_activated", self.row_activated_action)
         return tv
 
     def make_file_panel(self, name, model):
         v = Gtk.Box(Gtk.Orientation.VERTICAL, 0)     
-###        v.pack_start(Gtk.Label(name), True, True, 0)
         tv = self.make_file_list()
         tv.set_model(model)
+        select = tv.get_selection()
+        select.connect("changed", self.on_tree_selection_changed)
+        
         s = Gtk.ScrolledWindow()
         s.set_min_content_width(FILELIST_MINWIDTH)
         s.set_max_content_width(min(FILENAME_MAXWIDTH+FILESIZE_MAXWIDTH, FILELIST_MAXWIDTH))
@@ -168,6 +193,29 @@ class NXT_FileMgr(Gtk.Window):
         v.pack_start(s, True, False, 0)
         return v
 
+    def choose_files(self):
+        dialog = Gtk.FileChooserNative();
+        dialog.new("Add File", self, Gtk.FileChooserAction.OPEN, None, None)
+        dialog.set_transient_for(self)
+        dialog.set_select_multiple(False)
+        res = dialog.run()
+        if res == Gtk.ResponseType.ACCEPT:
+            ### Handle single file download for now
+            uri = dialog.get_uri()
+            print("You selected", uri)
+            write_files(self.brick, uri)
+        else:
+            print("Add File Cancelled")
+        dialog.destroy()
+
+    def on_tree_selection_changed(self, selection):
+        model, treeiter = selection.get_selected()
+        if treeiter != None:
+            print("You selected %s (%s bytes)" % (model[treeiter][0], model[treeiter][1]))
+            self.selected_file = model[treeiter][0]
+        else:
+            self.selected_file = None
+        
     def drag_data_get_data(self, treeview, context, selection, target_id,
         etime):
         treeselection = treeview.get_selection()
@@ -183,14 +231,51 @@ class NXT_FileMgr(Gtk.Window):
         # FIXME: update file listing after writing files
         # FIXME: finish context
 
+    def row_activated_action(self, treeview, context, selection):
+        self.execute_file(selection)
+
     def	execute_file(self, widget):
-        print("Running file...")
-        
-    def	delete_file(self, widget):
-        print("Deleting file...")
+        if self.selected_file != None:
+            name = ''
+            ext = ''
+###            print("Attempting to execute file...%s" % self.selected_file)
+            try:
+                name, ext = self.selected_file.split('.')
+            except:
+                print("No file extension")
+            finally:
+                if ext == 'rso':
+                    play_soundfile(self.brick,self.selected_file)
+                elif ext == 'rxe':
+                    run_program(self.brick,self.selected_file)
+                    self.brick = None
+                    self.nxt_filelist.clear()
+                else:
+                    print("Can't execute unknown file type")    
+                        
+    def	remove_file(self, widget):
+        if self.selected_file != None:
+            print("Removing file...%s" % self.selected_file)
+            delete_file(self.brick,self.selected_file)
+            self.selected_file = None
+            self.nxt_filelist.clear()
+            self.nxt_filelist.populate(self.brick, '*.*')
 
     def	add_file(self, widget):
         print("Adding file...")
+        self.choose_files()
+        self.selected_file = None
+        self.nxt_filelist.clear()
+        self.nxt_filelist.populate(self.brick, '*.*')
+
+    def	reload_filelist(self, widget):
+        print("Reloading filelist...")
+        if self.brick != None:
+            self.brick.sock.close()
+        self.brick = None
+        self.nxt_filelist.clear()
+        self.brick = nxt.locator.find_one_brick(keyword_arguments.get('host',None))
+        self.nxt_filelist.populate(self.brick, '*.*')
 
     def quit(self, w):
         'Quit the program'
