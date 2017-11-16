@@ -17,6 +17,8 @@
 # GNU General Public License for more details.
 
 VERSION="1.01"
+CONNECT_STRING = "Connect to NXT"
+PROTOCOL_VER = (1, 124)
 
 FILENAME_MINWIDTH = 100
 FILENAME_MAXWIDTH = 300
@@ -50,6 +52,7 @@ import nxt.locator
 from nxt.brick import FileFinder, FileReader, FileWriter
 from nxt.utils import parse_command_line_arguments
 
+from usb.core import USBError
 from nxt.locator import BrickNotFoundError
 from nxt.error import FileNotFound, ModuleNotFound, FileExistsError, SysProtError
 from nxt.telegram import OPCODES, Telegram
@@ -91,7 +94,7 @@ def file_exists_dialog(fname):
 def system_error_dialog():
     dialog = Gtk.MessageDialog(win, 0, Gtk.MessageType.INFO,
         Gtk.ButtonsType.OK, "System Error!")
-    dialog.format_secondary_text("No Space!\nPlease delete files to create contiguous space.")
+    dialog.format_secondary_text("No Space!\n\nPlease delete files to create contiguous space.")
     dialog.run()
     dialog.destroy()
     if DEBUG:
@@ -153,7 +156,7 @@ class NXT_FileMgr(Gtk.Window):
         self.set_border_width(6)
         self.brick = None
         self.selected_file = None
-        self.brick_info_str = "Connecting..."
+        self.brick_info_str = CONNECT_STRING
         self.nxt_filelist = NXTListing()
         
         h = Gtk.Grid()
@@ -245,7 +248,10 @@ class NXT_FileMgr(Gtk.Window):
             self.brick = nxt.locator.find_one_brick(keyword_arguments.get('host',None))
         except BrickNotFoundError:
             print("Brick not found!")
-        self.update_view()
+        except USBError:
+            print("USB Error!")
+        if self.brick != None:
+            self.update_view()
 
     def update_view(self):
         self.get_brick_info()
@@ -259,14 +265,19 @@ class NXT_FileMgr(Gtk.Window):
             print("Reading from NXT..."),
             prot_version, fw_version = self.brick.get_firmware_version()
             print("Protocol version: %s.%s" % prot_version)
-            brick_name, brick_hostid, brick_signal_strength, brick_user_flash = self.brick.get_device_info()
-            connection_type = str(self.brick.sock)
-            brick_name_str = brick_name.split('\0')[0]
-            if DEBUG:
-                print("Brick Info: ", connection_type, brick_name_str, brick_hostid, brick_signal_strength, fw_version, brick_user_flash)
-            self.brick_info_str = "%s ==> %s [%s]\tFirmware: v%s.%s\tFreespace: %s" % (connection_type, brick_name_str, brick_hostid, fw_version[0], fw_version[1], brick_user_flash)
+            if prot_version == PROTOCOL_VER:
+                brick_name, brick_hostid, brick_signal_strength, brick_user_flash = self.brick.get_device_info()
+                connection_type = str(self.brick.sock)
+                brick_name_str = brick_name.split('\0')[0]
+                if DEBUG:
+                    print("Brick Info: ", connection_type, brick_name_str, brick_hostid, brick_signal_strength, fw_version, brick_user_flash)
+                self.brick_info_str = "%s ==> %s [%s]\tFirmware: v%s.%s\tFreespace: %s" % (connection_type, brick_name_str, brick_hostid, fw_version[0], fw_version[1], brick_user_flash)
+            else:
+                print("Invalid Protocol version! Closing connection.")
+                self.brick.sock.close()
+                self.brick = None
         else:
-            self.brick_info_str = "Connect to NXT"
+            self.brick_info_str = CONNECT_STRING
  
     def choose_files(self):
         dialog = Gtk.FileChooserNative();
