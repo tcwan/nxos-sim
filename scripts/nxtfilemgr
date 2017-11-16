@@ -16,7 +16,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-VERSION="1.0"
+VERSION="1.01"
 
 FILENAME_MINWIDTH = 100
 FILENAME_MAXWIDTH = 300
@@ -42,9 +42,6 @@ from gi.repository import GObject
 from gi.repository import Gtk
 from gi.repository import GLib
 
-from nxt.error import FileNotFound, ModuleNotFound, FileExistsError
-from nxt.telegram import OPCODES, Telegram
-
 import os.path
 import urllib2
 import sys
@@ -52,6 +49,11 @@ import sys
 import nxt.locator
 from nxt.brick import FileFinder, FileReader, FileWriter
 from nxt.utils import parse_command_line_arguments
+
+from nxt.locator import BrickNotFoundError
+from nxt.error import FileNotFound, ModuleNotFound, FileExistsError, SysProtError
+from nxt.telegram import OPCODES, Telegram
+
 
 DEBUG = False
 
@@ -86,17 +88,15 @@ def file_exists_dialog(fname):
     if DEBUG:
         print("File Exists box closed.")
 
-class NXTListing(Gtk.ListStore):
+def system_error_dialog():
+    dialog = Gtk.MessageDialog(win, 0, Gtk.MessageType.INFO,
+        Gtk.ButtonsType.OK, "System Error!")
+    dialog.format_secondary_text("No Space!\nPlease delete files to create contiguous space.")
+    dialog.run()
+    dialog.destroy()
+    if DEBUG:
+        print("System Error box closed.")
 
-    def __init__(self, brick):
-        Gtk.ListStore.__init__(self, str, str)
-        self.set_sort_column_id(0, Gtk.SortType(Gtk.SortType.ASCENDING))
-        self.populate(brick, '*.*')
-
-    def populate(self, brick, pattern):
-        f = FileFinder(brick, pattern)
-        for (fname, size) in f:
-            self.append((fname, str(size)))
 
 def write_file(b, fname, data):
     try:
@@ -110,6 +110,8 @@ def write_file(b, fname, data):
             print("wrote %d bytes" % len(data))
     except FileExistsError:
         file_exists_dialog(fname)
+    except SysProtError:
+        system_error_dialog()
         
 def write_files(b, names):
     for fname in names.split('\r\n'):
@@ -126,54 +128,46 @@ def write_files(b, names):
                 print("name %s, size: %d " % (bname, len(data)))
             write_file(b, bname, data)
 
+class NXTListing(Gtk.ListStore):
+
+    def __init__(self):
+        'Create an empty file list'
+        Gtk.ListStore.__init__(self, str, str)
+        self.set_sort_column_id(0, Gtk.SortType(Gtk.SortType.ASCENDING))
+###        self.populate(brick, '*.*')
+
+    def populate(self, brick, pattern):
+        f = FileFinder(brick, pattern)
+        for (fname, size) in f:
+            self.append((fname, str(size)))
+
+
 class NXT_FileMgr(Gtk.Window):
  ### FIXME
  ###   TARGETS = Gtk.target_list_add_uri_targets()
 
-    def __init__(self, brick):
+    def __init__(self):
         Gtk.Window.__init__(self)
         self.set_default_size(WIN_WIDTH, WIN_HEIGHT)
         self.set_resizable(False)
-        self.brick = brick
         self.set_border_width(6)
+        self.brick = None
         self.selected_file = None
-        self.get_brick_info()
-
-        self.nxt_filelist = NXTListing(brick)
+        self.brick_info_str = "Connecting..."
+        self.nxt_filelist = NXTListing()
+        
         h = Gtk.Grid()
         h.set_orientation(Gtk.Orientation.VERTICAL)
-
         self.brick_button = Gtk.Button(label=self.brick_info_str)
         self.brick_button.connect("clicked", self.reload_filelist)
         h.add(self.brick_button)
-        h.add(self.make_file_panel(str(brick.sock), self.nxt_filelist))
+        h.add(self.make_file_panel())
         h.add(self.make_button_panel())
-        
         self.add(h)
         self.connect('destroy', self.quit)
+        self.reload_filelist(self.nxt_filelist)
 
-    def make_button_panel(self):
-        vb = Gtk.Box(Gtk.Orientation.HORIZONTAL, 0)     
- 
-        self.about_button = Gtk.Button(label="?")
-        self.about_button.connect("clicked", self.about)
-        vb.pack_start(self.about_button, True, True, 10)
-        
-        self.delete_button = Gtk.Button(label="Remove")
-        self.delete_button.connect("clicked", self.remove_file)
-        vb.pack_start(self.delete_button, True, True, 10)
-
-        self.add_button = Gtk.Button(label="Add")
-        self.add_button.connect("clicked", self.add_file)
-        vb.pack_start(self.add_button, True, True, 10)
-
-        self.exec_button = Gtk.Button(label="Execute")
-        self.exec_button.connect("clicked", self.execute_file)
-        vb.pack_start(self.exec_button, True, True, 10)
-
-        return vb
-
-    def make_file_list(self):
+    def make_file_view(self):
         tv = Gtk.TreeView()
         tv.set_headers_visible(True)
         tv.set_property('fixed_height_mode', True)
@@ -204,10 +198,10 @@ class NXT_FileMgr(Gtk.Window):
         tv.connect("row_activated", self.row_activated_action)
         return tv
 
-    def make_file_panel(self, name, model):
+    def make_file_panel(self):
         v = Gtk.Box(Gtk.Orientation.VERTICAL, 0)     
-        tv = self.make_file_list()
-        tv.set_model(model)
+        tv = self.make_file_view()
+        tv.set_model(self.nxt_filelist)
         select = tv.get_selection()
         select.connect("changed", self.on_tree_selection_changed)
         
@@ -221,6 +215,59 @@ class NXT_FileMgr(Gtk.Window):
         v.pack_start(s, True, False, 0)
         return v
 
+    def make_button_panel(self):
+        vb = Gtk.Box(Gtk.Orientation.HORIZONTAL, 0)     
+ 
+        self.about_button = Gtk.Button(label="?")
+        self.about_button.connect("clicked", self.about)
+        vb.pack_start(self.about_button, True, True, 10)
+        
+        self.delete_button = Gtk.Button(label="Remove")
+        self.delete_button.connect("clicked", self.remove_file)
+        vb.pack_start(self.delete_button, True, True, 10)
+
+        self.add_button = Gtk.Button(label="Add")
+        self.add_button.connect("clicked", self.add_file)
+        vb.pack_start(self.add_button, True, True, 10)
+
+        self.exec_button = Gtk.Button(label="Execute")
+        self.exec_button.connect("clicked", self.execute_file)
+        vb.pack_start(self.exec_button, True, True, 10)
+        return vb
+
+    def	reload_filelist(self, widget):
+        if DEBUG:
+            print("Reloading filelist...")
+        if self.brick != None:
+            self.brick.sock.close()
+            self.brick = None
+        try:
+            self.brick = nxt.locator.find_one_brick(keyword_arguments.get('host',None))
+        except BrickNotFoundError:
+            print("Brick not found!")
+        self.update_view()
+
+    def update_view(self):
+        self.get_brick_info()
+        self.brick_button.set_label(self.brick_info_str)
+        self.nxt_filelist.clear()
+        if self.brick != None:
+            self.nxt_filelist.populate(self.brick, '*.*')
+    
+    def get_brick_info(self):
+        if self.brick != None:
+            print("Reading from NXT..."),
+            prot_version, fw_version = self.brick.get_firmware_version()
+            print("Protocol version: %s.%s" % prot_version)
+            brick_name, brick_hostid, brick_signal_strength, brick_user_flash = self.brick.get_device_info()
+            connection_type = str(self.brick.sock)
+            brick_name_str = brick_name.split('\0')[0]
+            if DEBUG:
+                print("Brick Info: ", connection_type, brick_name_str, brick_hostid, brick_signal_strength, fw_version, brick_user_flash)
+            self.brick_info_str = "%s ==> %s [%s]\tFirmware: v%s.%s\tFreespace: %s" % (connection_type, brick_name_str, brick_hostid, fw_version[0], fw_version[1], brick_user_flash)
+        else:
+            self.brick_info_str = "Connect to NXT"
+ 
     def choose_files(self):
         dialog = Gtk.FileChooserNative();
         dialog.new("Add File", self, Gtk.FileChooserAction.OPEN, None, None)
@@ -319,46 +366,17 @@ class NXT_FileMgr(Gtk.Window):
                     print("CANCEL Delete File")
                        
     def	add_file(self, widget):
-        if DEBUG:
-            print("Adding file...")
-        self.choose_files()
-        self.selected_file = None
-        self.update_view()
-
-    def	reload_filelist(self, widget):
-        if DEBUG:
-            print("Reloading filelist...")
         if self.brick != None:
-            self.brick.sock.close()
-        self.brick = None
-        self.brick = nxt.locator.find_one_brick(keyword_arguments.get('host',None))
-        self.update_view()
-
-    def update_view(self):
-        self.get_brick_info()
-        self.brick_button.set_label(self.brick_info_str)
-        self.nxt_filelist.clear()
-        self.nxt_filelist.populate(self.brick, '*.*')
-    
-    def get_brick_info(self):
-        if self.brick != None:
-            print("Reading from NXT..."),
-            prot_version, self.fw_version = self.brick.get_firmware_version()
-            print("Protocol version: %s.%s" % prot_version)
-            brick_name, self.brick_hostid, self.brick_signal_strength, self.brick_user_flash = self.brick.get_device_info()
-            self.connection_type = str(self.brick.sock)
-            self.brick_name_str = brick_name.split('\0')[0]
             if DEBUG:
-                print("Brick Info: ", self.connection_type, self.brick_name_str, self.brick_hostid, self.brick_signal_strength, self.fw_version, self.brick_user_flash)
-            self.brick_info_str = "%s ==> %s [%s]\tFirmware: v%s.%s\tFreespace: %s" % (self.connection_type, self.brick_name_str, self.brick_hostid, self.fw_version[0], self.fw_version[1], self.brick_user_flash)
-        else:
-            self.connection_type = ""
-            self.brick_name_str = ""
-            self.brick_info_str = ""
-   
+                print("Adding file...")
+            self.choose_files()
+            self.selected_file = None
+            self.update_view()
+  
     def quit(self, w):
         'Quit the program'
-        self.brick.sock.close()
+        if self.brick != None:
+            self.brick.sock.close()
         Gtk.main_quit()
 
 if __name__ == '__main__':
@@ -374,7 +392,6 @@ if __name__ == '__main__':
 Usage:	nxt_filemgr [--host <macaddress>]")
         exit(0)
 
-    brick = nxt.locator.find_one_brick(keyword_arguments.get('host',None))
-    win = NXT_FileMgr(brick)
+    win = NXT_FileMgr()
     win.show_all()
     Gtk.main()
