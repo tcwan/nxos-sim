@@ -36,7 +36,6 @@ WIN_HEIGHT = FILELIST_HEIGHT
 FILELIST_MINWIDTH = 1.0 * WIN_WIDTH
 FILELIST_MAXWIDTH = 1.0 * WIN_WIDTH
 
-import cStringIO
 # Use Gtk+ 3.x
 import gi
 gi.require_version("Gtk", "3.0")
@@ -45,7 +44,7 @@ from gi.repository import Gtk
 from gi.repository import GLib
 
 import os.path
-import urllib2
+import urllib
 import sys
 
 import nxt.locator
@@ -132,7 +131,7 @@ def write_files(b, names):
             if DEBUG:
                 print("File:", fname)
             bname = os.path.basename(fname)
-            url = urllib2.urlopen(fname)
+            url = urllib.urlopen(fname)
             try:
                 data = url.read()
             finally:
