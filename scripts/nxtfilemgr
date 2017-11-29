@@ -263,7 +263,7 @@ class NXT_FileMgr(Gtk.Window):
             print("Brick not found!")
         except USBError:
             usb_error_dialog()
-            do_housekeping()
+            self.do_housekeeping()
         if self.brick != None:
             self.update_view()
 
