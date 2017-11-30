@@ -261,6 +261,7 @@ class NXT_FileMgr(Gtk.Window):
             self.brick = nxt.locator.find_one_brick(keyword_arguments.get('host',None))
         except BrickNotFoundError:
             print("Brick not found!")
+            sys.stdout.flush()
         except USBError:
             usb_error_dialog()
             self.do_housekeeping()
@@ -291,6 +292,7 @@ class NXT_FileMgr(Gtk.Window):
                 self.do_housekeeping()
         else:
             self.brick_info_str = CONNECT_STRING
+        sys.stdout.flush()
  
     def choose_files(self):
         dialog = Gtk.FileChooserNative();
