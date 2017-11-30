@@ -111,14 +111,15 @@ typedef enum {
 
 /*** Predefined messages ***/
 
-
+#if 0
+// Commented out to avoid unused variable warning by gcc
 static const U8 bt_msg_start_heart[] = {
   0x03, /* length */
   BT_MSG_START_HEART,
   0xFF, /* checksum (high) */
   0xF4  /* checksum (low) */
 };
-
+#endif
 
 static const U8 bt_msg_get_version[] = {
   0x03, /* length */
