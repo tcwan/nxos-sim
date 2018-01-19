@@ -110,6 +110,7 @@ bool fantom_filter_packet(U8 **msgPtr, U32 *lenPtr, bool isBTComms)
                 nx_usb_fantom_read(NULL, 0);
                 status = TRUE;
 		/* Fall through */
+                __attribute__ ((fallthrough));	// GCC 7 warning fix
 #endif
 	default:
 		*msgPtr = NULL;
