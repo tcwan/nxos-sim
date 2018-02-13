@@ -23,19 +23,21 @@
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
 #define ENABLE_BREAKPOINTS
+#define USE_CONST_INIT
 
 
 	.extern	nx_systick_wait_ms
 	.equ	SYSTICK_1000MS, 1000
 	.equ	SYSTICK_500MS, 500
-	.equ	LOOPCNT, 3
+	.equ	LOOPCNT, 5
+	.equ	RAND_INIT, 0x25AF31EE
 
 .data
 .align 4
 
-title:	 .asciz "Armskel Prog"
-prompt:	 .asciz "Welcome to NxOS"
-content: .asciz "Hello!"
+title:	 .asciz "Randtest Prog"
+prompt:	 .asciz "Random Numbers: "
+donestr: .asciz "Done!"
 spacestr: .asciz ", "
 
 .code 32
@@ -64,19 +66,23 @@ break:
 	nop		/* Provide GDB with a safe instruction to breakpoint at */
 
 /********************* Begin Customization Here *********************/
-
+#ifdef USE_CONST_INIT
+	ldr		r0, =RAND_INIT
+#else
 	bl		nx_systick_get_ms		/* get current system tick */
+#endif
 	bl		srand					/* Init pseudo random number generator */
 
 	mov		r7, #LOOPCNT
-loop:
 	ldr		r0, =prompt
 	bl		nx_progtitle
 
+loop:
 	mov		r0, #SYSTICK_500MS		/* Wait 500 ms */
 	bl		nx_systick_wait_ms
 
 	bl		rand					/* get random number */
+display:
 	bl		nx_display_int
 
 	ldr		r0, =spacestr
@@ -90,6 +96,12 @@ loop:
 	subs	r7, r7, #1
 	bne		loop
 #endif
+
+	ldr		r0, =donestr
+	bl		nx_display_string
+
+	mov		r0, #SYSTICK_1000MS		/* Wait 1000 ms */
+	bl		nx_systick_wait_ms
 
 /********************** End Customization Here **********************/
 exit_main:
