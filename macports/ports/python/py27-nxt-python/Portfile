@@ -1,11 +1,11 @@
 # $Id: Portfile 74794 2011-01-02 21:15:32Z ecronin@macports.org $
 
 PortSystem          1.0
-PortGroup           python27 1.0
+PortGroup           python 1.0
 name                py27-nxt-python
 license             GPL
 version             2.2.2
-revision	    1
+revision	    3
 epoch               1
 categories          python devel
 maintainers         nomaintainer
@@ -15,18 +15,23 @@ long_description    NXT-Python is a package for controlling a LEGO NXT robot \
 
 platforms           darwin
 
-homepage            http://code.google.com/p/nxt-python/
-master_sites        googlecode:nxt-python
-distname            nxt-python-${version}
-#use_zip				yes
+#github.setup        castarco nxt-python master
+#github.tarball_from releases
 
-checksums           md5 39b76db07ba22811651555ed33c35821 \
-                    sha1 c6543c1f601d13453e71606c6d84e3a28f0adcf7 \
-                    rmd160 e488b18f75b92c4fc20d9d49cffae40bf25f085d 
+homepage            https://github.com/castarco/nxt-python
+master_sites        https://github.com/castarco/nxt-python/archive/
+#distfiles           ${name}-${version}.zip
+#distname            nxt-python-${version}
+distfiles           master.zip
+distname            nxt-python-master
+use_zip				yes
+checksums           md5 82a1eb94026e034a927a0e3c803cff28 \
+		    sha1 1ff7cb1dfbf6f08f957a88f5353d3a1c6113fa84 \
+		    rmd160 78bdc9b883dd4cd430ae7c989f642475f186603a
 
-#depends_lib-append  port:py27-pyusb-devel
-#depends_lib-append  port:py27-pyusb
+patchfiles	    usbsock.py-${version}.diff
+
+depends_lib-append   port:py27-pyusb
 depends_lib-append   port:py27-lightblue
-#patchfiles          patch-nxt-locator.diff
 
 
