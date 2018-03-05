@@ -3,4 +3,6 @@
 PYTHON=python
 GDBSERVER=../nxos/armdebug/Host/nxt-gdb-server.py
 cd `dirname $0`
+# Kill existing NXT GDB Server processes (to avoid port binding error)
+ps ax |grep [n]xt-gdb-server |cut -d ' ' -f 1 |xargs kill
 $PYTHON $GDBSERVER $*
