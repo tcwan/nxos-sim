@@ -65,8 +65,8 @@
 	 *    run the motors until it hits the limiters and the Tachometer stops changing.
 	 *    Using too high a speed may pop the claw assembly!
 	 */
-	.equ	OPEN_SPEED, -20
-	.equ	CLOSE_SPEED, 10
+	.equ	OPEN_SPEED,  10
+	.equ	CLOSE_SPEED, -20
 	.equ	TACHO_THRESH, 0						/* Need value of <= 1 for reliability of detecting limits */
 
 
