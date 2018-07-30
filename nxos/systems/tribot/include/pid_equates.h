@@ -17,8 +17,11 @@
 /* 2s Complement macro	*/
     .macro   com  reg
     neg      \reg, \reg
-    add      \reg, \reg, #1
-    .endm
+#if 0
+	// This is wrong, neg already convert it to the 2's complement since it is equivalent to rsbs \reg, \reg, #0
+	add      \reg, \reg, #1
+#endif
+	.endm
 
 /** @addtogroup pid */
 /*@{*/
