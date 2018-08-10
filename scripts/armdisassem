@@ -4,7 +4,7 @@ if [ x$1 == "x" ]; then
 	echo "$0 <Sourcefile>"
 else
 	sourcefile=`basename -s .o $1`
-	#$OBJDUMP -rdj .text -j .data -j .bss $sourcefile.o > $sourcefile.objdump
-	$OBJDUMP -D $sourcefile.o > $sourcefile.objdump
+	#$OBJDUMP -rdj .text -j .data -j .bss $1 > $sourcefile.objdump
+	$OBJDUMP -D $1 > $sourcefile.objdump
 fi
 
