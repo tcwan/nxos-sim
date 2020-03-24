@@ -8,11 +8,9 @@
 
 #include "base/at91sam7s256.h"
 
-#include "base/nxt.h"
 #include "base/types.h"
 #include "base/interrupts.h"
 #include "base/drivers/aic.h"
-#include "base/drivers/_avr.h"
 #include "base/drivers/_lcd.h"
 
 #include "base/drivers/_systick.h"
@@ -20,6 +18,9 @@
 /* The main clock is at 48MHz, and the PIT divides that by 16 to get
  * its base timer frequency.
  */
+
+#define NXT_CLOCK_FREQ 48000000
+
 #define PIT_BASE_FREQUENCY (NXT_CLOCK_FREQ/16)
 
 /* PIT count for 1 us */
@@ -90,7 +91,6 @@ static void systick_isr(void) {
    *
    * As a result, this handler must be *very* fast.
    */
-  nx__avr_fast_update();
 
   /* The LCD dirty display routine can be done here too, since it is
    * very short.

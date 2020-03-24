@@ -9,7 +9,6 @@
 #include "base/at91sam7s256.h"
 
 #include "base/types.h"
-#include "base/nxt.h"
 #include "base/assert.h"
 #include "base/interrupts.h"
 #include "base/drivers/aic.h"
@@ -32,7 +31,11 @@
  * value. This divisor actually programs for 461.5kBaud, for 0.15%
  * error.
  */
+#if 0
 #define UART_CLOCK_DIVISOR (NXT_CLOCK_FREQ / 8 / UART_BAUD_RATE)
+#else
+#define UART_CLOCK_DIVISOR 1		// FIXME: Dummy value for simulator
+#endif
 
 static volatile struct {
   nx__uart_read_callback_t callback;
