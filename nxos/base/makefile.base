@@ -1,0 +1,138 @@
+# NxOS Library
+TOP = ../..
+
+FONT_SCRIPT = $(TOP)/$(NXOSDIR)/scripts/generate_fonts.py
+FONT_H = _font.h
+FONT_DEP = font.8x5.png _font.h.base
+
+# -- source directories
+D_C = ./
+D_CXX = $(D_C)
+D_ASM = $(D_C)
+
+# -- include directories
+D_H = $(D_C) $(TOP)/$(NXOSDIR)
+
+# -- library directory
+D_BIN = $(TOP)/$(NXOSDIR)
+
+# -- object directory
+D_OBJ = $(TOP)/$(NXOSDIR)/obj
+
+# ---------------------------------
+include $(TOP)/Makefile.inc
+# ---------------------------------
+
+# -- full name of static library
+F_BIN = $(D_BIN)/lib$(TARGET)$(E_BIN)
+
+# -- full name of font header file
+F_FONT = $(TARGET)/base/$(FONT_H)
+
+# -- submodule libraries
+F_INCLIB = $(D_OBJ)/lib$(TARGET)_drivers$(E_BIN) $(D_OBJ)/lib$(TARGET)_lib$(E_BIN)
+
+# ---------------------------------
+#   files lists
+# ---------------------------------
+S_H = $(wildcard $(addsuffix /*$(E_H), $(D_H)))
+
+S_C = $(sort $(wildcard $(addsuffix /*$(E_C), $(D_C))))
+S_CXX = $(sort $(wildcard $(addsuffix /*$(E_CXX), $(D_CXX))))
+S_ASM = $(wildcard $(addsuffix /*$(E_ASM), $(D_ASM)))
+
+O_CXX = $(addprefix $(D_OBJ)/, $(addsuffix $(E_OBJ), $(basename $(notdir $(S_CXX)))))
+O_C = $(addprefix $(D_OBJ)/, $(addsuffix $(E_OBJ), $(basename $(notdir $(S_C)))))
+O_ASM = $(addprefix $(D_OBJ)/, $(addsuffix $(E_OBJ), $(basename $(notdir $(S_ASM)))))
+
+O = $(O_CXX) $(O_C) $(O_ASM)
+
+# -- removal list
+R_BIN = $(F_BIN) $(O) $(FONT_H)
+R = $(R_BIN)
+
+ifeq ($(_BASH),0)
+# -- cmd
+CLEAN = cmd /c del /f $(subst /,\,$(R))
+CLEAN_BIN = cmd /c del /f $(R_BIN)
+else
+# -- sh (MSYS)
+CLEAN = rm -rf $(R)
+CLEAN_BIN = rm -rf $(R_BIN)
+endif
+
+# ---------------------------------
+#   make rules
+# ---------------------------------
+
+vpath %$(E_CXX) $(D_CXX)
+vpath %$(E_C) $(D_C)
+vpath %$(E_ASM) $(D_ASM)
+
+# ---- build library
+.PHONY: default libs fonts
+
+# -- build static library
+default: libs fonts
+
+libs: bindirs $(F_BIN)
+
+$(D_OBJ)/lib$(TARGET)_drivers$(E_BIN):
+	make -f makefile.drivers -C drivers
+
+$(D_OBJ)/lib$(TARGET)_lib$(E_BIN):
+	make -f makefile.lib -C lib
+
+# -- build fonts
+fonts: $(F_FONT)
+
+# Dependency of display module on font header
+DISPLAY_O = $(D_OBJ)/display.o
+
+$(DISPLAY_O): $(F_FONT)
+
+$(F_BIN): $(O) $(F_INCLIB)
+	$(call wrap,$(LINK),$(LDFLAGS) $@ $^)
+	$(call final,$@)
+	@echo "*** $(F_BIN) ***"
+
+$(F_FONT): $(FONT_DEP)
+	$(FONT_SCRIPT) $(FONT_DEP) $(FONT_H)
+
+$(S_C) $(S_CXX) $(S_ASM): $(S_H)
+
+$(O_C): $(D_OBJ)/%$(E_OBJ): $(D_C)/%$(E_C)
+	$(call wrap,$(CC),$(CFLAGS) -c $< -o $@)
+
+$(O_CXX): $(D_OBJ)/%$(E_OBJ): $(D_CXX)/%$(E_CXX)
+	$(call wrap,$(CXX),$(CXXFLAGS) -c $< -o $@)
+
+$(O_ASM): $(D_OBJ)/%$(E_OBJ): $(D_ASM)/%$(E_ASM)
+	$(call wrap,$(CC),$(ASMFLAGS) -c $< -o $@)
+
+# -- create 'object' and 'bin' directories
+bindirs: $(D_OBJ) $(D_BIN)
+
+$(D_OBJ):
+	${MKDIR} ${D_OBJ}
+
+$(D_BIN):
+	${MKDIR} ${D_BIN}
+
+# ---- remove temporary files
+.PHONY: clean
+
+clean:
+	$(CLEAN)
+	make -f makefile.drivers -C drivers clean
+	make -f makefile.lib -C lib clean
+
+# ---- remove binary and object files
+.PHONY: clean-libs
+
+clean-libs:
+	$(CLEAN_BIN)
+	make -f makefile.drivers -C drivers clean
+	make -f makefile.lib -C lib clean
+
+# -- EOF

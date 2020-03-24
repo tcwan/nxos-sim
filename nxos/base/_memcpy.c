@@ -9,10 +9,8 @@
 #include "_memcpy.h"
 #include "base/types.h"
 #include "base/at91sam7s256.h"
-#include "base/drivers/_efc.h"
 #include "base/memmap.h"
 #include "base/assert.h"
-#include "base/drivers/_efc.h"
 
 #define BELONGS(start, end, pos, len) \
     (((S32)pos) >= ((S32)start) && ((S32)pos) < ((S32)end)) && \
@@ -46,9 +44,11 @@ static void * memcpy_ram(U8 *dst, const U8 *src, U32 len) {
   return dst;
 }
 
+#if 0
 static bool write_page(U32 page, U8 *buffer) {
   return nx__efc_write_page((U32 *)buffer, page);
 }
+#endif
 
 static int positioning(U32 pos, size_t len) {
   if (BELONGS(AT91C_RAM_START, AT91C_RAM_START + REAL_LENGTH_RAM,
@@ -69,6 +69,7 @@ static int positioning(U32 pos, size_t len) {
   return CHUNK_INVALID;
 }
 
+#if 0
 static void replace_flash(U32 pagenumb, U32 offset, const U8 *src, size_t n) {
   U32 i;
   U8 buffer[PAGE_SIZE];
@@ -103,6 +104,7 @@ static void *memcpy_flash(U8 *dest, const U8 *src, size_t n) {
 
   return dest;
 }
+#endif
 
 void *_memcpy(void *dest, const void *src, size_t n) {
   belong_t belong = positioning((U32)dest, n);
@@ -113,8 +115,9 @@ void *_memcpy(void *dest, const void *src, size_t n) {
     break;
   case CHUNK_RELOC_FLASH:
   case CHUNK_FLASH:
-    return memcpy_flash((U8 *)dest, (U8 *)src, n);
-    break;
+	// FIXME: Cleanup Flash copy code
+    //return memcpy_flash((U8 *)dest, (U8 *)src, n);
+    //break;
   default:
     NX_FAIL("Access to undefined memory area");
     return NULL;

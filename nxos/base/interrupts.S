@@ -29,6 +29,7 @@ irq_spurious_count: .long 0
 
 #include "asm_decls.h"
 #define __ASSEMBLY__
+// FIXME: Convert to Cortex-A9 header
 #include "at91sam7s256.h"
 
 /**********************************************************

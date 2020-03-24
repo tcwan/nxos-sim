@@ -16,26 +16,9 @@
 #include "drivers/_aic.h"
 #include "drivers/_systick.h"
 #include "drivers/_sound.h"
-#include "drivers/_avr.h"
-#include "drivers/_motors.h"
 #include "drivers/_lcd.h"
-#include "drivers/_sensors.h"
-#include "drivers/_color.h"
-#include "drivers/_usb.h"
-#include "drivers/_i2c.h"
 
 #include "base/_core.h"
-
-#if defined(__FANTOMENABLE__) || defined(__DBGENABLE__)
-#include "base/lib/fantom/fantom.h"
-#endif
-
-#ifdef __DBGENABLE__
-#include "armdebug/Debugger/debug_stub.h"
-#ifdef TEST_DBGBKPT
-#include "armdebug/Debugger/debug_test.h"
-#endif
-#endif
 
 
 /* main() is the entry point into the custom payload, not included in
@@ -51,14 +34,8 @@ static void core_init(void) {
   nx_interrupts_enable();
   nx__systick_init();
   nx__sound_init();
-  nx__avr_init();
-  nx__motors_init();
   nx__lcd_init();
   nx__display_init();
-  nx__sensors_init();
-  nx__usb_init();
-  nx__i2c_init();
-  nx__color_init();
 
   /* Delay a little post-init, to let all the drivers settle down. */
   nx_systick_wait_ms(100);
@@ -91,15 +68,12 @@ void nx_core_halt(void) {
   if (shutdown_handler)
     shutdown_handler();
   nx__lcd_shutdown();
-  nx__usb_disable();
-  nx__avr_power_down();
 }
 
 void nx_core_reset(void) {
   if (shutdown_handler)
     shutdown_handler();
   nx__lcd_shutdown();
-  nx__usb_disable();
   /* Total reset of the NXT's processor. */
   *AT91C_RSTC_RCR = 0xA5000005;
 }
@@ -111,15 +85,9 @@ void nx_core_register_shutdown_handler(nx_closure_t handler) {
 void nx__kernel_main(void) {
   core_init();
   check_boot_errors();
-#if defined(__FANTOMENABLE__) || defined(__DBGENABLE__)
-  fantom_init();
-#endif
-#ifdef __DBGENABLE__
-  dbg__bkpt_init();
 #ifdef TEST_DBGBKPT
   dbg__test_arm_bkpt();                 /* Routine to trigger a manual ARM Breakpoint */
   dbg__test_thumb_bkpt();               /* Routine to trigger a manual Thumb Breakpoint */
-#endif
 #endif
 
 
