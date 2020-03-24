@@ -1,0 +1,52 @@
+#Library makefile
+TOP = ../../..
+
+# -- include directories
+D_H = ./
+
+# -- object directory
+D_OBJ = $(TOP)/$(NXOSDIR)/obj
+LIBLIB = $(D_OBJ)/lib$(TARGET)_lib$(E_BIN)
+
+# ---------------------------------
+include $(TOP)/Makefile.inc
+# ---------------------------------
+
+LIBDIRS = ./[a-z]*/
+O = $(addprefix $(D_OBJ)/, $(addsuffix $(E_OBJ), $(wildcard $(LIBDIRS:%/=%))))
+
+# -- full name of static library
+F_BIN = $(LIBLIB)
+
+# meta builds
+# ---- build library
+.PHONY: default
+
+default: bindirs all
+
+# ---- remove temporary files
+.PHONY: clean all
+
+clean::
+	@echo "Cleaning ..." ${LIBDIRS}
+	@for i in ${LIBDIRS}; \
+	do \
+	make -f Makefile.obj -C $${i} clean; \
+	done
+	rm -rf $(LIBLIB)
+
+all::
+	@echo "Making ..." ${LIBDIRS}
+	@for i in ${LIBDIRS}; \
+	do \
+	make -f Makefile.obj -C $${i}; \
+	done
+	$(LINK) $(LDFLAGS) $(F_BIN) $(O)
+	@echo "*** $(F_BIN) ***"
+	
+# Actual builds
+# -- create 'object' directories
+bindirs: $(D_OBJ)
+
+$(D_OBJ):
+	${MKDIR} ${D_OBJ}
