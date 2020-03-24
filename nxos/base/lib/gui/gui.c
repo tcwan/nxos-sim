@@ -5,7 +5,6 @@
 #include "base/util.h"
 #include "base/assert.h"
 #include "base/display.h"
-#include "base/drivers/avr.h"
 #include "base/drivers/systick.h"
 #include "base/drivers/sound.h"
 #include "base/lib/gui/gui.h"
@@ -16,7 +15,9 @@
 
 U8 nx_gui_text_menu(gui_text_menu_t menu) {
   U8 current = 0, count = 0, i;
+#if 0
   bool done = FALSE;
+#endif
 
   NX_ASSERT(strlen(menu.title) > 0);
 
@@ -26,6 +27,8 @@ U8 nx_gui_text_menu(gui_text_menu_t menu) {
   if (menu.default_entry < count)
     current = menu.default_entry;
 
+#if 0
+  // FIXME: Update for NxOS-sim
   do {
     nx_avr_button_t button;
     U8 start = 0, end = count;
@@ -90,7 +93,7 @@ U8 nx_gui_text_menu(gui_text_menu_t menu) {
         break;
     }
   } while (!done);
-
+#endif
 
   nx_systick_wait_ms(GUI_EVENT_AVOID_REPEAT);
   return current;

@@ -10,11 +10,9 @@
 
 #include "base/types.h"
 #include "base/assert.h"
-#include "base/nxt.h"
 #include "base/interrupts.h"
 #include "base/memmap.h"
 #include "base/util.h"
-#include "base/drivers/usb.h"
 
 #include "base/lib/tracing/tracing.h"
 
