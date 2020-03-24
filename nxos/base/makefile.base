@@ -30,7 +30,9 @@ F_BIN = $(D_BIN)/lib$(TARGET)$(E_BIN)
 F_FONT = $(TARGET)/base/$(FONT_H)
 
 # -- submodule libraries
-F_INCLIB = $(D_OBJ)/lib$(TARGET)_drivers$(E_BIN) $(D_OBJ)/lib$(TARGET)_lib$(E_BIN)
+LIBDRIVERS = $(D_OBJ)/lib$(TARGET)_drivers$(E_BIN)
+LIBLIB = $(D_OBJ)/lib$(TARGET)_lib$(E_BIN)
+F_INCLIB = $(LIBDRIVERS) $(LIBLIB)
 
 # ---------------------------------
 #   files lists
@@ -77,11 +79,11 @@ default: libs fonts
 
 libs: bindirs $(F_BIN)
 
-$(D_OBJ)/lib$(TARGET)_drivers$(E_BIN):
+$(LIBDRIVERS):
 	make -f makefile.drivers -C drivers
 
-$(D_OBJ)/lib$(TARGET)_lib$(E_BIN):
-	make -f makefile.lib -C lib
+$(LIBLIB):
+	make -f _makefile.lib -C lib
 
 # -- build fonts
 fonts: $(F_FONT)
@@ -125,7 +127,7 @@ $(D_BIN):
 clean:
 	$(CLEAN)
 	make -f makefile.drivers -C drivers clean
-	make -f makefile.lib -C lib clean
+	make -f _makefile.lib -C lib clean
 
 # ---- remove binary and object files
 .PHONY: clean-libs
@@ -133,6 +135,6 @@ clean:
 clean-libs:
 	$(CLEAN_BIN)
 	make -f makefile.drivers -C drivers clean
-	make -f makefile.lib -C lib clean
+	make -f _makefile.lib -C lib clean
 
 # -- EOF

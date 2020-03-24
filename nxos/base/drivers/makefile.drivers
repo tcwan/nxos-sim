@@ -12,12 +12,14 @@ D_H = $(D_C) $(TOP)/$(NXOSDIR)
 # -- object directory
 D_OBJ = $(TOP)/$(NXOSDIR)/obj
 
+LIBDRIVERS = $(D_OBJ)/lib$(TARGET)_drivers$(E_BIN)
+
 # ---------------------------------
 include $(TOP)/Makefile.inc
 # ---------------------------------
 
 # -- full name of static library
-F_BIN = $(D_OBJ)/lib$(TARGET)_drivers$(E_BIN)
+F_BIN = $(LIBDRIVERS)
 
 # ---------------------------------
 #   files lists
