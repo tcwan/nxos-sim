@@ -157,7 +157,7 @@ for root, dirs, files in os.walk('systems'):
 opts = Variables('scons.options', ARGUMENTS)
 opts.Add(ListVariable('appkernels',
                     'List of application kernels to build '
-                    '(by default, only the tests kernel is compiled', 'tests',
+                    '(by default, only the armskel kernel is compiled', 'armskel',
                     buildable_systems))
 opts.Add(PathVariable('gccprefix',
                     'Prefix of the cross-gcc to use (by default arm-none-eabi)',
@@ -168,16 +168,13 @@ Type: 'scons appkernels=... [gccprefix=...]' to build kernels.
 
 The application kernel names are the directory names in the systems/
 subdirectory. You can specify several application kernels, separated
-by commas.  If you specify no app kernel, only the tests kernel is
+by commas.  If you specify no app kernel, only the armskel kernel is
 built.
 
 Examples
 
- - Build the Marvin application kernel:
-     scons appkernels=marvin
-
- - Build both Marvin and the tests kernel:
-     scons appkernels=tests,marvin
+ - Build the armskel application kernel:
+     scons appkernels=armskel
 
  - Build all available systems (may require extra external dependencies):
      scons appkernels=all
@@ -189,8 +186,8 @@ Examples
      scons gccprefix=arm-softfloat-eabi
 
 Options are saved persistent in the file 'scons.options'. That means
-after you have called e.g. 'scons appkernels=tests,marvin' it's enough
-to call only 'scons' to build both Marvin and the tests kernel again.
+after you have called e.g. 'scons appkernels=armskel' it's enough
+to call only 'scons' to build the armskel kernel again.
 ''')
 
 ###############################################################
@@ -199,7 +196,7 @@ to call only 'scons' to build both Marvin and the tests kernel again.
 env = Environment(options = opts,
                   tools = ['gcc', 'as', 'gnulink', 'ar',
                            'doxygen', appkernel_tool],
-                  toolpath = ['scons_tools'],
+                  toolpath = ['scripts'],
                   NXOS_LIBGCC = [], CPPPATH = '#',
                   WITH_DOXYGEN = True)
 opts.Update(env)

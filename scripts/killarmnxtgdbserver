@@ -1,2 +1,0 @@
-#!/bin/bash
-ps ax |grep [n]xt-gdb-server |cut -d ' ' -f 1 |xargs kill

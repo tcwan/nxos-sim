@@ -1,4 +1,0 @@
-#!/bin/sh
-echo "Currently in $PWD"
-git pull -s subtree armdebug master
-

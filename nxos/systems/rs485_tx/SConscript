@@ -1,3 +1,0 @@
-from glob import glob
-Import('env')
-env.AppKernel('rs485_tx', glob('*.[cS]'), kernelsize='30k')

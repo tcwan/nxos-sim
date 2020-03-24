@@ -1,6 +1,0 @@
-# -*- mode: python -*-
-
-from glob import glob
-
-Import('env')
-env.AppKernel('bootup', glob('*.[cS]'), kernelsize='20k')

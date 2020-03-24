@@ -1,3 +1,0 @@
-from glob import glob
-Import('env')
-env.AppKernel('tribot-thumb', glob('*.[cS]'), kernelsize='50k')

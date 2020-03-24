@@ -1,3 +1,0 @@
-from glob import glob
-Import('env')
-env.AppKernel('grasper', glob('*.[cS]'), kernelsize='50k')

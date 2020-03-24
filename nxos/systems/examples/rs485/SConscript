@@ -1,8 +1,0 @@
-# -*- mode: python -*-
-
-from glob import glob
-
-Import('env')
-
-env.AppKernel('rs485_rx', glob('rx_*.[cS]'))
-env.AppKernel('rs485_tx', glob('tx_*.[cS]'))
