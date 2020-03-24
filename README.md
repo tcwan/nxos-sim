@@ -6,7 +6,8 @@ The original [NxOS](https://github.com/danderson/nxos) and [NxOS-armdebug](https
 
 ## NxOS-sim
 
-This is a port of the core NxOS code to run on an ARM simulation platform. The target platform is [CPUlator](https://cpulator.01xz.net/?sys=arm) which simulate an Altera Cyclone V FPGA-based development board (DE1-SoC) developed by Henry Wong at the University of Toronto, Canada.
+This is a port of the core NxOS code to run on an ARM simulation platform. The target platform is [CPUlator](https://cpulator.01xz.net/?sys=arm) which simulates an Altera Cyclone V FPGA-based development board (DE1-SoC) with an ARM Cortex-A9 core.
+[CPUlator](https://cpulator.01xz.net) is developed by Henry Wong at the University of Toronto, Canada.
 
 ## Features
 
