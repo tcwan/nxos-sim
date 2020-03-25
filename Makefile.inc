@@ -63,9 +63,13 @@ MKDIR = mkdir -p
 LIBLDFLAGS = -rcs
 
 # -- systems (app) link options
-# -- the parameter order matters! (-l should appear early)
-# -- make sure that '-o' is the last parameter
-SYSLDFLAGS = -L$(NXOSDIR) -l$(TARGET) -L$(NXOSOBJDIR) -T $(NXOSLD) -Os --gc-sections --no-check-sections -o
+# -- the parameter order matters! (-l should appear last with the libraries in sequence of resolution)
+# -- make sure that '-o' is the last parameter for SYSLDFLAGS
+#
+# -- evaluate libgcc path
+LIBGCCDIR = $(dir $(shell $(CC) -print-libgcc-file-name))
+SYSLDFLAGS = -L$(NXOSDIR) -L$(NXOSOBJDIR) -L$(LIBGCCDIR) -T $(NXOSLD) -Os --gc-sections --no-check-sections -o
+SYSLDLIBS = -lnxos -lgcc
 
 # -- compiler flags
 #CFLAGS = $(addprefix -I, $(D_H)) -O2 -std=gnu99 -W -Wall -Wno-comment -g

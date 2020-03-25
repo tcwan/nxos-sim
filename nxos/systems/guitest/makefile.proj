@@ -68,7 +68,7 @@ vpath %$(E_ASM) $(D_ASM)
 default: $(F_BIN)
 
 $(F_BIN): $(O)
-	$(call wrap,$(LINKER),$(SYSLDFLAGS) $@ $^)
+	$(call wrap,$(LINKER),$(SYSLDFLAGS) $@ $^ $(SYSLDLIBS))
 	$(call final,$@)
 	@echo "*** $(F_BIN) ***"
 
