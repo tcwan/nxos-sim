@@ -41,7 +41,7 @@ all::
 	do \
 	make -f Makefile.obj -C $${i}; \
 	done
-	$(LINK) $(LDFLAGS) $(F_BIN) $(O)
+	$(LINK) $(LIBLDFLAGS) $(F_BIN) $(O)
 	@echo "*** $(F_BIN) ***"
 	
 # Actual builds

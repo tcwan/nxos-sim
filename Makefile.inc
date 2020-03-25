@@ -34,7 +34,12 @@ endif
 MKDIR = mkdir -p
 
 # -- static library link options
-LDFLAGS = rcs
+LIBLDFLAGS = rcs
+
+# -- systems (app) link options
+SYSLDFLAGS = -T -Os --gc-sections --no-check-sections
+#		'$LINK -o $TARGET -T %s -Os --gc-sections --no-check-sections '
+#        '$SOURCES' % app_kernel_lds)
 
 # Enable Debug Symbols by default
 # -- compiler flags
