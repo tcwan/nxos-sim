@@ -17,9 +17,6 @@ CFLAGS := $(addprefix -I, $(D_H)) $(CFLAGS)
 CXXFLAGS := $(addprefix -I, $(D_H)) $(CXXFLAGS)
 ASMFLAGS := $(addprefix -I, $(D_H)) $(ASMFLAGS)
 
-# -- submodule library archive
-LIBDRIVERS = $(D_OBJ)/lib$(TARGET)_drivers$(E_BIN)
-
 # -- full name of static library
 F_BIN = $(LIBDRIVERS)
 
@@ -67,10 +64,10 @@ vpath %$(E_ASM) $(D_ASM)
 # -- build static library
 default: bindirs $(F_BIN)
 
+# -- create a dummy output file, to indicate that the object files were built
 $(F_BIN): $(O)
-	$(call wrap,$(AR),$(LIBLDFLAGS) $@ $^)
-	$(call final,$@)
-	@echo "*** $(F_BIN) ***"
+	touch $(LIBDRIVERS)
+	@echo "*** $(LIBDRIVERS) ***"
 
 $(S_C) $(S_CXX) $(S_ASM): $(S_H)
 

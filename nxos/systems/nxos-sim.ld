@@ -21,8 +21,8 @@
  */
 
 MEMORY {
-vector_ram : ORIGIN = 2M, LENGTH = 64
-ram : ORIGIN = 2M + 64, LENGTH = 64K - 64 + 21
+vector_ram : ORIGIN = 0M, LENGTH = 64
+ram : ORIGIN = 0M + 64, LENGTH = 64K - 64 + 21
 }
 
 ROM_BASE = 1M;

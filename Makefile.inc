@@ -11,6 +11,10 @@ NXOSOBJDIR = $(NXOSDIR)/obj
 NXOSLIBDIR = $(NXOSDIR)/base
 NXOSSYSDIR = $(NXOSDIR)/systems
 
+# -- dummy temporary libs
+LIBDRIVERS = $(NXOSOBJDIR)/drivers.built
+LIBLIB = $(NXOSOBJDIR)/lib.built
+
 # -- executable related
 NXOSLD = $(NXOSSYSDIR)/nxos-sim.ld
 EXECEXT = .elf
@@ -56,12 +60,12 @@ endif
 MKDIR = mkdir -p
 
 # -- static library link options
-LIBLDFLAGS = rcs
+LIBLDFLAGS = -rcs
 
 # -- systems (app) link options
 # -- the parameter order matters! (-l should appear early)
 # -- make sure that '-o' is the last parameter
-SYSLDFLAGS = -L$(NXOSDIR) -L$(NXOSOBJDIR) -l$(TARGET) -T $(NXOSLD) -Os --gc-sections --no-check-sections -o
+SYSLDFLAGS = -L$(NXOSDIR) -l$(TARGET) -L$(NXOSOBJDIR) -T $(NXOSLD) -Os --gc-sections --no-check-sections -o
 
 # -- compiler flags
 #CFLAGS = $(addprefix -I, $(D_H)) -O2 -std=gnu99 -W -Wall -Wno-comment -g

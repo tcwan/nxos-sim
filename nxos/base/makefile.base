@@ -27,9 +27,7 @@ F_BIN = $(NXOSLIBS)
 # -- full name of font header file
 F_FONT = $(NXOSDIR)/base/$(FONT_H)
 
-# -- submodule libraries
-LIBDRIVERS = $(D_OBJ)/lib$(TARGET)_drivers$(E_BIN)
-LIBLIB = $(D_OBJ)/lib$(TARGET)_lib$(E_BIN)
+# -- submodule libraries (dummy output files)
 F_INCLIB = $(LIBDRIVERS) $(LIBLIB)
 
 # ---------------------------------
@@ -92,7 +90,8 @@ DISPLAY_O = $(D_OBJ)/display.o
 $(DISPLAY_O): $(F_FONT)
 
 $(F_BIN): $(O) $(F_INCLIB)
-	$(call wrap,$(AR),$(LIBLDFLAGS) $@ $^)
+#	$(call wrap,$(AR),$(LIBLDFLAGS) $@ $^)
+	$(call wrap,$(AR),$(LIBLDFLAGS) $@ $(NXOSOBJDIR)/*.o)
 	$(call final,$@)
 	@echo "*** $(F_BIN) ***"
 
