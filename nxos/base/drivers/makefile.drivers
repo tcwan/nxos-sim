@@ -68,7 +68,7 @@ vpath %$(E_ASM) $(D_ASM)
 default: bindirs $(F_BIN)
 
 $(F_BIN): $(O)
-	$(call wrap,$(LINK),$(LIBLDFLAGS) $@ $^)
+	$(call wrap,$(AR),$(LIBLDFLAGS) $@ $^)
 	$(call final,$@)
 	@echo "*** $(F_BIN) ***"
 

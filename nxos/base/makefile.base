@@ -92,7 +92,7 @@ DISPLAY_O = $(D_OBJ)/display.o
 $(DISPLAY_O): $(F_FONT)
 
 $(F_BIN): $(O) $(F_INCLIB)
-	$(call wrap,$(LINK),$(LIBLDFLAGS) $@ $^)
+	$(call wrap,$(AR),$(LIBLDFLAGS) $@ $^)
 	$(call final,$@)
 	@echo "*** $(F_BIN) ***"
 

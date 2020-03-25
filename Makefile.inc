@@ -7,17 +7,20 @@ NXOSDIR = $(TOP)/nxos
 NXOSLIBS = $(NXOSDIR)/lib$(TARGET).a
 
 # -- project path
-NXOSLIBDIR = $(NXOSDIR)/base/
-NXOSSYSDIR = $(NXOSDIR)/systems/
+NXOSOBJDIR = $(NXOSDIR)/obj
+NXOSLIBDIR = $(NXOSDIR)/base
+NXOSSYSDIR = $(NXOSDIR)/systems
 
-NXOSLD = nxos-sim.ld
+# -- executable related
+NXOSLD = $(NXOSSYSDIR)/nxos-sim.ld
+EXECEXT = .elf
 
 # -- paths
 # -- library directory
 D_BIN = $(NXOSDIR)
 
 # -- object directory
-D_OBJ = $(NXOSDIR)/obj
+D_OBJ = $(NXOSOBJDIR)
 
 # -- Configuration constants
 # -- ELF Architecture
@@ -37,13 +40,15 @@ ifeq ($(PLATFORM),__UNIX__)
 CC = arm-none-eabi-gcc
 AS = arm-none-eabi-as
 CXX = arm-none-eabi-g++
-LINK = arm-none-eabi-ar
+AR = arm-none-eabi-ar
+LINKER = arm-none-eabi-ld
 MAKE = make
 else
 CC = gcc
 AS = as
 CXX = g++
-LINK = ar
+AR = ar
+LINKER = ld
 MAKE = make
 endif
 
@@ -54,7 +59,9 @@ MKDIR = mkdir -p
 LIBLDFLAGS = rcs
 
 # -- systems (app) link options
-SYSLDFLAGS = -T $(NXOSLD) -Os --gc-sections --no-check-sections
+# -- the parameter order matters! (-l should appear early)
+# -- make sure that '-o' is the last parameter
+SYSLDFLAGS = -L$(NXOSDIR) -L$(NXOSOBJDIR) -l$(TARGET) -T $(NXOSLD) -Os --gc-sections --no-check-sections -o
 
 # -- compiler flags
 #CFLAGS = $(addprefix -I, $(D_H)) -O2 -std=gnu99 -W -Wall -Wno-comment -g
@@ -99,6 +106,7 @@ ASMFLAGS := $(ASMFLAGS) -mcpu=$(CPUARCH) -W -Werror -Os
 #
 #################################################################
 CFLAGS := $(CFLAGS) -D__NXOS__ -D__DBGENABLE__
+ASMFLAGS := $(ASMFLAGS) -D__NXOS__ -D__DBGENABLE__
 
 # ---------------------------------
 #   file suffixes
