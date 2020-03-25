@@ -6,7 +6,6 @@
 #include "base/types.h"
 #include "base/core.h"
 #include "base/display.h"
-#include "base/drivers/avr.h"
 #include "base/drivers/systick.h"
 #include "base/lib/gui/gui.h"
 
@@ -38,8 +37,9 @@ void main(void) {
         nx_display_end_line();
 
         nx_display_string("\nOk to go back");
+#if 0
         while (nx_avr_get_button() != BUTTON_OK);
-
+#endif
         break;
     }
   }

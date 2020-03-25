@@ -19,7 +19,7 @@
 #include "base/interwork.h"
 #include "base/lib/scaffolding/scaffolding.h"
 #include "base/lib/prng/prng.h"
-#include "armdebug/Debugger/debug_stub.h"
+#include "base/debug_stub.h"
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
 #define ENABLE_BREAKPOINTS

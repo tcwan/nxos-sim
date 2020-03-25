@@ -17,6 +17,7 @@
 
 #define __ASSEMBLY__
 #include "base/interwork.h"
+#include "base/debug_stub.h"
 #include "base/lib/scaffolding/scaffolding.h"
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
