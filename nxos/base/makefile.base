@@ -1,7 +1,10 @@
 # NxOS Library
 TOP = ../..
+# ---------------------------------
+include $(TOP)/Makefile.inc
+# ---------------------------------
 
-FONT_SCRIPT = $(TOP)/$(NXOSDIR)/scripts/generate_fonts.py
+FONT_SCRIPT = $(NXOSDIR)/scripts/generate_fonts.py
 FONT_H = _font.h
 FONT_DEP = font.8x5.png _font.h.base
 
@@ -11,23 +14,18 @@ D_CXX = $(D_C)
 D_ASM = $(D_C)
 
 # -- include directories
-D_H = $(D_C) $(TOP)/$(NXOSDIR)
+D_H = $(D_C) $(NXOSDIR)
 
-# -- library directory
-D_BIN = $(TOP)/$(NXOSDIR)
-
-# -- object directory
-D_OBJ = $(TOP)/$(NXOSDIR)/obj
-
-# ---------------------------------
-include $(TOP)/Makefile.inc
-# ---------------------------------
+# -- update XXFLAGS
+CFLAGS := $(addprefix -I, $(D_H)) $(CFLAGS)
+CXXFLAGS := $(addprefix -I, $(D_H)) $(CXXFLAGS)
+ASMFLAGS := $(addprefix -I, $(D_H)) $(ASMFLAGS)
 
 # -- full name of static library
-F_BIN = $(D_BIN)/lib$(TARGET)$(E_BIN)
+F_BIN = $(NXOSLIBS)
 
 # -- full name of font header file
-F_FONT = $(TARGET)/base/$(FONT_H)
+F_FONT = $(NXOSDIR)/base/$(FONT_H)
 
 # -- submodule libraries
 LIBDRIVERS = $(D_OBJ)/lib$(TARGET)_drivers$(E_BIN)

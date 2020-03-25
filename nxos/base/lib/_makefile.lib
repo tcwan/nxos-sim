@@ -1,16 +1,14 @@
 #Library makefile
 TOP = ../../..
+# ---------------------------------
+include $(TOP)/Makefile.inc
+# ---------------------------------
 
 # -- include directories
 D_H = ./
 
-# -- object directory
-D_OBJ = $(TOP)/$(NXOSDIR)/obj
+# -- submodule library archive
 LIBLIB = $(D_OBJ)/lib$(TARGET)_lib$(E_BIN)
-
-# ---------------------------------
-include $(TOP)/Makefile.inc
-# ---------------------------------
 
 LIBDIRS = ./[a-z]*/
 O = $(addprefix $(D_OBJ)/, $(addsuffix $(E_OBJ), $(wildcard $(LIBDIRS:%/=%))))
@@ -31,6 +29,7 @@ clean::
 	@echo "Cleaning ..." ${LIBDIRS}
 	@for i in ${LIBDIRS}; \
 	do \
+	echo @@@ make -f Makefile.obj -C $${i} clean; \
 	make -f Makefile.obj -C $${i} clean; \
 	done
 	rm -rf $(LIBLIB)
@@ -39,8 +38,10 @@ all::
 	@echo "Making ..." ${LIBDIRS}
 	@for i in ${LIBDIRS}; \
 	do \
+	echo @@@ make -f Makefile.obj -C $${i}; \
 	make -f Makefile.obj -C $${i}; \
 	done
+	@echo "@@@ Linking $(F_BIN)"
 	$(LINK) $(LIBLDFLAGS) $(F_BIN) $(O)
 	@echo "*** $(F_BIN) ***"
 	

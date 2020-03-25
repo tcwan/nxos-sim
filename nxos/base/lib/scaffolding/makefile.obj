@@ -1,5 +1,8 @@
 # NxOS Library
 TOP = ../../../..
+# ---------------------------------
+include $(TOP)/Makefile.inc
+# ---------------------------------
 
 # -- source directories
 D_C = .
@@ -7,14 +10,12 @@ D_CXX = $(D_C)
 D_ASM = $(D_C)
 
 # -- include directories
-D_H = $(D_C) $(TOP)/$(NXOSDIR)
+D_H = $(D_C) $(NXOSDIR)
 
-# -- object directory
-D_OBJ = $(TOP)/$(NXOSDIR)/obj
-
-# ---------------------------------
-include $(TOP)/Makefile.inc
-# ---------------------------------
+# -- update XXFLAGS
+CFLAGS := $(addprefix -I, $(D_H)) $(CFLAGS)
+CXXFLAGS := $(addprefix -I, $(D_H)) $(CXXFLAGS)
+ASMFLAGS := $(addprefix -I, $(D_H)) $(ASMFLAGS)
 
 # ---------------------------------
 #   files lists

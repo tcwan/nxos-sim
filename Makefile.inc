@@ -1,11 +1,26 @@
 # Makefile include used by all other Makefiles
+# -- TOP must be defined in enclosing makefile
 
-# -- library name
+# -- library name and paths
 TARGET = nxos
-NXOSDIR = nxos
+NXOSDIR = $(TOP)/nxos
+NXOSLIBS = $(NXOSDIR)/lib$(TARGET).a
 
+# -- project path
+NXOSLIBDIR = $(NXOSDIR)/base/
+NXOSSYSDIR = $(NXOSDIR)/systems/
 
-# ELF Architecture
+NXOSLD = nxos-sim.ld
+
+# -- paths
+# -- library directory
+D_BIN = $(NXOSDIR)
+
+# -- object directory
+D_OBJ = $(NXOSDIR)/obj
+
+# -- Configuration constants
+# -- ELF Architecture
 CPUARCH = arm7tdmi
 
 # -- platform
@@ -23,11 +38,13 @@ CC = arm-none-eabi-gcc
 AS = arm-none-eabi-as
 CXX = arm-none-eabi-g++
 LINK = arm-none-eabi-ar
+MAKE = make
 else
 CC = gcc
 AS = as
 CXX = g++
 LINK = ar
+MAKE = make
 endif
 
 # -- command to create directories
@@ -37,26 +54,26 @@ MKDIR = mkdir -p
 LIBLDFLAGS = rcs
 
 # -- systems (app) link options
-SYSLDFLAGS = -T -Os --gc-sections --no-check-sections
-#		'$LINK -o $TARGET -T %s -Os --gc-sections --no-check-sections '
-#        '$SOURCES' % app_kernel_lds)
+SYSLDFLAGS = -T $(NXOSLD) -Os --gc-sections --no-check-sections
 
-# Enable Debug Symbols by default
 # -- compiler flags
 #CFLAGS = $(addprefix -I, $(D_H)) -O2 -std=gnu99 -W -Wall -Wno-comment -g
-CFLAGS = $(addprefix -I, $(D_H)) -std=gnu99 -W -Wall -Wno-comment -g
+# Enable Debug Symbols by default
+CFLAGS = -std=gnu99 -W -Wall -Wno-comment -g
 
 ifeq ($(PLATFORM),__UNIX__)
 CFLAGS := $(CFLAGS) -fPIC
 endif
 
 #CXXFLAGS = $(addprefix -I, $(D_H)) -O2 -ffast-math -funroll-loops -fno-exceptions -fomit-frame-pointer -g -W -Wall -Wno-comment -g
-CXXFLAGS = $(addprefix -I, $(D_H)) -ffast-math -funroll-loops -fno-exceptions -fomit-frame-pointer -g -W -Wall -Wno-comment -g
+# Enable Debug Symbols by default
+CXXFLAGS = -ffast-math -funroll-loops -fno-exceptions -fomit-frame-pointer -g -W -Wall -Wno-comment -g
 
 ifeq ($(PLATFORM),__UNIX__)
 CXXFLAGS := $(CXXFLAGS) -fPIC
 endif
 
+# Enable Debug Symbols by default
 ASMFLAGS = -Wall -g
 
 # ---------------------------------
