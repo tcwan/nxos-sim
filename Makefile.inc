@@ -105,16 +105,18 @@ CXXFLAGS := $(CXXFLAGS) -mcpu=$(CPUARCH)
 ASMFLAGS := $(ASMFLAGS) -mcpu=$(CPUARCH) -W -Werror -Os
 
 #################################################################
-# Debugger Support Flags
+# NxOS Configuration Flags
 #
-# If ARM Debugging is desired, the following flags must be defined:
-# __NXOS__, __DBGENABLE__
+# If ARM Debugging is desired, the following flag must be defined:
+# __DBGENABLE__
 #
-# (__NXOS__ selects armdebug for NxOS)
+# Note: The following flags are MUTUALLY EXCLUSIVE (only one should be defined)
+# __DE1SOC__ configures NxOS for the CPUlator DE1-SoC board configuration
+# __LEGONXT__ configures NxOS for the LEGO Mindstorms NXT board configuration
 #
 #################################################################
-CFLAGS := $(CFLAGS) -D__NXOS__ -D__DBGENABLE__
-ASMFLAGS := $(ASMFLAGS) -D__NXOS__ -D__DBGENABLE__
+CFLAGS := $(CFLAGS) -D__DBGENABLE__ -D__DE1SOC__
+ASMFLAGS := $(ASMFLAGS) -D__DBGENABLE__ -D__DE1SOC__
 
 # ---------------------------------
 #   file suffixes
