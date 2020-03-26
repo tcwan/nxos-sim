@@ -6,7 +6,14 @@
  * the terms of the GNU Public License (GPL) version 2.
  */
 
-#include "at91sam7s256.h"
+#ifdef __DE1SOC__
+#include "base/boards/DE1-SoC/address_map_arm.h"
+#include "base/boards/DE1-SoC/interrupt_ID.h"
+#endif
+
+#ifdef __LEGONXT__
+#include "base/boards/LEGO-NXT/at91sam7s256.h"
+#endif
 
 #include "base/types.h"
 #include "base/interrupts.h"
@@ -41,6 +48,18 @@ static void core_init(void) {
   nx_systick_wait_ms(100);
 }
 
+#ifdef __DE1SOC__
+/* Checks whether the system rebooted due to some kind of external
+ * failure, and report if so.
+ *
+ * This is a dummy function in CPUlator
+ */
+static void check_boot_errors(void) {
+	// Do nothing
+}
+#endif
+
+#ifdef __LEGONXT__
 /* Checks whether the system rebooted due to some kind of external
  * failure, and report if so.
  *
@@ -63,6 +82,7 @@ static void check_boot_errors(void) {
 	    "**************\n");
   }
 }
+#endif
 
 void nx_core_halt(void) {
   if (shutdown_handler)
@@ -74,8 +94,16 @@ void nx_core_reset(void) {
   if (shutdown_handler)
     shutdown_handler();
   nx__lcd_shutdown();
+
+#ifdef __DE1SOC__
+  // FIXME: Halt the processor
+  while (1);
+#endif
+
+#ifdef __LEGONXT__
   /* Total reset of the NXT's processor. */
   *AT91C_RSTC_RCR = 0xA5000005;
+#endif
 }
 
 void nx_core_register_shutdown_handler(nx_closure_t handler) {

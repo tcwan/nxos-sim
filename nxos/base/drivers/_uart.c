@@ -1,4 +1,4 @@
-/* Copyright (C) 2007 the NxOS developers
+/* Copyright (C) 2007-2020 the NxOS developers
  *
  * See AUTHORS for a full list of the developers.
  *
@@ -6,7 +6,14 @@
  * the terms of the GNU Public License (GPL) version 2.
  */
 
-#include "base/at91sam7s256.h"
+#ifdef __DE1SOC__
+#include "base/boards/DE1-SoC/address_map_arm.h"
+#include "base/boards/DE1-SoC/interrupt_ID.h"
+#endif
+
+#ifdef __LEGONXT__
+#include "base/boards/LEGO-NXT/at91sam7s256.h"
+#endif
 
 #include "base/types.h"
 #include "base/assert.h"
@@ -15,6 +22,12 @@
 #include "base/drivers/systick.h"
 
 #include "base/drivers/_uart.h"
+
+#ifdef __DE1SOC__
+#define UART_CLOCK_DIVISOR 1		// FIXME: Dummy value for simulator
+#endif
+
+#ifdef __LEGONXT__
 
 /* Pinmask for all the UART pins. */
 #define UART_PIOA_PINS \
@@ -31,11 +44,9 @@
  * value. This divisor actually programs for 461.5kBaud, for 0.15%
  * error.
  */
-#if 0
 #define UART_CLOCK_DIVISOR (NXT_CLOCK_FREQ / 8 / UART_BAUD_RATE)
-#else
-#define UART_CLOCK_DIVISOR 1		// FIXME: Dummy value for simulator
 #endif
+
 
 static volatile struct {
   nx__uart_read_callback_t callback;
@@ -49,6 +60,56 @@ static volatile struct {
 } uart_state = {
   NULL, 0, {0}, 0
 };
+
+#ifdef __DE1SOC__
+	// FIXME
+#define UNUSED(x) (void)(x)
+
+/** Initialize the UART driver.
+ *
+ * @param callback The callback to fire when the UART receives data.
+ */
+void nx__uart_init(nx__uart_read_callback_t callback);
+
+/**
+ * @param callback new callback to use
+ * @note if callback is null, interruptions are disabled and PDC is disabled
+ */
+void nx__uart_set_callback(nx__uart_read_callback_t callback);
+
+/**
+ * Set manually the PDC
+ */
+void nx__uart_read(U8 *buf, U32 length);
+
+/**
+ * Indicates how many bytes the PDC has already read from the UART
+ */
+U32 nx__uart_data_read(void);
+
+/** Write @a lng bytes from @a data over the UART bus.
+ *
+ * @param data A pointer to the data to write.
+ * @param lng The number of bytes to write.
+ */
+void nx__uart_write(const U8 *data, U32 lng);
+
+/** Check if the UART can be written to.
+ *
+ * @return TRUE if the UART is idle and can be written to, else
+ * FALSE.
+ */
+bool nx__uart_can_write(void);
+
+/** Check if the UART is currently writing data.
+ *
+ * @return TRUE if the UART is busy writing, else FALSE.
+ */
+bool nx__uart_is_writing(void);
+
+#endif
+
+#ifdef __LEGONXT__
 
 static void uart_isr(void) {
   volatile U32 status = *AT91C_US1_CSR;
@@ -230,3 +291,6 @@ void nx__uart_read(U8 *buf, U32 length) {
 U32 nx__uart_data_read(void) {
   return uart_state.to_read - (*AT91C_US1_RCR);
 }
+
+#endif
+

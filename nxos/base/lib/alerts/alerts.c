@@ -1,4 +1,4 @@
-/* Copyright (C) 2007-2011 the NxOS developers
+/* Copyright (C) 2007-2020 the NxOS developers
  *
  * See AUTHORS for a full list of the developers.
  *
@@ -6,7 +6,14 @@
  * the terms of the GNU Public License (GPL) version 2.
  */
 
-#include "base/at91sam7s256.h"
+#ifdef __DE1SOC__
+#include "base/boards/DE1-SoC/address_map_arm.h"
+#include "base/boards/DE1-SoC/interrupt_ID.h"
+#endif
+
+#ifdef __LEGONXT__
+#include "base/boards/LEGO-NXT/at91sam7s256.h"
+#endif
 #include "base/drivers/systick.h"
 #include "base/drivers/sound.h"
 

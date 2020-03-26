@@ -8,7 +8,16 @@
 
 #include "_memcpy.h"
 #include "base/types.h"
-#include "base/at91sam7s256.h"
+
+#ifdef __DE1SOC__
+#include "base/boards/DE1-SoC/address_map_arm.h"
+#include "base/boards/DE1-SoC/interrupt_ID.h"
+#endif
+
+#ifdef __LEGONXT__
+#include "base/boards/LEGO-NXT/at91sam7s256.h"
+#endif
+
 #include "base/memmap.h"
 #include "base/assert.h"
 
@@ -16,6 +25,21 @@
     (((S32)pos) >= ((S32)start) && ((S32)pos) < ((S32)end)) && \
     (((S32)pos) + ((S32)len) <= ((S32)end))
 
+#ifdef __DE1SOC__
+void *_memcpy(void *dest, const void *src, size_t n) {
+  // FIXME: Naive implementation, no bounds checking
+  if (n == 0)
+    return NULL;
+
+  char *d = dest;
+  const char *s = src;
+  while (n--)
+	*d++ = *s++;
+  return dest;
+}
+#endif
+
+#ifdef __LEGONXT__
 typedef enum {
   CHUNK_INVALID = -1,
   CHUNK_RAM = 0,
@@ -44,11 +68,9 @@ static void * memcpy_ram(U8 *dst, const U8 *src, U32 len) {
   return dst;
 }
 
-#if 0
 static bool write_page(U32 page, U8 *buffer) {
   return nx__efc_write_page((U32 *)buffer, page);
 }
-#endif
 
 static int positioning(U32 pos, size_t len) {
   if (BELONGS(AT91C_RAM_START, AT91C_RAM_START + REAL_LENGTH_RAM,
@@ -69,7 +91,6 @@ static int positioning(U32 pos, size_t len) {
   return CHUNK_INVALID;
 }
 
-#if 0
 static void replace_flash(U32 pagenumb, U32 offset, const U8 *src, size_t n) {
   U32 i;
   U8 buffer[PAGE_SIZE];
@@ -104,7 +125,6 @@ static void *memcpy_flash(U8 *dest, const U8 *src, size_t n) {
 
   return dest;
 }
-#endif
 
 void *_memcpy(void *dest, const void *src, size_t n) {
   belong_t belong = positioning((U32)dest, n);
@@ -115,12 +135,12 @@ void *_memcpy(void *dest, const void *src, size_t n) {
     break;
   case CHUNK_RELOC_FLASH:
   case CHUNK_FLASH:
-	// FIXME: Cleanup Flash copy code
-    //return memcpy_flash((U8 *)dest, (U8 *)src, n);
-    //break;
+    return memcpy_flash((U8 *)dest, (U8 *)src, n);
+    break;
   default:
     NX_FAIL("Access to undefined memory area");
     return NULL;
   }
 }
+#endif
 

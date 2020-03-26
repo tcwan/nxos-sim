@@ -1,4 +1,4 @@
-/* Copyright (C) 2007 the NxOS developers
+/* Copyright (C) 2007-2020 the NxOS developers
  *
  * See AUTHORS for a full list of the developers.
  *
@@ -6,7 +6,14 @@
  * the terms of the GNU Public License (GPL) version 2.
  */
 
-#include "base/at91sam7s256.h"
+#ifdef __DE1SOC__
+#include "base/boards/DE1-SoC/address_map_arm.h"
+#include "base/boards/DE1-SoC/interrupt_ID.h"
+#endif
+
+#ifdef __LEGONXT__
+#include "base/boards/LEGO-NXT/at91sam7s256.h"
+#endif
 
 #include "base/types.h"
 #include "base/interrupts.h"
@@ -16,6 +23,8 @@
 
 #include "base/drivers/_sound.h"
 
+#if 0
+	// FIXME
 /* Statically defined digitized sine wave, used for tone
  * generation.
  */
@@ -34,6 +43,17 @@ static const U32 tone_pattern[16] = {
  * previous digitized sine wave is to be played.
  */
 static volatile U32 tone_cycles;
+#endif
+
+#ifdef __DE1SOC__
+
+// FIXME
+#define UNUSED(x) (void)(x)
+
+
+#endif
+
+#ifdef __LEGONXT__
 
 static void sound_isr(void) {
   if (tone_cycles--) {
@@ -121,3 +141,4 @@ void nx_sound_freq(U32 freq, U32 ms) {
   nx_sound_freq_async(freq, ms);
   nx_systick_wait_ms(ms);
 }
+#endif

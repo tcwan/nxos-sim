@@ -6,7 +6,14 @@
  * the terms of the GNU Public License (GPL) version 2.
  */
 
-#include "base/at91sam7s256.h"
+#ifdef __DE1SOC__
+#include "base/boards/DE1-SoC/address_map_arm.h"
+#include "base/boards/DE1-SoC/interrupt_ID.h"
+#endif
+
+#ifdef __LEGONXT__
+#include "base/boards/LEGO-NXT/at91sam7s256.h"
+#endif
 
 #include "base/types.h"
 #include "base/lock.h"
@@ -15,6 +22,61 @@
 #include "base/drivers/aic.h"
 
 #include "base/drivers/_lcd.h"
+
+#ifdef __DE1SOC__
+	// FIXME
+#define UNUSED(x) (void)(x)
+
+/** Initialize the LCD driver. */
+void nx__lcd_init(void) {
+
+}
+
+/** Periodic update function, called once every millisecond.
+ *
+ * @warning This is called by the systick driver, and shouldn't be
+ * invoked directly unless you really know what you are doing.
+ */
+void nx__lcd_fast_update(void) {
+
+}
+
+/** Set the virtual display to mirror to the screen.
+ *
+ * @param display_buffer The screen buffer to mirror.
+ */
+void nx__lcd_set_display(U8 *display_buffer) {
+	UNUSED(display_buffer);	// To suppress compiler errors
+}
+
+/** Mark the display as requiring a refresh cycle. */
+void nx__lcd_dirty_display(void) {
+
+}
+
+/** Safely power off the LCD controller.
+ *
+ * The LCD controller must be powered off this way in order to drain
+ * several capacitors connected to the display. Failure to do so may
+ * damage the LCD display (although in practice the screen seems to
+ * take hard poweroffs fairly happily).
+ */
+void nx__lcd_shutdown(void) {
+
+}
+
+/** Display an abort message.
+ *
+ * This will take the kernel offline (the technical term for "crash")
+ * after displaying an abort message.
+ */
+void nx__lcd_sync_refresh(void) {
+
+}
+
+#endif
+
+#ifdef __LEGONXT__
 
 /* Internal command bytes implementing part of the basic commandset of
  * the UC1601.
@@ -336,3 +398,4 @@ void nx__lcd_sync_refresh() {
     }
   }
 }
+#endif
