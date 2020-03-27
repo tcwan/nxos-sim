@@ -6,6 +6,9 @@
  * the terms of the GNU Public License (GPL) version 2.
  */
 
+#define UNUSED(x) (void)(x);
+
+
 #ifdef __DE1SOC__
 #include "base/boards/DE1-SoC/address_map_arm.h"
 #include "base/boards/DE1-SoC/interrupt_ID.h"
@@ -21,13 +24,16 @@
 
 #ifdef __DE1SOC__
 
+
 /* Despite the name (AIC), this module is written for the Cortex-A9 GIC
  * The function name remains unchanged due to historical reasons.
  */
 	// FIXME
 
 /** Initialize the interrupt controller. */
-void nx__aic_init(void);
+void nx__aic_init(void) {
+	// FIXME: Setup other peripherals
+}
 
 /** Install @a isr as the handler for @a vector.
  *
@@ -44,25 +50,43 @@ void nx__aic_init(void);
  * care!
  */
 void nx_aic_install_isr(nx_aic_vector_t vector, nx_aic_priority_t prio,
-                        nx_aic_trigger_mode_t trig_mode, nx_closure_t isr);
+                        nx_aic_trigger_mode_t trig_mode, nx_closure_t isr) {
+// FIXME: This is not used unless we want to handle ISR for other peripherals
+	UNUSED(vector);
+	UNUSED(prio)
+	UNUSED(trig_mode);
+	UNUSED(isr);
+
+}
 
 /** Enable dispatching of @a vector.
  *
  * @param vector The interrupt vector to enable.
  */
-void nx_aic_enable(nx_aic_vector_t vector);
+void nx_aic_enable(nx_aic_vector_t vector) {
+	// FIXME: This is not used unless we want to handle ISR for other peripherals
+	UNUSED(vector);
+
+}
 
 /** Disable dispatching of @a vector.
  *
  * @param vector The interrupt vector to disable.
  */
-void nx_aic_disable(nx_aic_vector_t vector);
+void nx_aic_disable(nx_aic_vector_t vector) {
+	// FIXME: This is not used unless we want to handle ISR for other peripherals
+	UNUSED(vector);
+
+}
 
 /** Manually trigger the interrupt line @a vector.
  *
  * @param vector The interrupt vector to trigger.
  */
-void nx_aic_set(nx_aic_vector_t vector);
+void nx_aic_set(nx_aic_vector_t vector) {
+	// FIXME: This is not used unless we want to handle ISR for other peripherals
+	UNUSED(vector);
+}
 
 /** Manually reset the interrupt line @a vector.
  *
@@ -72,7 +96,10 @@ void nx_aic_set(nx_aic_vector_t vector);
  * line was triggered manually with nx_aic_set(). In other cases, each
  * peripheral has its own discipline for acknowledging the interrupt.
  */
-void nx_aic_clear(nx_aic_vector_t vector);
+void nx_aic_clear(nx_aic_vector_t vector) {
+	// FIXME: This is not used unless we want to handle ISR for other peripherals
+	UNUSED(vector);
+}
 
 #endif
 

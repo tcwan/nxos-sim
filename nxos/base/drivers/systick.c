@@ -22,6 +22,28 @@
 
 #include "base/drivers/_systick.h"
 
+#ifdef __DE1SOC__
+
+#define DE1_CLOCK_FREQ 200000000L
+
+#define US_COUNT (DE1_CLOCK_FREQ/1000000L)
+
+/* We want a timer interrupt 1000 times per second. */
+#define SYSIRQ_FREQ 1000
+
+/* Cortex A9 Private Timer Defines */
+#define MPT_LOAD_INDEX 		0
+#define MPT_COUNTER_INDEX	1
+#define MPT_CONTROL_INDEX	2
+#define MPT_INTSTAT_INDEX	3
+
+#define PTEN_MASK	0x3			// int mask = 1, mode = 1, enable = 1
+#define PTINTR_ACK	0x1			// acknowldge interrupt mask
+
+#endif
+
+#ifdef __LEGONXT__
+
 /* The main clock is at 48MHz, and the PIT divides that by 16 to get
  * its base timer frequency.
  */
@@ -36,7 +58,6 @@
 /* We want a timer interrupt 1000 times per second. */
 #define SYSIRQ_FREQ 1000
 
-#ifdef __LEGONXT__
 
 /* The system IRQ processing takes place in two different interrupt
  * handlers: the main PIT interrupt handler runs at a high priority,
@@ -72,28 +93,34 @@ static nx_closure_t scheduler_cb = NULL;
  */
 static bool scheduler_inhibit = FALSE;
 
+#ifdef __LEGONXT__
 /* Low priority handler, called 1000 times a second by the high
  * priority handler if a scheduler callback is registered.
  */
 static void systick_sched(void) {
   /* Acknowledge the interrupt. */
-#ifdef __LEGONXT__
   nx_aic_clear(SCHEDULER_SYSIRQ);
-#endif
 
   /* Call into the scheduler. */
   if (scheduler_cb)
     scheduler_cb();
 }
+#endif
 
 /* High priority handler, called 1000 times a second */
-static void systick_isr(void) {
+void systick_isr(void) {
+
+#ifdef __DE1SOC__
+  ((HW_REG *) MPCORE_PRIV_TIMER)[MPT_INTSTAT_INDEX] = PTINTR_ACK;		// Acknowledge Interrupt
+#endif
+
+
+#ifdef __LEGONXT__
   volatile U32 status __attribute__ ((unused));
   /* The PIT's value register must be read to acknowledge the
    * interrupt.
    */
 
-#ifdef __LEGONXT__
   status = *AT91C_PITC_PIVR;
 #endif
 
@@ -121,10 +148,11 @@ void nx__systick_init(void) {
   nx_interrupts_disable();
 
 #ifdef __DE1SOC__
-	// FIXME
-#define UNUSED(x) (void)(x)
-  	  UNUSED(systick_sched);
-  	  UNUSED(systick_isr);
+
+  ((HW_REG *) MPCORE_PRIV_TIMER)[MPT_CONTROL_INDEX] = 0;		// Stop timer
+  ((HW_REG *) MPCORE_PRIV_TIMER)[MPT_LOAD_INDEX] = (DE1_CLOCK_FREQ / SYSIRQ_FREQ) - 1;	// period 1 ms @ 200 MHz
+  ((HW_REG *) MPCORE_PRIV_TIMER)[MPT_CONTROL_INDEX] = PTEN_MASK;	// Enable timer with Auto reload and Interrupt
+
 #endif
 
 #ifdef __LEGONXT__
@@ -171,7 +199,7 @@ void nx_systick_wait_ms(U32 ms) {
 void nx_systick_wait_us(U32 us) {
 
 #ifdef __DE1SOC__
-	  U32 pittime = 0;	// FIXME
+  U32 pittime = ((HW_REG *) MPCORE_PRIV_TIMER)[MPT_COUNTER_INDEX];
 #endif
 
 #ifdef __LEGONXT__
@@ -186,11 +214,11 @@ void nx_systick_wait_us(U32 us) {
    */
   while ((long) (pittime - final) < 0) {
 #ifdef __DE1SOC__
-	  pittime = 0;	// FIXME
+  pittime = ((HW_REG *) MPCORE_PRIV_TIMER)[MPT_COUNTER_INDEX];
 #endif
 
-	  #ifdef __LEGONXT__
-	  pittime = (*AT91C_PITC_PIIR);
+#ifdef __LEGONXT__
+  pittime = (*AT91C_PITC_PIIR);
 #endif
 	}
 }

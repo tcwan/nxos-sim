@@ -9,8 +9,156 @@
 
 #include "asm_decls.h"
 
+#ifdef __DE1SOC__
+#include "base/boards/DE1-SoC/address_map_arm.h"
+#include "base/boards/DE1-SoC/interrupt_ID.h"
+#endif
+
+
 #define ENABLE_STACK_GUARD 	/* Insert a stack guard value at top of selected stacks */
 #define STACK_GUARD_VAL 0xDEADBEEF
+
+/**********************************************************
+ * Memory copy and setting macros. These refer to functions
+ * defined at the end of the file.
+ */
+        .macro  mem_copy, source, source_end, dest
+        ldr r0, =\source
+        ldr r1, =\source_end
+        ldr r2, =\dest
+        bl mem_copy_func
+        .endm
+
+        .macro mem_initialise, dest, dest_end, val
+        ldr r0,=\dest
+        ldr r1,=\dest_end
+        ldr r2,=\val
+        bl mem_init_func
+        .endm
+
+#ifdef __DE1SOC__
+
+.section .stack.supervisor, "aw", %nobits
+        .space 0x400; /* 1 Kbyte supervisor stack. */
+
+.code 32
+.text
+.align 0
+        .global nx_start
+        .extern nx__kernel_main
+
+
+/* This variable is not really declared somewhere: the linker script
+ * defines it. see system/appkernels.lds
+ */
+.extern __bottom_mapped__
+
+/**********************************************************
+ * Execution starts here after a reset.
+ */
+nx_start:
+        /* Disable interrupts. They will be enabled if we are
+         * rebooting.
+         */
+        msr cpsr_c, #(MODE_SVC | IRQ_FIQ_MASK)
+
+		/* This section only initializes the Private Timer for CPUlator.
+		 * Other devices are setup in nx__aic_init()
+		 */
+
+config_gic:
+		/* taken from A9 Private Timer ISR example, Henry Wong, U of Toronto, Canada */
+
+		// configure A9 Private Timer interrupt
+		ldr	r0, =(MPCORE_GIC_DIST + ICDIPTR + 0x1c) // ICDIPTRn: processor targets register (IRQ 29)
+		mov r1, #0x00000100		// set target to cpu0
+		str r1, [r0]
+
+		ldr r0, =(MPCORE_GIC_DIST + ICDISER + 0x0) // ICDISERn: set enable register
+		mov r1, #0x20000000		// set interrupt enable
+		str r1, [r0]
+
+		// Configure GIC CPU interface
+		ldr r0, =MPCORE_GIC_CPUIF
+		ldr r1, =0xffff			// Enable interrupts of all priority levels
+		str r1, [r0, #ICCPMR]
+
+		mov r1, #1
+		str r1, [r0, #ICCICR]	// Set enable bit in CPU Interface Control Register (ICCICR)
+
+		ldr r0, =MPCORE_GIC_DIST
+		str r1, [r0, #ICDDCR]	// Set enable bit in Distributor Control Register (ICDDCR)
+
+init_mem:
+        /* Copy and initialize memory region. */
+        mem_copy __vectors_load_start__, __vectors_load_end__, __vectors_ram_start__
+        mem_copy __data_load_start__, __data_load_end__, __data_ram_start__
+        mem_copy __ramtext_load_start__, __ramtext_load_end__, __ramtext_ram_start__
+        mem_initialise __bss_start__, __bss_end__, 0
+        mem_initialise __stack_start__, __stack_end__, 0
+
+        /* Set up stacks for the modes we're going to use.
+         *
+         * Note that the ATPCS specify that stacks must be 8-byte
+         * aligned. We make sure they are here, but they are aligned
+         * properly in the linker script.
+         */
+
+        ldr	r0, =__ram_userspace_end__
+        bic r0, r0, #7
+#ifdef ENABLE_STACK_GUARD
+		/* setup stack guard value */
+        ldr r1, =STACK_GUARD_VAL
+#endif
+
+		/* IRQ stack is not used. R13 (SP_irq) is used as a temporary variable
+		 * during interrupt processing. Please see interrupt.S
+		 * for more details.
+		 */
+#if 0
+        /* Set up the IRQ stack (moved to top of RAM). */
+        msr cpsr_c, #(MODE_IRQ | IRQ_FIQ_MASK)
+        mov sp, r0
+#endif
+
+        /* Set up the SYS/User stack (moved to top of RAM). */
+        /* Note: Currently SYS/User Mode is not used.
+         * If we enable user tasks scheduling, the stack initialization
+         * for IRQ vs. User modes would have to be changed.
+         */
+        msr cpsr_c, #(MODE_SYS | IRQ_FIQ_MASK)
+        mov sp, r0
+
+        /* Set up the abort mode stack (Not used). */
+        msr cpsr_c, #(MODE_ABT | IRQ_FIQ_MASK)
+        mov sp, r0
+
+        /* Set up the supervisor mode stack. */
+        msr cpsr_c, #(MODE_SVC | IRQ_FIQ_MASK)
+        ldr sp, =__supervisor_stack__
+        bic sp, sp, #7
+#ifdef ENABLE_STACK_GUARD
+		/* store stack guard value */
+        str r1, [sp]
+#endif
+
+        /* Set up initial frame pointers for C code in both Arm
+         * and Thumb modes. */
+        mov fp, #0
+        mov r7, #0
+
+        /* Start the main kernel code using an interworking branch. */
+        ldr r5, =nx__kernel_main
+        mov lr, pc
+        bx  r5
+
+main_returned:
+        /* The kernel should never return, but if it does, freeze. */
+        b main_returned
+
+#endif /* __DE1SOC__ */
+
+#ifdef __LEGONXT__
 /*
  * Definition of a few constants, for readability.
  */
@@ -39,23 +187,6 @@
         .space 0x40; /* Single Stepping Breakpoint + 7 Breakpoints */
 #endif
 
-/**********************************************************
- * Memory copy and setting macros. These refer to functions
- * defined at the end of the file.
- */
-        .macro  mem_copy, source, source_end, dest
-        ldr r0, =\source
-        ldr r1, =\source_end
-        ldr r2, =\dest
-        bl mem_copy_func
-        .endm
-
-        .macro mem_initialise, dest, dest_end, val
-        ldr r0,=\dest
-        ldr r1,=\dest_end
-        ldr r2,=\val
-        bl mem_init_func
-        .endm
 
 .code 32
 .text
@@ -224,7 +355,7 @@ wait_mclk_3:
         ands r1, r1, #8
         beq wait_mclk_3
 
-
+init_mem:
         /* Copy and initialize memory region. */
         mem_copy __vectors_load_start__, __vectors_load_end__, __vectors_ram_start__
         mem_copy __data_load_start__, __data_load_end__, __data_ram_start__
@@ -297,6 +428,7 @@ main_returned:
         /* The kernel should never return, but if it does, freeze. */
         b main_returned
 
+#endif /* __LEGONXT__ */
 
 /**********************************************************
  * Helper functions used by the bootstrap code.

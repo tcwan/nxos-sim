@@ -48,7 +48,22 @@ static volatile U32 tone_cycles;
 #ifdef __DE1SOC__
 
 // FIXME
-#define UNUSED(x) (void)(x)
+#define UNUSED(x) (void)(x);
+
+void nx__sound_init(void) {
+}
+
+void nx_sound_freq_async(U32 freq, U32 ms) {
+	UNUSED(freq);
+	UNUSED(ms);
+}
+
+void nx_sound_freq(U32 freq, U32 ms) {
+	UNUSED(freq);
+	UNUSED(ms);
+
+}
+
 
 
 #endif

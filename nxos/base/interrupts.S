@@ -5,6 +5,14 @@
  * Redistribution of this file is permitted under
  * the terms of the GNU Public License (GPL) version 2.
  */
+#ifdef __DE1SOC__
+#include "base/boards/DE1-SoC/address_map_arm.h"
+#include "base/boards/DE1-SoC/interrupt_ID.h"
+#endif
+
+#ifdef __LEGONXT__
+#include "base/boards/LEGO-NXT/at91sam7s256.h"
+#endif
 
 .data
 .align
@@ -22,6 +30,36 @@ irq_spurious_count: .long 0
 	.equ	IRQ_STK_FRAME, (irq_stack_frame_address - irq_state)
 	.equ	IRQ_SPURIOUS, (irq_spurious_count - irq_state)
 #endif
+
+/*
+ * Altera DE1-SoC FPGA Board ISR Interrupt Vectors
+ *
+ * To override the vectors, the isr_vec label must be known.
+ *
+ */
+
+ #define GIC_INTRID_MASK	0x3FF
+
+	.macro gic_vector_entry isr_vec, intr_id, intr_routine
+	.align
+	// Export vector address for overrides
+	.global \isr_vec
+\isr_vec:
+	.word	\intr_id
+	.word	\intr_routine
+	.endm
+
+	.equ	GIC_VEC_ENTRY_ISR_ID, 0
+	.equ	GIC_VEC_ENTRY_ISR_OFFSET, 4
+	.equ	SIZEOF_GIC_VEC_ENTRY, 8
+	.equ	INVALID_INTR_ID, 0xFFFFFFFF
+
+	.global de1_soc_isr_table
+de1_soc_isr_table:
+	gic_vector_entry isr_a9pt, MPCORE_PRIV_TIMER_IRQ, systick_isr		// Cortex-A9 Private Timer Interrupt
+	gic_vector_entry isr_invalid, INVALID_INTR_ID, nx__spurious_irq		// Guard Entry (must be last item in table)
+
+	.equ	de1_soc_isr_table_end, .
 
 .text
 .code 32
@@ -119,25 +157,37 @@ _irq_save_stack_frame:
 		movgt	r0, #0					/* Not Top Level Interrupt, clear Interrupted Stack Frame Address */
 		str		r0, [r3, #IRQ_STK_FRAME] /* Else Save Top Level Interrupt Stack Frame Address (for Debugger) */
 
-#if 0
-// FIXME: Need to update for Cortex-A9 GIC support
-        /* Get the IVR value. */
-        ldr 	r2, =AT91C_BASE_AIC
-        ldr 	r3, [r2, #AIC_IVR]
+		// Cortex-A9 GIC handling
+		// Read ICCIAR from CPU interface
+		// Retrieve interrupt ID intp SP_irq (R13) as temporary storage
+		ldr		lr, =MPCORE_GIC_CPUIF				/* LR_irq is not used */
+		ldr		r13, [lr, #ICCIAR]
+		ldr		r0, =GIC_INTRID_MASK				/* Must use register to keep bitmask (> 8 bits) */
+		and		r13, r13, r0						/* Mask out irrelevant bits */
 
-        /* If we're in Protected mode (usually for JTAG debugging), we
-         * need to write back to the IVR register to tell the AIC it
-         * can dispatch other higher priority interrupts again.
-         * In normal mode, this has no effect, so we can safely do it.
-         */
-        str 	r2, [r2, #AIC_IVR]
+		// Check Interrupt ID and retrieve Interrupt Vector Routine (IVR) into r3
+		// This is to maintain compatibility with AIC implementation
+		ldr		r0, =de1_soc_isr_table				/* ISR Vector Table Start */
+ivr_lookup:
+		ldr		r2, [r0, #GIC_VEC_ENTRY_ISR_ID]		/* Get Interrupt ID */
+		ldr		r3, [r0, #GIC_VEC_ENTRY_ISR_OFFSET]	/* Get IVR */
+		cmp		r2, #INVALID_INTR_ID				/* Check end of table entry */
+		beq		_irq_dispatch_aic_ivr				/* No matching IVR, so call default */
+		cmp		r2, r13								/* Otherwise check against triggered ID */
+		beq		_irq_dispatch_aic_ivr				/* Found match, dispatch it */
+		add		r0, r0, #SIZEOF_GIC_VEC_ENTRY
+		b		ivr_lookup
+#if 0
+		// To enable nested interrupts properly we must play around with the
+		// Priority level in ICCPMR.
+		// ^Don't allow nested IRQ interrupts for now.
+		and		r1, r1, #MODE_MASK		/* Enable IRQ (& FIQ) */
 #endif
 
-		and		r1, r1, #MODE_MASK		/* Enable IRQ (& FIQ) */
 		msr		cpsr_c, r1				/* switch back to previous privileged mode */
 
 _irq_dispatch_aic_ivr:
-		/* In target privileged mode (IRQ & FIQ Enabled) */
+		/* In target privileged mode (IRQ & FIQ Enabled^) */
         /* Dispatch the IRQ to the registered handler. */
         mov 	lr, pc
         bx 		r3						/* Use R3 to dispatch Interrupt Handler, so that it is not clobbered by
@@ -161,11 +211,10 @@ _irq_exit_handler:
         msr 	cpsr_c, #(MODE_IRQ | IRQ_FIQ_MASK)
 
 		/* In IRQ Mode (IRQ & FIQ Disabled) */
-#if 0
-// FIXME: Need to update for Cortex-A9 GIC support
-        ldr 	lr, =AT91C_BASE_AIC
-        str 	lr, [lr, #AIC_EOICR]
-#endif
+
+		/* Fix up GIC ICCEOIR to clear interrupt */
+		ldr lr, =MPCORE_GIC_CPUIF
+		str r13, [lr, #ICCEOIR]				/* R13_irq holds the Interrupt ID */
 
 		/* Interrupt Handler Housekeeping */
 		ldr		r3, =irq_state

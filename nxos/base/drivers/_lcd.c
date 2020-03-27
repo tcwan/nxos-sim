@@ -25,7 +25,7 @@
 
 #ifdef __DE1SOC__
 	// FIXME
-#define UNUSED(x) (void)(x)
+#define UNUSED(x) (void)(x);
 
 /** Initialize the LCD driver. */
 void nx__lcd_init(void) {
