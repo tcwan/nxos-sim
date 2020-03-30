@@ -114,9 +114,13 @@ ASMFLAGS := $(ASMFLAGS) -mcpu=$(CPUARCH) -W -Werror -Os
 # __DE1SOC__ configures NxOS for the CPUlator DE1-SoC board configuration
 # __LEGONXT__ configures NxOS for the LEGO Mindstorms NXT board configuration
 #
+# If __DE1SOC__ is enabled, configure __CPULATOR__ to configure Interrupts etc.
+# for the simulator environment to reduce the system overheads.
+# Otherwise hardware platform is assumed.
+#
 #################################################################
-CFLAGS := $(CFLAGS) -D__DBGENABLE__ -D__DE1SOC__
-ASMFLAGS := $(ASMFLAGS) -D__DBGENABLE__ -D__DE1SOC__
+CFLAGS := $(CFLAGS) -D__DBGENABLE__ -D__DE1SOC__ -D__CPULATOR__
+ASMFLAGS := $(ASMFLAGS) -D__DBGENABLE__ -D__DE1SOC__ -D__CPULATOR__
 
 # ---------------------------------
 #   file suffixes
