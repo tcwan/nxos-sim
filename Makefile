@@ -45,10 +45,10 @@ all:: $(NXOSLIBS)
 
 # Actual builds
 # -- handle directory names with or without training slash
-nxos/systems/*/:: 
+nxos/systems/*/:: nxos-libs
 	make -f makefile.systems -C $(NXOSSYSDIR) $(basename $(notdir $(@:%/=%)));
 
-nxos/systems/*::
+nxos/systems/*:: nxos-libs
 	make -f makefile.systems -C $(NXOSSYSDIR) $(basename $(notdir $(@:%/=%)));
 
 # disable subproject builds to make it easier for makefile.systems
