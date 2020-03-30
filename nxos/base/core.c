@@ -45,7 +45,7 @@ static void core_init(void) {
   nx__lcd_init();
   nx__display_init();
 
-#ifdef __LEGONXT__
+#ifndef __CPULATOR__
   /* Delay a little post-init, to let all the drivers settle down. */
   nx_systick_wait_ms(100);
 #endif
