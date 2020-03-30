@@ -39,11 +39,11 @@ static nx_closure_t shutdown_handler = NULL;
 
 static void core_init(void) {
   nx__aic_init();
-  nx_interrupts_enable();
   nx__systick_init();
   nx__sound_init();
   nx__lcd_init();
   nx__display_init();
+  nx_interrupts_enable();		// We must call this once before passing control over to main() to enable interrupts
 
 #ifndef __CPULATOR__
   /* Delay a little post-init, to let all the drivers settle down. */
