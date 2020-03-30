@@ -34,7 +34,7 @@ clean-nxos-libs::
 clean-libs:: clean-nxos-libs
 
 
-all:: $(NXOSLIBS)
+all:: $(NXOSLIBS) $(CPULATORINC)
 	make -f makefile.systems -C $(NXOSSYSDIR)
 	
 #	@echo "Making ..." ${DIRS}

@@ -70,7 +70,13 @@ plap:
  */
 	.global	main
 main:
-	push	{lr}
+/* Needed to support CPUlator system init
+ * since it starts execution from main() and does not go through the system reset handler
+ */
+#include "cpulator_stub.inc"
+
+	push	{r4-r12,lr}			// Preserve all AAPCS registers to avoid CPUlator warnings.
+
 	bl		nx_proginit
 
 	ldr		r0, =title
@@ -136,6 +142,6 @@ button_pressed:
 /********************** End Customization Here **********************/
 exit_main:
 	bl		nx_progshutdown
-	pop		{pc}
+	pop		{r4-r12,pc}			// Restore all AAPCS registers to avoid CPUlator warnings.
 
 .end

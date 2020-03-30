@@ -17,7 +17,12 @@
 #include "base/assert.h"
 
 void main() {
-  /* Let's test basic mathematics. If this fails, the CPU is so badly
+/* Needed to support CPUlator system init
+ * since it starts execution from main() and does not go through the system reset handler
+ */
+#include "cpulator_stub.inc"
+
+	/* Let's test basic mathematics. If this fails, the CPU is so badly
    * damaged that it's a miracle we booted at all :-).
    */
   U32 a = 2;

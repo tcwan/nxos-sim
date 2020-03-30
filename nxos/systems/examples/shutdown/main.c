@@ -33,6 +33,11 @@ static void handle_shutdown() {
 }
 
 void main() {
+/* Needed to support CPUlator system init
+ * since it starts execution from main() and does not go through the system reset handler
+ */
+#include "cpulator_stub.inc"
+
   /* Any shutdown after this function call will call the shutdown
    * handler.
    */

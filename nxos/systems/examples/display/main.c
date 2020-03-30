@@ -19,6 +19,11 @@
 #include "base/drivers/systick.h" /* for nx_systick_wait_ms */
 
 void main() {
+/* Needed to support CPUlator system init
+ * since it starts execution from main() and does not go through the system reset handler
+ */
+#include "cpulator_stub.inc"
+
   /* The display is already initialized at this point, so let's
    * display the classic string.
    */

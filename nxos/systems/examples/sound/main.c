@@ -16,6 +16,11 @@
 #include "base/drivers/systick.h" /* For nx_systick_wait_ms */
 
 void main() {
+/* Needed to support CPUlator system init
+ * since it starts execution from main() and does not go through the system reset handler
+ */
+#include "cpulator_stub.inc"
+
   /* Play a 2kHz tone for 1 second. This function waits for the tone
    * to finish before continuing.
    */

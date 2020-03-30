@@ -74,13 +74,13 @@ $(F_BIN): $(O) $(NXOSLIBS)
 
 $(S_C) $(S_CXX) $(S_ASM): $(S_H)
 
-$(O_C): $(D_OBJ)/%$(E_OBJ): $(D_C)/%$(E_C)
+$(O_C): $(D_OBJ)/%$(E_OBJ): $(D_C)/%$(E_C)  $(CPULATORINC)
 	$(call wrap,$(CC),$(CFLAGS) -c $< -o $@)
 
-$(O_CXX): $(D_OBJ)/%$(E_OBJ): $(D_CXX)/%$(E_CXX)
+$(O_CXX): $(D_OBJ)/%$(E_OBJ): $(D_CXX)/%$(E_CXX)  $(CPULATORINC)
 	$(call wrap,$(CXX),$(CXXFLAGS) -c $< -o $@)
 
-$(O_ASM): $(D_OBJ)/%$(E_OBJ): $(D_ASM)/%$(E_ASM)
+$(O_ASM): $(D_OBJ)/%$(E_OBJ): $(D_ASM)/%$(E_ASM)  $(CPULATORINC)
 	$(call wrap,$(CC),$(ASMFLAGS) -c $< -o $@)
 
 

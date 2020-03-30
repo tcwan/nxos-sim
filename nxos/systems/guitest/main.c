@@ -10,6 +10,11 @@
 #include "base/lib/gui/gui.h"
 
 void main(void) {
+/* Needed to support CPUlator system init
+ * since it starts execution from main() and does not go through the system reset handler
+ */
+#include "cpulator_stub.inc"
+
   char *entries[] = {"Browse", "Sysinfo", "Settings", "Format", "Item5", "Item6", "Item7", "Halt", NULL};
   gui_text_menu_t menu;
   U8 res;

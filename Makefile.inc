@@ -5,6 +5,7 @@
 TARGET = nxos
 NXOSDIR = $(TOP)/nxos
 NXOSLIBS = $(NXOSDIR)/lib$(TARGET).a
+CPULATORINC = $(NXOSDIR)/cpulator_stub.inc
 
 # -- project path
 NXOSOBJDIR = $(NXOSDIR)/obj

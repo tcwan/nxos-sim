@@ -87,10 +87,24 @@ static void check_boot_errors(void) {
 }
 #endif
 
+#ifdef	 __CPULATOR__
+
+void cpulator_halt(void);
+
+void cpulator_halt() {
+  while (1);
+}
+#endif
+
 void nx_core_halt(void) {
   if (shutdown_handler)
     shutdown_handler();
   nx__lcd_shutdown();
+
+#ifdef __CPULATOR__
+  cpulator_halt();
+#endif
+
 }
 
 void nx_core_reset(void) {
@@ -98,16 +112,12 @@ void nx_core_reset(void) {
     shutdown_handler();
   nx__lcd_shutdown();
 
-#ifdef __DE1SOC__
-  // FIXME: Halt the processor
-  while (1);
-#endif
-
 #ifdef __LEGONXT__
   /* Total reset of the NXT's processor. */
   *AT91C_RSTC_RCR = 0xA5000005;
 #endif
 }
+
 
 void nx_core_register_shutdown_handler(nx_closure_t handler) {
   shutdown_handler = handler;
@@ -122,16 +132,20 @@ void nx__kernel_main(void) {
 #endif
 
 
-#if __CPULATOR__
+#ifdef __CPULATOR__
   // CPUlator defaults to start from main when loading a pre-compiled ELF executable, skipping the RESET handler call
   // This works around the problem by invoking nx_start() from main when program is started, and continuing with main_entry()
   main_entry();
+
+  nx_core_halt();
+
 #else
+  // LEGO NXT startup process
   main();
-#endif
 
   if( NX_BOOT_FROM_ENH_FW )
     nx_core_reset();
   else
     nx_core_halt();
+#endif
 }
