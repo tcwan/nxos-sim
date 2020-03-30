@@ -25,8 +25,10 @@
 #ifdef __DE1SOC__
 
 #define DE1_CLOCK_FREQ 200000000L
-
 #define US_COUNT (DE1_CLOCK_FREQ/1000000L)
+
+// #define SYSTICK_DBG_INTERVAL DE1_CLOCK_FREQ		// 1 s @ 200 MHz
+#define SYSTICK_DBG_INTERVAL US_COUNT				// 1 us @ 200 MHz
 
 /* We want a timer interrupt 1000 times per second. */
 #define SYSIRQ_FREQ 1000
@@ -150,7 +152,15 @@ void nx__systick_init(void) {
 #ifdef __DE1SOC__
 
   ((HW_REG *) MPCORE_PRIV_TIMER)[MPT_CONTROL_INDEX] = 0;		// Stop timer
+
+#ifdef __CPULATOR__
+  /* This uses a user defined interval which does not correspond to hardware clock duration since it is running on a simulator */
+  ((HW_REG *) MPCORE_PRIV_TIMER)[MPT_LOAD_INDEX] = SYSTICK_DBG_INTERVAL;	// Debug Systick Interval
+#else
+  /* Configure the timer based on DE1-SoC Platform */
   ((HW_REG *) MPCORE_PRIV_TIMER)[MPT_LOAD_INDEX] = (DE1_CLOCK_FREQ / SYSIRQ_FREQ) - 1;	// period 1 ms @ 200 MHz
+#endif
+
   ((HW_REG *) MPCORE_PRIV_TIMER)[MPT_CONTROL_INDEX] = PTEN_MASK;	// Enable timer with Auto reload and Interrupt
 
 #endif
@@ -182,6 +192,11 @@ U32 nx_systick_get_ms(void) {
 
 void nx_systick_wait_ms(U32 ms) {
   U32 final = systick_time + ms;
+
+#if 1
+  // FIXME: TESTING
+  while (1);
+#endif
 
   /* Dealing with systick_time rollover:
    * http://www.arduino.cc/playground/Code/TimingRollover

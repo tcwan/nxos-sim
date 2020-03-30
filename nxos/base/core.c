@@ -32,6 +32,7 @@
  * the NxOS core.
  */
 extern void main(void);
+extern void main_entry(void);
 
 /* Application kernels can register a shutdown handler, which we keep here. */
 static nx_closure_t shutdown_handler = NULL;
@@ -44,8 +45,10 @@ static void core_init(void) {
   nx__lcd_init();
   nx__display_init();
 
+#ifdef __LEGONXT__
   /* Delay a little post-init, to let all the drivers settle down. */
   nx_systick_wait_ms(100);
+#endif
 }
 
 #ifdef __DE1SOC__
@@ -119,7 +122,14 @@ void nx__kernel_main(void) {
 #endif
 
 
+#if __CPULATOR__
+  // CPUlator defaults to start from main when loading a pre-compiled ELF executable, skipping the RESET handler call
+  // This works around the problem by invoking nx_start() from main when program is started, and continuing with main_entry()
+  main_entry();
+#else
   main();
+#endif
+
   if( NX_BOOT_FROM_ENH_FW )
     nx_core_reset();
   else
