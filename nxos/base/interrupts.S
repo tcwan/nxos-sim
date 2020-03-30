@@ -54,12 +54,12 @@ irq_spurious_count: .long 0
 	.equ	SIZEOF_GIC_VEC_ENTRY, 8
 	.equ	INVALID_INTR_ID, 0xFFFFFFFF
 
-	.global de1_soc_isr_table
-de1_soc_isr_table:
+	.global de1_soc_ivr_table
+de1_soc_ivr_table:
 	gic_vector_entry isr_a9pt, MPCORE_PRIV_TIMER_IRQ, systick_isr		// Cortex-A9 Private Timer Interrupt
 	gic_vector_entry isr_invalid, INVALID_INTR_ID, nx__spurious_irq		// Guard Entry (must be last item in table)
 
-	.equ	de1_soc_isr_table_end, .
+	.equ	de1_soc_ivr_table_end, .
 
 .text
 .code 32
@@ -126,8 +126,12 @@ nx__irq_handler:
         ands 	r13, r13, #0x0F		/* eq (0) == User Mode */
         eornes 	r13, r13, #0x0F		/* ne (!0) && eor #0x0F => eq (0) == SYS mode) */
         msreq	cpsr_c, #(MODE_SYS | IRQ_MASK)	/* Match, so switch to SYS Mode */
+#ifdef  __CPULATOR__
+		// SYS mode not supported in CPUlator, abort
+		beq		default_data_abort_handler
+#else
 		beq		_irq_save_stack_frame
-
+#endif
 		mrs		r13, spsr			/* Reload SPSR_irq */
 		and		r13, r13, #MODE_MASK	/* check for other modes */
 		teq		r13, #MODE_SVC		/* Supervisor Mode? */
@@ -167,14 +171,14 @@ _irq_save_stack_frame:
 
 		// Check Interrupt ID and retrieve Interrupt Vector Routine (IVR) into r3
 		// This is to maintain compatibility with AIC implementation
-		ldr		r0, =de1_soc_isr_table				/* ISR Vector Table Start */
+		ldr		r0, =de1_soc_ivr_table				/* ISR Vector Table Start */
 ivr_lookup:
 		ldr		r2, [r0, #GIC_VEC_ENTRY_ISR_ID]		/* Get Interrupt ID */
 		ldr		r3, [r0, #GIC_VEC_ENTRY_ISR_OFFSET]	/* Get IVR */
 		cmp		r2, #INVALID_INTR_ID				/* Check end of table entry */
-		beq		_irq_dispatch_aic_ivr				/* No matching IVR, so call default */
+		beq		_irq_dispatch_gic_ivr				/* No matching IVR, so call default */
 		cmp		r2, r13								/* Otherwise check against triggered ID */
-		beq		_irq_dispatch_aic_ivr				/* Found match, dispatch it */
+		beq		_irq_dispatch_gic_ivr				/* Found match, dispatch it */
 		add		r0, r0, #SIZEOF_GIC_VEC_ENTRY
 		b		ivr_lookup
 #if 0
@@ -184,9 +188,10 @@ ivr_lookup:
 		and		r1, r1, #MODE_MASK		/* Enable IRQ (& FIQ) */
 #endif
 
+
+_irq_dispatch_gic_ivr:
 		msr		cpsr_c, r1				/* switch back to previous privileged mode */
 
-_irq_dispatch_aic_ivr:
 		/* In target privileged mode (IRQ & FIQ Enabled^) */
         /* Dispatch the IRQ to the registered handler. */
         mov 	lr, pc
