@@ -115,7 +115,8 @@ init_mem:
 		 * during interrupt processing. Please see interrupt.S
 		 * for more details.
 		 */
-#if 0
+#if 1
+// Prevent CPUlator from triggering unnecessary SP OOB checks during startup
         /* Set up the IRQ stack (moved to top of RAM). */
         msr cpsr_c, #(MODE_IRQ | IRQ_FIQ_MASK)
         mov sp, r0
