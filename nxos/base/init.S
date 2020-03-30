@@ -75,7 +75,7 @@ config_gic:
 		str r1, [r0]
 
 		ldr r0, =(MPCORE_GIC_DIST + ICDISER + 0x0) // ICDISERn: set enable register
-		mov r1, #0x20000000		// set interrupt enable
+		mov r1, #0x20000000		// set interrupt enable for A9 private timer (! FIXME: make it general)
 		str r1, [r0]
 
 		// Configure GIC CPU interface
@@ -121,6 +121,8 @@ init_mem:
         mov sp, r0
 #endif
 
+#if 0
+// Not supported by CPUlator
         /* Set up the SYS/User stack (moved to top of RAM). */
         /* Note: Currently SYS/User Mode is not used.
          * If we enable user tasks scheduling, the stack initialization
@@ -128,7 +130,7 @@ init_mem:
          */
         msr cpsr_c, #(MODE_SYS | IRQ_FIQ_MASK)
         mov sp, r0
-
+#endif
         /* Set up the abort mode stack (Not used). */
         msr cpsr_c, #(MODE_ABT | IRQ_FIQ_MASK)
         mov sp, r0
