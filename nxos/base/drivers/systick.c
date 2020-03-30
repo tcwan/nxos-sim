@@ -154,11 +154,6 @@ U32 nx_systick_get_ms(void) {
 void nx_systick_wait_ms(U32 ms) {
   U32 final = systick_time + ms;
 
-#if 1
-  // FIXME: TESTING
-  while (1);
-#endif
-
   /* Dealing with systick_time rollover:
    * http://www.arduino.cc/playground/Code/TimingRollover
    * Exit only if (long)( systick_time - final ) >= 0
