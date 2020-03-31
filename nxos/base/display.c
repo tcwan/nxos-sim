@@ -16,14 +16,17 @@
 
 #include "base/_display.h"
 
+#ifdef __LEGONXT__
 /* A simple 8x5 font. This is in a separate file because the embedded
  * font is converted from a .png at compile time.
  */
 #include "_font.h"
 
+#endif
+
 static struct {
-  /* The display buffer, which is mirrored to the LCD controller's RAM. */
-  U8 buffer[LCD_HEIGHT][LCD_WIDTH];
+  /* The text display buffer, which is mirrored to the LCD controller's RAM. */
+  U8 buffer[NX__DISPLAY_HEIGHT_CELLS][NX__DISPLAY_WIDTH_CELLS];		/* row major layout */
 
   /* Whether the display is automatically refreshed after every call
    * to display functions. */
@@ -91,18 +94,21 @@ static inline bool is_on_screen(U8 x, U8 y) {
     return FALSE;
 }
 
+#ifdef __LEGONXT__
+
 static inline const U8 *char_to_font(const char c) {
   if (c >= NX__FONT_START)
     return nx__font_data[c - NX__FONT_START];
   else
     return nx__font_data[0]; /* Unprintable characters become spaces. */
 }
+#endif
 
 static inline void update_cursor(bool inc_y) {
   if (!inc_y) {
     display.cursor.x++;
 
-    if (display.cursor.x >= LCD_WIDTH / NX__CELL_WIDTH) {
+    if (display.cursor.x >= NX__DISPLAY_WIDTH_CELLS) {
       display.cursor.x = 0;
       display.cursor.y++;
       display.cursor.ignore_lf = TRUE;
@@ -116,12 +122,12 @@ static inline void update_cursor(bool inc_y) {
     display.cursor.y++;
   }
 
-  if (display.cursor.y >= LCD_HEIGHT) {
+  if (display.cursor.y >= NX__DISPLAY_HEIGHT_CELLS) {
     if (display.scroll_ok) {
       memcpy(&display.buffer[0][0], &display.buffer[1][0],
              sizeof(display.buffer) - sizeof(display.buffer[0]));
-      memset(&display.buffer[LCD_HEIGHT-1], 0, sizeof(display.buffer[0]));
-      display.cursor.y = LCD_HEIGHT - 1;
+      memset(&display.buffer[NX__DISPLAY_HEIGHT_CELLS-1], 0, sizeof(display.buffer[0]));
+      display.cursor.y = NX__DISPLAY_HEIGHT_CELLS - 1;
       dirty_display();
     } else {
       display.cursor.y = 0;
@@ -152,9 +158,17 @@ void nx_display_string(const char *str) {
     if (*str == '\n')
       update_cursor(TRUE);
     else {
-      int x_offset = display.cursor.x * NX__CELL_WIDTH;
-      memcpy(&display.buffer[display.cursor.y][x_offset],
-             char_to_font(*str), NX__FONT_WIDTH);
+
+#ifdef __DE1SOC__
+    		memcpy(&display.buffer[display.cursor.y][display.cursor.x],
+    				str, sizeof(char));
+#endif
+
+#ifdef __LEGONXT__
+    		int x_offset = display.cursor.x * NX__CELL_WIDTH;
+    		memcpy(&display.buffer[display.cursor.y][x_offset],
+    				char_to_font(*str), NX__FONT_WIDTH);
+#endif
       update_cursor(FALSE);
     }
     str++;

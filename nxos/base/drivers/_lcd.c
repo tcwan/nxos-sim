@@ -17,6 +17,8 @@
 
 #include "base/types.h"
 #include "base/lock.h"
+#include "base/util.h"
+
 #include "base/interrupts.h"
 #include "base/drivers/systick.h"
 #include "base/drivers/aic.h"
@@ -24,11 +26,32 @@
 #include "base/drivers/_lcd.h"
 
 #ifdef __DE1SOC__
-	// FIXME
-#define UNUSED(x) (void)(x);
+
+static volatile struct {
+
+  /* A pointer to the in-memory screen framebuffer to mirror to
+   * screen, and a flag stating whether the in-memory buffer is dirty
+   * (new content needs mirroring to the LCD device.
+   */
+  U8 *screen;
+  bool screen_dirty;
+} lcd_state = {
+  NULL,
+  FALSE
+};
 
 /** Initialize the LCD driver. */
 void nx__lcd_init(void) {
+
+	// clear graphical and text display buffers
+
+	HW_REG *vga_buf_start = (HW_REG *) FPGA_ONCHIP_BASE;
+	size_t vga_buf_size = (FPGA_ONCHIP_END - FPGA_ONCHIP_BASE) + 1;
+	memset((void *)vga_buf_start, 0, vga_buf_size);
+
+	HW_REG *txt_buf_start = (HW_REG *) FPGA_CHAR_BASE;
+	size_t txt_buf_size = (FPGA_CHAR_END - FPGA_CHAR_BASE) + 1;
+	memset((void *)txt_buf_start, 0, txt_buf_size);
 
 }
 
@@ -39,6 +62,28 @@ void nx__lcd_init(void) {
  */
 void nx__lcd_fast_update(void) {
 
+	/* Atomically retrieve the dirty flag and set it to FALSE. This is
+	 * to avoid race conditions where a set of the dirty flag could
+	 * get squashed by the interrupt handler resetting it.
+	 */
+	// FIXME: swpb not implemented by CPUlator
+	// bool dirty = nx_atomic_cas8((U8*)&(lcd_state.screen_dirty), FALSE);
+	bool dirty = lcd_state.screen_dirty;
+	lcd_state.screen_dirty = FALSE;
+
+	if (dirty) {
+	  // FIXME: We only copy the text buffer for now
+	  U8 *txt_buf_row = (U8 *)(HW_REG *) FPGA_CHAR_BASE;
+	  U8 *txt_src_row = lcd_state.screen;
+
+	  int row;
+	  for (row = 0; row < NX__DISPLAY_HEIGHT_CELLS; row++) {
+		  memcpy((void *)txt_buf_row, txt_src_row, NX__DISPLAY_WIDTH_CELLS);
+		  txt_buf_row += NX__TXTBUF_ROW_INCR;
+		  txt_src_row += NX__DISPLAY_WIDTH_CELLS;
+	  }
+
+  }
 }
 
 /** Set the virtual display to mirror to the screen.
@@ -46,11 +91,12 @@ void nx__lcd_fast_update(void) {
  * @param display_buffer The screen buffer to mirror.
  */
 void nx__lcd_set_display(U8 *display_buffer) {
-	UNUSED(display_buffer);	// To suppress compiler errors
+  lcd_state.screen = display_buffer;
 }
 
 /** Mark the display as requiring a refresh cycle. */
 void nx__lcd_dirty_display(void) {
+  lcd_state.screen_dirty = TRUE;
 
 }
 

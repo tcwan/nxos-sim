@@ -56,6 +56,12 @@ main:
 	ldr		r0, =title
 	bl		nx_progtitle
 
+#ifdef __CPULATOR__
+	// Allow CPUlator to execute ISR before hitting the breakpoint
+	mov		r0, #SYSTICK_500MS
+	bl		nx_systick_wait_ms
+#endif
+
 #ifdef ENABLE_BREAKPOINTS
 	dbg__bkpt_arm
 #else
