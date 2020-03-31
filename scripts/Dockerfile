@@ -11,6 +11,8 @@ RUN apt-get update && \
     apt-get install -y \
 # Development files
       build-essential \
+      python \
+      python-pil \
       doxygen \
       git \
       bzip2 \
