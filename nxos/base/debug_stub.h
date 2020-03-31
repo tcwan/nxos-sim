@@ -24,7 +24,11 @@
  */
 /*@{*/
 
+#ifdef __LEGONXT__
+#define __ARM6OR7__
+#else
 #undef  __ARM6OR7__
+#endif
 
 #ifdef __ARM6OR7__
 #define BKPT32_INSTR            0xE7200070      /* ARM6 and ARM7 does not trap unused opcodes (BKPT overlap with control instructions), \
