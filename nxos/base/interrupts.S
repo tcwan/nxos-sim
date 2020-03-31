@@ -1,13 +1,17 @@
-/* Copyright (C) 2007 the NxOS developers
+/* Copyright (C) 2007-2020 the NxOS developers
  *
  * See AUTHORS for a full list of the developers.
  *
  * Redistribution of this file is permitted under
  * the terms of the GNU Public License (GPL) version 2.
  */
+#include "asm_decls.h"
+#define __ASSEMBLY__
+
 #ifdef __DE1SOC__
 #include "base/boards/DE1-SoC/address_map_arm.h"
 #include "base/boards/DE1-SoC/interrupt_ID.h"
+#include "base/ivr_table.h"
 #endif
 
 #ifdef __LEGONXT__
@@ -31,51 +35,10 @@ irq_spurious_count: .long 0
 	.equ	IRQ_SPURIOUS, (irq_spurious_count - irq_state)
 #endif
 
-/*
- * Altera DE1-SoC FPGA Board ISR Interrupt Vectors
- *
- * To override the vectors, the isr_vec label must be known.
- *
- */
-
- #define GIC_INTRID_MASK	0x3FF
-
-	.macro gic_vector_entry isr_vec, intr_id, intr_routine
-	.align
-	// Export vector address for overrides
-	.global \isr_vec
-\isr_vec:
-	.word	\intr_id
-	.word	\intr_routine
-	.endm
-
-	.equ	GIC_VEC_ENTRY_ISR_ID, 0
-	.equ	GIC_VEC_ENTRY_ISR_OFFSET, 4
-	.equ	SIZEOF_GIC_VEC_ENTRY, 8
-	.equ	INVALID_INTR_ID, 0xFFFFFFFF
-
-	.global de1_soc_ivr_table
-de1_soc_ivr_table:
-	gic_vector_entry isr_a9pt, MPCORE_PRIV_TIMER_IRQ, systick_isr		// Cortex-A9 Private Timer Interrupt
-	gic_vector_entry isr_invalid, INVALID_INTR_ID, nx__spurious_irq		// Guard Entry (must be last item in table)
-
-	.equ	de1_soc_ivr_table_end, .
-
 .text
 .code 32
 .align 0
 
-#include "asm_decls.h"
-#define __ASSEMBLY__
-
-#ifdef __DE1SOC__
-#include "base/boards/DE1-SoC/address_map_arm.h"
-#include "base/boards/DE1-SoC/interrupt_ID.h"
-#endif
-
-#ifdef __LEGONXT__
-#include "base/boards/LEGO-NXT/at91sam7s256.h"
-#endif
 
 /**********************************************************
  * Default handlers for unknown IRQ and FIQ interrupts, and
@@ -181,6 +144,8 @@ ivr_lookup:
 		beq		_irq_dispatch_gic_ivr				/* Found match, dispatch it */
 		add		r0, r0, #SIZEOF_GIC_VEC_ENTRY
 		b		ivr_lookup
+
+_irq_dispatch_gic_ivr:
 #if 0
 		// To enable nested interrupts properly we must play around with the
 		// Priority level in ICCPMR.
@@ -188,8 +153,6 @@ ivr_lookup:
 		and		r1, r1, #MODE_MASK		/* Enable IRQ (& FIQ) */
 #endif
 
-
-_irq_dispatch_gic_ivr:
 		msr		cpsr_c, r1				/* switch back to previous privileged mode */
 
 		/* In target privileged mode (IRQ & FIQ Enabled^) */
