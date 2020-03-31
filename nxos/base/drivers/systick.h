@@ -28,7 +28,7 @@
 /*@{*/
 
 /** High priority interrupt handler, called 1000 times a second.
- * @Warning: do not call this from your code. It is used by the NxOS kernel
+ *  WARNING: do not call this from your code. It is used by the NxOS kernel
  */
 void systick_isr(void);
 

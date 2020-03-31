@@ -14,7 +14,7 @@
 #ifndef __IVR_TABLE_H__
 #define __IVR_TABLE_H__
 
-#define GIC_INTRID_MASK	0x3FF
+#define GIC_INTRID_MASK	0x3FF						/**< GIC Interrupt ID bitmask  */
 
 /** Macro to define IVR lookup table
  *
@@ -23,20 +23,25 @@
  *
  *  Respective IVRs are exported to allow for installation of new interrupt handlers.
  *
+ *  @param isr_vec: name of ISR vector
+ *  @param intr_id: Interrupt ID value
+ *  @param intr_routine: Interrupt Handler routine pointer
+ *
  */
-
+/** @cond DOXYGEN_SKIP */
 	.macro gic_vector_entry isr_vec, intr_id, intr_routine
 	.align
-	/* Export vector address for overrides */
-	.global \isr_vec
+/** @endcond */
+
+	.global \isr_vec								/**< Export vector address for overrides */
 \isr_vec:
-	.word	\intr_id
-	.word	\intr_routine
+	.word	\intr_id								/**< Interrupt ID value  */
+	.word	\intr_routine							/**< Interrupt Handler pointer  */
 	.endm
 
-	.equ	GIC_VEC_ENTRY_ISR_ID, 0
-	.equ	GIC_VEC_ENTRY_ISR_OFFSET, 4
-	.equ	SIZEOF_GIC_VEC_ENTRY, 8
-	.equ	INVALID_INTR_ID, 0xFFFFFFFF
+	.equ	GIC_VEC_ENTRY_ISR_ID, 0					/**< ISR vector Interrupt ID offset */
+	.equ	GIC_VEC_ENTRY_ISR_OFFSET, 4				/**< ISR vector Interrupt Handler offset */
+	.equ	SIZEOF_GIC_VEC_ENTRY, 8					/**< ISR vector entry size */
+	.equ	INVALID_INTR_ID, 0xFFFFFFFF				/**< ISR vector Invalid Interrupt ID value */
 
 #endif /* __IVR_TABLE_H__ */

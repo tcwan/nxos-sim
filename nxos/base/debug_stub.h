@@ -31,30 +31,35 @@
 #endif
 
 #ifdef __ARM6OR7__
-#define BKPT32_INSTR            0xE7200070      /* ARM6 and ARM7 does not trap unused opcodes (BKPT overlap with control instructions), \
+#define BKPT32_INSTR            0xE7200070      /**< ARM6 and ARM7 does not trap unused opcodes (BKPT overlap with control instructions), \
                                                    CPU has unpredictable behavior. Ref: Steve Furber, ARM SoC Architecture 2nd Ed, pg. 143 */
 #else
-#define BKPT32_INSTR            0xE1200070      /* ARM BKPT instruction, will work in ARMv5T and above */
+#define BKPT32_INSTR            0xE1200070      /**< ARM BKPT instruction, will work in ARMv5T and above */
 #endif
 
-#define BKPT32_ENUM_MASK        0x000FFF0F      /* ARM BKPT Enum Mask */
-#define BKPT32_AUTO_BKPT        0x00080000      /* RESERVED: ARM BKPT Auto-Step Flag (for CONT support) */
-#define BKPT32_MANUAL_BKPT      0x0007FF0F      /* Manually inserted ARM Breakpoint */
+#define BKPT32_ENUM_MASK        0x000FFF0F      /**< ARM BKPT Enum Mask */
+#define BKPT32_AUTO_BKPT        0x00080000      /**< RESERVED: ARM BKPT Auto-Step Flag (for CONT support) */
+#define BKPT32_MANUAL_BKPT      0x0007FF0F      /**< Manually inserted ARM Breakpoint */
 
-#define BKPT16_INSTR            0xBE00          /* Thumb BKPT instruction */
-#define BKPT16_ENUM_MASK        0x00FF          /* Thumb BKPT Enum Mask */
-#define BKPT16_AUTO_BKPT        0x0080          /* RESERVED: Thumb BKPT Auto-Step Flag (for CONT support) */
-#define BKPT16_MANUAL_BKPT      0x007F          /* Manually inserted Thumb Breakpoint */
+#define BKPT16_INSTR            0xBE00          /**< Thumb BKPT instruction */
+#define BKPT16_ENUM_MASK        0x00FF          /**< Thumb BKPT Enum Mask */
+#define BKPT16_AUTO_BKPT        0x0080          /**< RESERVED: Thumb BKPT Auto-Step Flag (for CONT support) */
+#define BKPT16_MANUAL_BKPT      0x007F          /**< Manually inserted Thumb Breakpoint */
 /*@}*/
 
 #ifndef __ASSEMBLY__
 
 /* Define C stuff */
-/** @defgroup debug_public */
+/** @defgroup debug_public Debugging Macros and Functions
+ *
+ *  Define architecture independent macros and functions for software-based Breakpoints
+ */
 /*@{*/
 
-
-/* FUNCDEF void dbg_breakpoint_arm(void); */
+/** ARM Breakpoint Instruction for C.
+ *
+ *  Generate ARM BKPT instruction for C code.
+ */
 static inline void dbg_breakpoint_arm(void)
 {
   asm volatile (".word %a0"
@@ -73,10 +78,11 @@ static inline void dbg_breakpoint_arm(void) { asm volatile (".word 0xE127FF7F" /
 
 #endif
 
-/** dbg_breakpoint_thumb.
- * 		Equivalent to GDB breakpoint() routine for Thumb code
+/** Thumb Breakpoint Instruction for C.
+ *
+ *  Generate Thumb BKPT instruction for C code.
+ * 	Equivalent to GDB breakpoint() routine for Thumb code
  */
-/* FUNCDEF void dbg_breakpoint_thumb(void); */
 static inline void dbg_breakpoint_thumb(void)
 {
   asm volatile (".hword %a0"
@@ -87,6 +93,11 @@ static inline void dbg_breakpoint_thumb(void)
 
 #if 0                /* Old asm definitions, in case gas does not recognize %a0 operand */
 
+/** Thumb Breakpoint Instruction for C.
+ *
+ *  Generate Thumb BKPT instruction for C code.
+ * 	Equivalent to GDB breakpoint() routine for Thumb code
+ */
 static inline void dbg_breakpoint_thumb(void) { asm volatile (".hword 0xBE7F" /* (BKPT16_INSTR | BKPT16_MANUAL_BKPT) */); }
 
 #endif
