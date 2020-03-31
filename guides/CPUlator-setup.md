@@ -42,42 +42,55 @@ Select Docker Explorer View, and place it in a perspective pane.
 ![Add Docker Explorer View 2](images/Eclipse-Add-Docker-Explorer-View.png)
 
 
-# Building nxos-sim projects via command line
+# Building NxoS-sim projects
 
-This can be done from the docker image bash shell prompt, or else define Build Targets in Eclipse.
+his can be done from the docker image bash shell prompt, or else you can define Build Targets in Eclipse and let Eclipse manage the build.
+
+## Building nxos-sim projects via command line
+
 It is assumed that the Docker volume mounts have been setup properly, and you're in the nxos-sim directory.
 
 See [docker run](https://linuxize.com/post/docker-run-command/) to understand how to setup the
 volume parameter `-v`
 
+```
+docker run -it -v$PWD:/home --rm arm-eabi bash
+[Insider docker image]
+# cd /home
+/home#
+```
+
 - Build the NxOS libraries
 ```
-$ make clean-libs
-$ make libs
+/home# make clean-libs
+/home# make libs
 ```
 - Build the project 
 ```
-$ make nxos/system/<project_name>
+/home# make nxos/system/<project_name>
 ```
 - Clean all projects (does not clean the libraries)
 ```
-$ make clean
+/home# make clean
 ```
 
 - Clean all libraries (does not clean the projects)
 ```
-$ make clean-libs
+/home# make clean-libs
 ```
 
-# Building nxos-sim projects via Eclipse
+## Building nxos-sim projects via Eclipse
 
-## Setup project to build with Docker
+### Setup project to build with Docker
 
 ![Eclipse Docker Configuration](images/Eclipse-Docker-Build-Config.png)
 
-Alternatively, define Build Targets for the various options
+This will cause the project to perform a default build (`make all`) when the Eclipse build project option is selected.
+However, it will not clean the libraries when you do a project clean (`make clean`).
 
-# Debugging NxOS-sim programs
+Alternatively, define Build Targets for the various options listed in the command-line section.
+
+# Running and Debugging NxOS-sim programs
 
 ## Launch CPUlator
 - [CPUlator for Altera DE1-SoC](https://cpulator.01xz.net/?sys=arm-de1soc)
