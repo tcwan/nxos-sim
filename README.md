@@ -26,3 +26,7 @@ NOTE: some ARMv5 instructions such as BLX may be adopted since common subroutine
 
 - nxos: NxOS Project Main Directory (see nxos/README for more details)
 - scripts: Miscellaneous cross-compiler toolchain utilities
+
+## Getting Started Guide
+
+See here for how to [build NxOS-sim projects](guides/CPUlator-setup.md)
