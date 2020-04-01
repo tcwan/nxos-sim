@@ -139,14 +139,14 @@ In order to build and clean the libraries, you need to define Build Targets for 
 You can also create a build target for a specific application instead of the default `make all`. The name of the build target should be: `nxos/systems/<app_name>`
 # Running and Debugging NxOS-sim application
 
-It is assumed that the build process for the application has completed successfully, and the <app>.elf executable file has been generated successfully.
+It is assumed that the build process for the application has completed successfully, and the `<app>.elf` executable file has been generated successfully.
 
 ## Launch CPUlator
 - [CPUlator for Altera DE1-SoC](https://cpulator.01xz.net/?sys=arm-de1soc)
 
 ![CPUlator](images/CPUlator-DE1-SoC.png)
 
-- Load the <app>.elf executable file from your PC. 
+- Load the `<app>.elf` executable file from your PC. 
 ```
 The built in CPUlator Editor and Assembler will not be used.
 ```
