@@ -23,10 +23,10 @@ Thumb state support is not available in CPUlator at this time. In addition, only
 NOTE: some ARMv5 instructions such as BLX may be adopted since common subroutine call conventions for modern 32-bit ARM coding uses them frequently.
 
 ## Directory Structure
-
+- guides: Guides for running NxOS applications
 - nxos: NxOS Project Main Directory (see nxos/README for more details)
 - scripts: Miscellaneous cross-compiler toolchain utilities
 
 ## Getting Started Guide
 
-See here for how to [build NxOS-sim projects](guides/CPUlator-setup.md)
+See the guide for how to [build and execute NxOS-sim applications](guides/CPUlator-setup.md)
