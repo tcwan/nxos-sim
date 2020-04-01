@@ -112,6 +112,9 @@ check_right:
 done_checking:
 	mov		r0, #SYSTICK_100MS		/* Wait 100 ms */
 	bl		nx_systick_wait_ms
+	bl		nx_getbutton			/* Button value in R0 */
+	cmp		r0, r4					/* Did button change? */
+	beq		done_checking			/* Still unchanged, wait for new button */
 	b		loop
 
 button_pressed:
