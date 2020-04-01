@@ -17,6 +17,7 @@
 #include "base/types.h"
 #include "base/core.h"
 #include "base/drivers/systick.h"
+#include "base/drivers/button.h"
 #include "base/display.h"
 #include "base/lib/alerts/alerts.h"
 
@@ -78,12 +79,7 @@ FUNCDEF void nx_progcontentX(char *string, int row) {
 
 }
 
-FUNCDEF nxt_button_t nx_getbutton(void) {
-	/* Retrieve enum value of NXT Button press */
-#if 0
-	return nx_avr_get_button();
-#else
-	// FIXME
-	return 0;
-#endif
+FUNCDEF nx_button_t nx_getbutton(void) {
+	/* Retrieve enum value of DE1 Button press */
+	return nx_de1_get_button();
 }

@@ -39,6 +39,9 @@ content: .asciz "Hello!"
 .text
 .align 	4
 
+// WARNING: Don't put any routines here between the .text and the main: label.
+// CPUlator will point the starting PC to the beginning of the .text section and start executing from there.
+
 /** main
  *    Main Program
  */
