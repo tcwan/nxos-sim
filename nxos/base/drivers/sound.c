@@ -22,9 +22,8 @@
 #include "base/drivers/systick.h"
 
 #include "base/drivers/_sound.h"
+#include "base/drivers/_sound_def.h"
 
-#if 0
-	// FIXME
 /* Statically defined digitized sine wave, used for tone
  * generation.
  */
@@ -43,7 +42,6 @@ static const U32 tone_pattern[16] = {
  * previous digitized sine wave is to be played.
  */
 static volatile U32 tone_cycles;
-#endif
 
 #ifdef __DE1SOC__
 
@@ -51,6 +49,8 @@ static volatile U32 tone_cycles;
 #define UNUSED(x) (void)(x);
 
 void nx__sound_init(void) {
+
+	((HW_REG *) AUDIO_BASE)[AIO_CONTROL_INDEX] = 0;	/* Clear Audio Out FIFO, disable interrupts */
 }
 
 void nx_sound_freq_async(U32 freq, U32 ms) {
@@ -58,9 +58,37 @@ void nx_sound_freq_async(U32 freq, U32 ms) {
 	UNUSED(ms);
 }
 
+static void nx__output_sound_sample(U32 sample) {
+	while (	((((HW_REG *) AUDIO_BASE)[AIO_FIFOSPACE_INDEX] & AIO_WSLC_MASK) == 0) ||
+			((((HW_REG *) AUDIO_BASE)[AIO_FIFOSPACE_INDEX] & AIO_WSRC_MASK) == 0) );
+		/* Wait for non-zero space in the FIFO output buffer */
+
+	// Write the same sample to both Left and Right channels
+	((HW_REG *) AUDIO_BASE)[AIO_LEFTDATA_INDEX] =
+	((HW_REG *) AUDIO_BASE)[AIO_RIGHTDATA_INDEX] = sample;
+}
+
 void nx_sound_freq(U32 freq, U32 ms) {
+	// ignore freq and duration for now
+
 	UNUSED(freq);
 	UNUSED(ms);
+
+	tone_cycles = 32;
+	int pattern_index = 0;
+	U32 sampleVal = 0;
+	U32 stretch = 1;
+	U32 count;
+
+	while (tone_cycles > 0) {
+		for (pattern_index = 0; pattern_index < 16; pattern_index++) {
+			sampleVal = tone_pattern[pattern_index];
+			for (count = 0; count < stretch; count++)
+				nx__output_sound_sample(sampleVal);			// duplicate samples to change frequency
+
+		}
+		tone_cycles--;
+	}
 
 }
 
