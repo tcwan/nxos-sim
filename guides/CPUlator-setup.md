@@ -127,7 +127,9 @@ Type the correct image name, either `arm-eabi` if you have tagged the docker ima
 By default Eclipse has a "Project->Build Project" menu item or a Build button which you can select. This will cause the project to perform a build if possible. 
 
 ```
-Note: Eclipse's "Project->Build Project" menu will execute the last build command (initially it is `make all`). However, if you've executed "Project->Build Targets" subsequently, "Project->Build Project" will not work as expected.
+Note: Eclipse's "Project->Build Project" menu will execute the last build command
+(initially it is `make all`). However, if you've executed "Project->Build Targets"
+subsequently, "Project->Build Project" will not work as expected.
 ```
 
 `make all` will try to build everthing in NxOS-sim. However, if you make any changes or updates to the library code after the most recent build, it will not always update the library archive (libnxos.a) correctly due to the complex dependency checking involved.
