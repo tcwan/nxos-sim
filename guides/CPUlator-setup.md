@@ -124,19 +124,27 @@ Type the correct image name, either `arm-eabi` if you have tagged the docker ima
 
 ### Building the application
 
-By default Eclipse has a "Project->Build Project" menu item or a Build button which you can select. This will cause the project to perform a default build (`make all`) when the Eclipse build project option is selected. This is fine though if you have made any changes or updates to the library code, it will not always update the library archive (libnxos.a)
-correctly.
+By default Eclipse has a "Project->Build Project" menu item or a Build button which you can select. This will cause the project to perform a build if possible. 
+
+```
+Note: Eclipse's "Project->Build Project" menu will execute the last build command (initially it is `make all`). However, if you've executed "Project->Build Targets" subsequently, "Project->Build Project" will not work as expected.
+```
+
+`make all` will try to build everthing in NxOS-sim. However, if you make any changes or updates to the library code after the most recent build, it will not always update the library archive (libnxos.a) correctly due to the complex dependency checking involved.
 
 In addition, if you select "Project->Clean..." (`make clean`) Eclipse will only clean the applications in the nxos/systems directory. It will not clean the libraries.
 
 In order to build and clean the libraries, you need to define Build Targets for the various Makefile options as listed in the command-line section.
+- To build the all the applications, create a Build Target for `all`
 - To build the libraries, create a Build Target for `libs`
 - To clean the libraries, create a Build Target for `clean-libs`
 - To build the documentation, create a Build Target for `docs`. The documentation will be rebuilt each time you make this target.
 
+It is advisable to perform a `clean-libs` each time you modify a file inside the `nxos/base/` subdirectory. Building an application in `nxos/systems/` will automatically rebuild the libraries if they were cleaned previously.
+
 ![Eclipse Build Targets](images/Eclipse-Create-Build-Targets.png)
 
-You can also create a build target for a specific application instead of the default `make all`. The name of the build target should be: `nxos/systems/<app_name>`
+You can also create a build target for a specific application instead of the default target `all`. The name of the build target should be: `nxos/systems/<app_name>`
 # Running and Debugging NxOS-sim application
 
 It is assumed that the build process for the application has completed successfully, and the `<app>.elf` executable file has been generated successfully.
