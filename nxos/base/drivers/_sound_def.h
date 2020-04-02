@@ -15,9 +15,11 @@
 
 #ifdef __DE1SOC__
 
+#define FIXED_POINT_NUMBITS		8				// 8 bits of fixed point
 #define DE1_AIO_FREQ			8000			// 8K samples per second
 #define DE1_AIO_MAXBUFSIZE 		128				// 128 sample buffer
 #define DE1_AIO_MINBUFSIZE		32				// 25% buffer capacity will trigger interrupt
+#define DE1_WAVEFORM_NUMSAMPLES 16
 
 /* Audio Input/Output Module Defines */
 #define AIO_CONTROL_INDEX		0
