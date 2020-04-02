@@ -22,18 +22,20 @@
 void hello_alert(bool audible) {
   if (!audible)
     return;
-  nx_sound_freq(1000, 200);
-  nx_systick_wait_ms(100);
-  nx_sound_freq(2000, 200);
+  nx_sound_freq(0, 300);			// silence
+  nx_sound_freq(1000, 300);
+  nx_systick_wait_ms(200);
+  nx_sound_freq(2000, 300);
   nx_systick_wait_ms(900);
 }
 
 void goodbye_alert(bool audible) {
   if (!audible)
     return;
-  nx_sound_freq(2000, 200);
-  nx_systick_wait_ms(100);
-  nx_sound_freq(1000, 200);
+  nx_sound_freq(0, 300);			// silence
+  nx_sound_freq(2000, 300);
+  nx_systick_wait_ms(200);
+  nx_sound_freq(1000, 300);
   nx_systick_wait_ms(900);
 }
 
