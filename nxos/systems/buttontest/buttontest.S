@@ -142,22 +142,22 @@ exit_main:
 
 plip:
 	push	{lr}
-	ldr		r0, =3000
-	mov		r1, #100
+	ldr		r0, =2000
+	mov		r1, #300
 	bl		nx_sound_freq
 	pop		{pc}
 
 plop:
 	push	{lr}
 	ldr		r0, =500
-	mov		r1, #100
+	mov		r1, #300
 	bl		nx_sound_freq
 	pop		{pc}
 
 plap:
 	push	{lr}
-	ldr		r0, =1500
-	mov		r1, #100
+	ldr		r0, =1000
+	mov		r1, #300
 	bl		nx_sound_freq
 	pop		{pc}
 
