@@ -37,10 +37,28 @@
  */
 /*@{*/
 
-/** Width of the LCD display, in pixels. */
+#ifdef __DE1SOC__
+/** Width of the Color LCD display, in pixels. */
+#define LCD_WIDTH 320
+/** Height of the Color LCD display, in pixels. */
+#define LCD_HEIGHT 240
+
+/** Width of the text display, in number of characters. */
+#define NX__DISPLAY_WIDTH_CELLS 80
+/** Height of the text display, in number of characters. */
+#define NX__DISPLAY_HEIGHT_CELLS 60
+
+/** Row Address Increment of the text display, in number of bytes. */
+#define NX__TXTBUF_ROW_INCR 0x80
+#endif
+
+
+#ifdef __LEGONXT__
+/** Width of the B/W LCD display, in pixels. */
 #define LCD_WIDTH 100
-/** Height of the LCD display, in bytes. */
-#define LCD_HEIGHT 8 /* == 64 pixels. */
+/** Height of the B/W LCD display, in pixels. */
+#define LCD_HEIGHT 64
+#endif
 
 /** Initialize the LCD driver. */
 void nx__lcd_init(void);

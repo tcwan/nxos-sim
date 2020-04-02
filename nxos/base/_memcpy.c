@@ -8,16 +8,38 @@
 
 #include "_memcpy.h"
 #include "base/types.h"
-#include "base/at91sam7s256.h"
-#include "base/drivers/_efc.h"
+
+#ifdef __DE1SOC__
+#include "base/boards/DE1-SoC/address_map_arm.h"
+#include "base/boards/DE1-SoC/interrupt_ID.h"
+#endif
+
+#ifdef __LEGONXT__
+#include "base/boards/LEGO-NXT/at91sam7s256.h"
+#endif
+
 #include "base/memmap.h"
 #include "base/assert.h"
-#include "base/drivers/_efc.h"
 
 #define BELONGS(start, end, pos, len) \
     (((S32)pos) >= ((S32)start) && ((S32)pos) < ((S32)end)) && \
     (((S32)pos) + ((S32)len) <= ((S32)end))
 
+#ifdef __DE1SOC__
+void *_memcpy(void *dest, const void *src, size_t n) {
+  // FIXME: Naive implementation, no bounds checking
+  if (n == 0)
+    return NULL;
+
+  char *d = dest;
+  const char *s = src;
+  while (n--)
+	*d++ = *s++;
+  return dest;
+}
+#endif
+
+#ifdef __LEGONXT__
 typedef enum {
   CHUNK_INVALID = -1,
   CHUNK_RAM = 0,
@@ -120,4 +142,5 @@ void *_memcpy(void *dest, const void *src, size_t n) {
     return NULL;
   }
 }
+#endif
 

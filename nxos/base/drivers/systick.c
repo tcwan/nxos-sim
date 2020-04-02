@@ -1,4 +1,4 @@
-/* Copyright (C) 2007-2012 the NxOS developers
+/* Copyright (C) 2007-2020 the NxOS developers
  *
  * See AUTHORS for a full list of the developers.
  *
@@ -6,27 +6,13 @@
  * the terms of the GNU Public License (GPL) version 2.
  */
 
-#include "base/at91sam7s256.h"
+#ifdef __DE1SOC__
+#include "base/boards/DE1-SoC/address_map_arm.h"
+#include "base/boards/DE1-SoC/interrupt_ID.h"
+#endif
 
-#include "base/nxt.h"
-#include "base/types.h"
-#include "base/interrupts.h"
-#include "base/drivers/aic.h"
-#include "base/drivers/_avr.h"
-#include "base/drivers/_lcd.h"
-
-#include "base/drivers/_systick.h"
-
-/* The main clock is at 48MHz, and the PIT divides that by 16 to get
- * its base timer frequency.
- */
-#define PIT_BASE_FREQUENCY (NXT_CLOCK_FREQ/16)
-
-/* PIT count for 1 us */
-#define US_COUNT (PIT_BASE_FREQUENCY/1000000L)
-
-/* We want a timer interrupt 1000 times per second. */
-#define SYSIRQ_FREQ 1000
+#ifdef __LEGONXT__
+#include "base/boards/LEGO-NXT/at91sam7s256.h"
 
 /* The system IRQ processing takes place in two different interrupt
  * handlers: the main PIT interrupt handler runs at a high priority,
@@ -44,6 +30,16 @@
  */
 #define SCHEDULER_SYSIRQ AT91C_ID_PWMC
 
+#endif
+
+#include "base/types.h"
+#include "base/interrupts.h"
+#include "base/drivers/aic.h"
+#include "base/drivers/_lcd.h"
+
+#include "base/drivers/_systick.h"
+#include "base/drivers/_systick_def.h"
+
 /* The system timer. Counts the number of milliseconds elapsed since
  * the system's initialization.
  */
@@ -60,6 +56,7 @@ static nx_closure_t scheduler_cb = NULL;
  */
 static bool scheduler_inhibit = FALSE;
 
+#ifdef __LEGONXT__
 /* Low priority handler, called 1000 times a second by the high
  * priority handler if a scheduler callback is registered.
  */
@@ -71,14 +68,24 @@ static void systick_sched(void) {
   if (scheduler_cb)
     scheduler_cb();
 }
+#endif
 
 /* High priority handler, called 1000 times a second */
-static void systick_isr(void) {
+void systick_isr(void) {
+
+#ifdef __DE1SOC__
+  ((HW_REG *) MPCORE_PRIV_TIMER)[MPT_INTSTAT_INDEX] = PTINTR_ACK;		// Acknowledge Interrupt
+#endif
+
+
+#ifdef __LEGONXT__
   volatile U32 status __attribute__ ((unused));
   /* The PIT's value register must be read to acknowledge the
    * interrupt.
    */
+
   status = *AT91C_PITC_PIVR;
+#endif
 
   /* Do the system timekeeping. */
   systick_time++;
@@ -90,7 +97,6 @@ static void systick_isr(void) {
    *
    * As a result, this handler must be *very* fast.
    */
-  nx__avr_fast_update();
 
   /* The LCD dirty display routine can be done here too, since it is
    * very short.
@@ -104,6 +110,23 @@ static void systick_isr(void) {
 void nx__systick_init(void) {
   nx_interrupts_disable();
 
+#ifdef __DE1SOC__
+
+  ((HW_REG *) MPCORE_PRIV_TIMER)[MPT_CONTROL_INDEX] = 0;		// Stop timer
+
+#ifdef __CPULATOR__
+  /* This uses a user defined interval which does not correspond to hardware clock duration since it is running on a simulator */
+  ((HW_REG *) MPCORE_PRIV_TIMER)[MPT_LOAD_INDEX] = SYSTICK_DBG_INTERVAL;	// Debug Systick Interval
+#else
+  /* Configure the timer based on DE1-SoC Platform */
+  ((HW_REG *) MPCORE_PRIV_TIMER)[MPT_LOAD_INDEX] = (DE1_CLOCK_FREQ / SYSIRQ_FREQ) - 1;	// period 1 ms @ 200 MHz
+#endif
+
+  ((HW_REG *) MPCORE_PRIV_TIMER)[MPT_CONTROL_INDEX] = PTEN_MASK;	// Enable timer with Auto reload and Interrupt
+
+#endif
+
+#ifdef __LEGONXT__
   /* Install both the low and high priority interrupt handlers, ready
    * to handle periodic updates.
    */
@@ -112,12 +135,14 @@ void nx__systick_init(void) {
   nx_aic_install_isr(AT91C_ID_SYS, AIC_PRIO_TICK,
 		     AIC_TRIG_EDGE, systick_isr);
 
+
   /* Configure and enable the Periodic Interval Timer. The counter
    * value is 1/16th of the master clock (base frequency), divided by
    * our desired interrupt period of 1ms.
    */
   *AT91C_PITC_PIMR = (((PIT_BASE_FREQUENCY / SYSIRQ_FREQ) - 1) |
                       AT91C_PITC_PITEN | AT91C_PITC_PITIEN);
+#endif
 
   nx_interrupts_enable();
 }
@@ -144,7 +169,13 @@ void nx_systick_wait_ms(U32 ms) {
 
 void nx_systick_wait_us(U32 us) {
 
+#ifdef __DE1SOC__
+  U32 pittime = ((HW_REG *) MPCORE_PRIV_TIMER)[MPT_COUNTER_INDEX];
+#endif
+
+#ifdef __LEGONXT__
   U32 pittime = (*AT91C_PITC_PIIR);
+#endif
   U32 final = pittime + (US_COUNT * us);
 
   /* Dealing with systick_time rollover:
@@ -153,7 +184,13 @@ void nx_systick_wait_us(U32 us) {
    *    Note: This used signed compare to come up with the correct decision
    */
   while ((long) (pittime - final) < 0) {
-	  pittime = (*AT91C_PITC_PIIR);
+#ifdef __DE1SOC__
+  pittime = ((HW_REG *) MPCORE_PRIV_TIMER)[MPT_COUNTER_INDEX];
+#endif
+
+#ifdef __LEGONXT__
+  pittime = (*AT91C_PITC_PIIR);
+#endif
 	}
 }
 
@@ -173,8 +210,10 @@ void nx_systick_call_scheduler(void) {
   /* If the application kernel set a scheduling callback, trigger the
    * lower priority IRQ in which the scheduler runs.
    */
+#ifdef __LEGONXT__
   if (scheduler_cb)
     nx_aic_set(SCHEDULER_SYSIRQ);
+#endif
 }
 
 void nx_systick_mask_scheduler(void) {

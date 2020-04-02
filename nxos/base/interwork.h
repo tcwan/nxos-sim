@@ -10,6 +10,8 @@
  * the terms of the GNU Public License (GPL) version 2.
  */
 
+#if 0
+/* Disable Interwork as it is not supported by CPUlator for now */
 #ifndef __NXOS_BASE_INTERWORK_H__
 #define __NXOS_BASE_INTERWORK_H__
 
@@ -94,3 +96,4 @@
 
 #endif
 #endif  /* __NXOS_BASE_INTERWORK_H__ */
+#endif  /* if 0 */

@@ -6,11 +6,15 @@
 #include "base/types.h"
 #include "base/core.h"
 #include "base/display.h"
-#include "base/drivers/avr.h"
 #include "base/drivers/systick.h"
 #include "base/lib/gui/gui.h"
 
 void main(void) {
+/* Needed to support CPUlator system init
+ * since it starts execution from main() and does not go through the system reset handler
+ */
+#include "cpulator_stub.inc"
+
   char *entries[] = {"Browse", "Sysinfo", "Settings", "Format", "Item5", "Item6", "Item7", "Halt", NULL};
   gui_text_menu_t menu;
   U8 res;
@@ -38,8 +42,9 @@ void main(void) {
         nx_display_end_line();
 
         nx_display_string("\nOk to go back");
+#if 0
         while (nx_avr_get_button() != BUTTON_OK);
-
+#endif
         break;
     }
   }

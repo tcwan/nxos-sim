@@ -1,10 +1,22 @@
-/* Copyright (C) 2007 the NxOS developers
+/* Copyright (C) 2007-2020 the NxOS developers
  *
  * See AUTHORS for a full list of the developers.
  *
  * Redistribution of this file is permitted under
  * the terms of the GNU Public License (GPL) version 2.
  */
+#include "asm_decls.h"
+#define __ASSEMBLY__
+
+#ifdef __DE1SOC__
+#include "base/boards/DE1-SoC/address_map_arm.h"
+#include "base/boards/DE1-SoC/interrupt_ID.h"
+#include "base/ivr_table.h"
+#endif
+
+#ifdef __LEGONXT__
+#include "base/boards/LEGO-NXT/at91sam7s256.h"
+#endif
 
 .data
 .align
@@ -27,9 +39,6 @@ irq_spurious_count: .long 0
 .code 32
 .align 0
 
-#include "asm_decls.h"
-#define __ASSEMBLY__
-#include "at91sam7s256.h"
 
 /**********************************************************
  * Default handlers for unknown IRQ and FIQ interrupts, and
@@ -42,6 +51,156 @@ nx__default_irq:
 nx__default_fiq:
 nx__unhandled_exception:
         b nx__unhandled_exception
+
+#ifdef __DE1SOC__
+
+/* Enhanced NxOS Nested Interrupt Handler.
+ * Based on notes from:
+ * "Building Bare Metal ARM Systems with GNU," Miro Samek,
+ * 2007, http://www.state-machine.com
+ *
+ * No context information is stored in IRQ mode.
+ * Instead, the interrupt context will be stored
+ * in the following priviledged modes:
+ *
+ * User/System Task (USR/SYS) -> System (SYS) Mode
+ * NxOS Task (SVC) -> Supervisor (SVC) Mode
+ * All other reserved modes -> Abort (ABT) Mode
+ *
+ * The interrupt stack frame consists of the following
+ * Registers: SPSR_irq, PC_irq, LR, R12, R3, R2, R1, R0
+ * which is identical to the ARM v7-M hardware
+ * interrupt stack frame (see ref: Miro Samek).
+ *
+ * This version also keeps track of the interrupt nesting
+ * level and stores the top level interrupted instruction
+ * address in order to let the Debugger know which instruction
+ * should be breakpointed when invoking the Debugger from
+ * Platform Operation Mode.
+ */
+
+        .global nx__irq_handler
+nx__irq_handler:
+		/* In IRQ Mode (IRQ Disabled, FIQ Enabled) */
+		/* The IRQ stack is not used at all. Hence, SP is used as a temporary variable R13 */
+		mrs		r13, spsr		/* Retrieve SPSR_irq */
+
+        /* Compare the SPSR mode bits to both 0000 and 1111 (usr/sys mode). */
+        ands 	r13, r13, #0x0F		/* eq (0) == User Mode */
+        eornes 	r13, r13, #0x0F		/* ne (!0) && eor #0x0F => eq (0) == SYS mode) */
+        msreq	cpsr_c, #(MODE_SYS | IRQ_MASK)	/* Match, so switch to SYS Mode */
+#ifdef  __CPULATOR__
+		// SYS mode not supported in CPUlator, abort
+		beq		default_data_abort_handler
+#else
+		beq		_irq_save_stack_frame
+#endif
+		mrs		r13, spsr			/* Reload SPSR_irq */
+		and		r13, r13, #MODE_MASK	/* check for other modes */
+		teq		r13, #MODE_SVC		/* Supervisor Mode? */
+        msreq	cpsr_c, #(MODE_SVC | IRQ_MASK)	/* Match, so switch to SVC Mode */
+		beq		_irq_save_stack_frame
+
+        msr		cpsr_c, #(MODE_ABT | IRQ_MASK)	/* Else, goto Abort Mode (catch all) */
+
+_irq_save_stack_frame:
+		/* In target privileged mode (IRQ Disabled, FIQ Enabled) */
+		sub		sp, sp, #(2*4)			/* Reserve stack space for SPSR and PC of Interrupted instruction */
+		stmfd	sp!, {r0-r3, r12, lr}	/* Save AAPCS clobbered registers to interrupt stack frame */
+		add		r0, sp, #(8*4)			/* Pass top of current interrupt stack frame to IRQ mode */
+
+		mrs		r1, cpsr				/* retrieve current privileged mode (for mode switchback) */
+        msr		cpsr_c, #(MODE_IRQ | IRQ_MASK)	/* Switch to IRQ mode to save SPSR_irq and PC_irq */
+		/* In IRQ Mode (IRQ Disabled, FIQ Enabled) */
+		sub		r2, lr, #4				/* Adjust return address (interrupted instruction address), copy to R2 for stacking */
+		mrs		r3, spsr				/* Retrieve SPSR_irq to R3 for stacking */
+		stmfd	r0, {r2, r3}			/* completed saving interrupt stack frame (SPSR_irq, PC_irq, LR, R12, R3, R2, R1, R0) */
+
+		/* Interrupt Handler Housekeeping */
+		ldr		r3, =irq_state
+		ldr		r2, [r3, #IRQ_NEST_LVL]
+		adds	r2, r2, #1				/* Raise Nesting Level (0: Top Level Interrupt) */
+		str		r2, [r3, #IRQ_NEST_LVL]
+		movgt	r0, #0					/* Not Top Level Interrupt, clear Interrupted Stack Frame Address */
+		str		r0, [r3, #IRQ_STK_FRAME] /* Else Save Top Level Interrupt Stack Frame Address (for Debugger) */
+
+		// Cortex-A9 GIC handling
+		// Read ICCIAR from CPU interface
+		// Retrieve interrupt ID intp SP_irq (R13) as temporary storage
+		ldr		lr, =MPCORE_GIC_CPUIF				/* LR_irq is not used */
+		ldr		r13, [lr, #ICCIAR]
+		ldr		r0, =GIC_INTRID_MASK				/* Must use register to keep bitmask (> 8 bits) */
+		and		r13, r13, r0						/* Mask out irrelevant bits */
+
+		// Check Interrupt ID and retrieve Interrupt Vector Routine (IVR) into r3
+		// This is to maintain compatibility with AIC implementation
+		ldr		r0, =de1_soc_ivr_table				/* ISR Vector Table Start */
+ivr_lookup:
+		ldr		r2, [r0, #GIC_VEC_ENTRY_ISR_ID]		/* Get Interrupt ID */
+		ldr		r3, [r0, #GIC_VEC_ENTRY_ISR_OFFSET]	/* Get IVR */
+		cmp		r2, #INVALID_INTR_ID				/* Check end of table entry */
+		beq		_irq_dispatch_gic_ivr				/* No matching IVR, so call default */
+		cmp		r2, r13								/* Otherwise check against triggered ID */
+		beq		_irq_dispatch_gic_ivr				/* Found match, dispatch it */
+		add		r0, r0, #SIZEOF_GIC_VEC_ENTRY
+		b		ivr_lookup
+
+_irq_dispatch_gic_ivr:
+#if 0
+		// To enable nested interrupts properly we must play around with the
+		// Priority level in ICCPMR.
+		// ^Don't allow nested IRQ interrupts for now.
+		and		r1, r1, #MODE_MASK		/* Enable IRQ (& FIQ) */
+#endif
+
+		msr		cpsr_c, r1				/* switch back to previous privileged mode */
+
+		/* In target privileged mode (IRQ & FIQ Enabled^) */
+        /* Dispatch the IRQ to the registered handler. */
+        mov 	lr, pc
+        bx 		r3						/* Use R3 to dispatch Interrupt Handler, so that it is not clobbered by
+        								 * default exception handlers
+        								 */
+
+_irq_exit_handler:
+		/* Clean up and exit */
+		mrs		r1, cpsr
+		orr		r1, #IRQ_FIQ_MASK			/* Mask IRQ and FIQ */
+		msr		cpsr_c, r1					/* Disable interrupts to restore context */
+
+		/* In target privileged mode (IRQ & FIQ Disabled) */
+		mov		r0, sp						/* Pass privileged mode SP to IRQ Mode */
+		ldr		lr, [r0, #(5*4)]			/* Restore LR to privileged mode */
+		add		sp, sp, #(8*4)				/* unstack interrupt stack frame from current privileged mode */
+
+        /* Switch back to IRQ mode and tell the AIC that the interrupt has been
+         * handled.
+         */
+        msr 	cpsr_c, #(MODE_IRQ | IRQ_FIQ_MASK)
+
+		/* In IRQ Mode (IRQ & FIQ Disabled) */
+
+		/* Fix up GIC ICCEOIR to clear interrupt */
+		ldr lr, =MPCORE_GIC_CPUIF
+		str r13, [lr, #ICCEOIR]				/* R13_irq holds the Interrupt ID */
+
+		/* Interrupt Handler Housekeeping */
+		ldr		r3, =irq_state
+		ldr		r2, [r3, #IRQ_NEST_LVL]
+		sub		r2, r2, #1					/* Decrease nesting level */
+		str		r2, [r3, #IRQ_NEST_LVL]
+
+		ldr		r1, [r0, #(7*4)]			/* Load SPSR to R1 */
+		msr		spsr_csxf, r1				/* Restore SPSR_irq */
+
+		ldmfd	r0, {r0-r3, r12, lr, pc}^	/* Return execution to interrupted instruction, restore CPSR from SPSR_irq */
+		/* Note: SP_irq does not contain an actual IRQ stack pointer,
+		 * whereas LR_irq is not used, so it does not matter what value they have on exit
+		 */
+
+#endif /* __DE1SOC__ */
+
+#ifdef __LEGONXT__
 
 #if defined (__DBGENABLE__)
 /* Enhanced NxOS Nested Interrupt Handler.
@@ -299,6 +458,8 @@ nx__irq_handler:
         /* Restore execution to the main code. */
         ldmfd sp!, {pc}^
 #endif
+
+#endif /* __LEGONXT__ */
 
 /**********************************************************
  * Abort entry points. These get run when the CPU enters

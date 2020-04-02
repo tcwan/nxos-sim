@@ -20,20 +20,20 @@
 
 #include "base/_c_arm_macros.h"
 
-/** @name NXT Button Enums
+/** @name DE1 Button Enums
  *
- * NXT Buttons
+ * Altera DE1-SoC Buttons
  * The enums must be consecutive, starting from 0
- * The values are taken from avr.h but have different names to avoid clashing with the existing definitions
+ * The values are taken from button.h but have different names to avoid clashing with the existing definitions
  */
 /*@{*/
 ENUM_BEGIN
-ENUM_VALASSIGN(NXT_BTN_NONE, 0)    /**< Default button value. */
-ENUM_VAL(NXT_BTN_OK)               /**< OK Button. */
-ENUM_VAL(NXT_BTN_CANCEL)       	   /**< Cancel Button. */
-ENUM_VAL(NXT_BTN_LEFT)       	   /**< Left Arrow Button. */
-ENUM_VAL(NXT_BTN_RIGHT)       	   /**< Right Arrow Button. */
-ENUM_END(nxt_button_t)
+ENUM_VALASSIGN(DE1_BTN_NONE, 0)  /**< Default button value. */
+ENUM_VAL(DE1_BTN_0)              /**< Button 0. */
+ENUM_VAL(DE1_BTN_1)              /**< Button 1. */
+ENUM_VAL(DE1_BTN_2)       	     /**< Button 2. */
+ENUM_VAL(DE1_BTN_3)       	     /**< Button 3. */
+ENUM_END(nx_button_t)
 /*@}*/
 
 /* Assembly Language Defines */
@@ -86,9 +86,9 @@ FUNCDEF void nx_progcontentX(char *string, int row);     /* Display Content stri
 
 /**
  * Get Button value from NXT
- *    @return nxt_button_t
+ *    @return nx_button_t
  */
-FUNCDEF  nxt_button_t nx_getbutton(void);     /* Retrieve enum value of NXT Button press */
+FUNCDEF  nx_button_t nx_getbutton(void);     /* Retrieve enum value of NXT Button press */
 
 #endif
 

@@ -16,8 +16,8 @@
 /* Include as necessary */
 #include "base/types.h"
 #include "base/core.h"
-#include "base/drivers/avr.h"
 #include "base/drivers/systick.h"
+#include "base/drivers/button.h"
 #include "base/display.h"
 #include "base/lib/alerts/alerts.h"
 
@@ -30,8 +30,11 @@ static bool audible = TRUE;
 /** Security hook. A press on Cancel will unconditionally halt the brick.
  */
 static void watchdog(void) {
+#if 0
+	// FIXME
  if (nx_avr_get_button() == BUTTON_CANCEL)
     nx_core_halt();
+#endif
 }
 
 /* Public Routines */
@@ -76,8 +79,7 @@ FUNCDEF void nx_progcontentX(char *string, int row) {
 
 }
 
-FUNCDEF nxt_button_t nx_getbutton(void) {
-	/* Retrieve enum value of NXT Button press */
-	return nx_avr_get_button();
-
+FUNCDEF nx_button_t nx_getbutton(void) {
+	/* Retrieve enum value of DE1 Button press */
+	return nx_de1_get_button();
 }

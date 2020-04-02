@@ -19,6 +19,11 @@
 #include "base/drivers/systick.h" /* for nx_systick_wait_ms */
 
 void main() {
+/* Needed to support CPUlator system init
+ * since it starts execution from main() and does not go through the system reset handler
+ */
+#include "cpulator_stub.inc"
+
   /* The display is already initialized at this point, so let's
    * display the classic string.
    */
@@ -78,6 +83,28 @@ void main() {
   nx_systick_wait_ms(1000);
 
   /* We request a refresh, and the message appears. */
+  nx_display_refresh();
+
+  nx_systick_wait_ms(1000);
+
+  /* Check autoscrolling of text display   */
+#define NUM_ROWS 60
+  int i;
+
+  nx_display_clear();
+  nx_display_scroll_ok(TRUE);
+
+  for (i = 1; i < NUM_ROWS + 1; i++) {
+	  nx_display_string("Row No.  ");
+	  nx_display_uint(i);
+	  nx_display_end_line();
+	  nx_display_refresh();
+	  nx_systick_wait_ms(500);
+  }
+
+  nx_display_string("* ");
+  nx_display_uint(NUM_ROWS);
+  nx_display_string(" rows *");
   nx_display_refresh();
 
   nx_systick_wait_ms(1000);

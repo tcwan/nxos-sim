@@ -22,6 +22,11 @@
 #include "base/drivers/systick.h"
 
 void main() {
+/* Needed to support CPUlator system init
+ * since it starts execution from main() and does not go through the system reset handler
+ */
+#include "cpulator_stub.inc"
+
   /* You can get the current time since bootup. The NXT does not
    * include a real time clock, so systick can only tell you the time
    * since bootup, not the "wall clock" time.

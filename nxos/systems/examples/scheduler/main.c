@@ -54,6 +54,11 @@ static void show_counter() {
 }
 
 void main() {
+/* Needed to support CPUlator system init
+ * since it starts execution from main() and does not go through the system reset handler
+ */
+#include "cpulator_stub.inc"
+
   /* Install the scheduler callback. As of here, the scheduler will be
    * called periodically.
    */

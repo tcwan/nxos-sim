@@ -1,0 +1,39 @@
+# Define TOP for projects under source/
+TOP = ../../..
+# ---------------------------------
+include $(TOP)/Makefile.inc
+# ---------------------------------
+
+DIRS = ./*/
+# -- strip trailing '/' example
+#O = $(addprefix $(D_OBJ)/, $(addsuffix $(E_OBJ), $(wildcard $(LIBDIRS:%/=%))))
+
+.PHONY: default all clean
+
+default: all
+
+all:
+	@echo "Making ..." ${DIRS}
+	@for i in ${DIRS}; \
+	do \
+	echo @@@ make -f makefile.subproj -C $${i}; \
+	make -f makefile.subproj -C $${i}; \
+	done
+
+clean:
+	@echo "Cleaning ..." ${DIRS}
+	@for i in ${DIRS}; \
+	do \
+	echo @@@ make -f makefile.subproj -C $${i} clean; \
+	make -f makefile.subproj -C $${i} clean; \
+	done
+
+# -- handle invocation from top level Makefile as well as from examples directory
+*/::
+#	echo $@
+	make -f makefile.subproj -C ./$(@:%/=%)/;
+
+*::
+#	echo $@
+	make -f makefile.subproj -C ./$(@:%/=%)/;
+	

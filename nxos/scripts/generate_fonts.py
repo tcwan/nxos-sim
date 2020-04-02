@@ -92,6 +92,7 @@ def main():
     template = template.replace(
         '@@FONT_SIZE@@', '%dX%d' % (font.chary, font.charx))
     template = template.replace('@@FONT_WIDTH@@', '%d' % font.charx)
+    template = template.replace('@@FONT_HEIGHT@@', '%d' % font.chary)
     template = template.replace('@@FONT_DATA@@', font_data)
 
     f = open(output_file, 'w')

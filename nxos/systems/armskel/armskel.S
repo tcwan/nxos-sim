@@ -17,8 +17,8 @@
 
 #define __ASSEMBLY__
 #include "base/interwork.h"
+#include "base/debug_stub.h"
 #include "base/lib/scaffolding/scaffolding.h"
-#include "armdebug/Debugger/debug_stub.h"
 
 /* To disable Manual Breakpoints, change the following to #undef ENABLE_BREAKPOINTS */
 #define ENABLE_BREAKPOINTS
@@ -39,16 +39,31 @@ content: .asciz "Hello!"
 .text
 .align 	4
 
+// WARNING: Don't put any routines here between the .text and the main: label.
+// CPUlator will point the starting PC to the beginning of the .text section and start executing from there.
+
 /** main
  *    Main Program
  */
 	.global	main
 main:
-	push	{lr}
+/* Needed to support CPUlator system init
+ * since it starts execution from main() and does not go through the system reset handler
+ */
+#include "cpulator_stub.inc"
+
+	push	{r4-r12,lr}			// Preserve all AAPCS registers to avoid CPUlator warnings.
+
 	bl		nx_proginit
 
 	ldr		r0, =title
 	bl		nx_progtitle
+
+#ifdef __CPULATOR__
+	// Allow CPUlator to execute ISR before hitting the breakpoint
+	mov		r0, #SYSTICK_500MS
+	bl		nx_systick_wait_ms
+#endif
 
 #ifdef ENABLE_BREAKPOINTS
 	dbg__bkpt_arm
@@ -85,6 +100,7 @@ loop:
 /********************** End Customization Here **********************/
 exit_main:
 	bl		nx_progshutdown
-	pop		{pc}
+	pop		{r4-r12,pc}			// Restore all AAPCS registers to avoid CPUlator warnings.
+
 
 .end

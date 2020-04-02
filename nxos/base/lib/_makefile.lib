@@ -1,0 +1,50 @@
+#Library makefile
+TOP = ../../..
+# ---------------------------------
+include $(TOP)/Makefile.inc
+# ---------------------------------
+
+# -- include directories
+D_H = ./
+
+LIBDIRS = ./[a-z]*/
+O = $(addprefix $(D_OBJ)/, $(addsuffix $(E_OBJ), $(wildcard $(LIBDIRS:%/=%))))
+
+# -- full name of static library
+F_BIN = $(LIBLIB)
+
+# meta builds
+# ---- build library
+.PHONY: default
+
+default: bindirs all
+
+# ---- remove temporary files
+.PHONY: clean all
+
+clean::
+	@echo "Cleaning ..." ${LIBDIRS}
+	@for i in ${LIBDIRS}; \
+	do \
+	echo @@@ make -f Makefile.obj -C $${i} clean; \
+	make -f Makefile.obj -C $${i} clean; \
+	done
+	rm -rf $(LIBLIB)
+
+all::
+	@echo "Making ..." ${LIBDIRS}
+	@for i in ${LIBDIRS}; \
+	do \
+	echo @@@ make -f Makefile.obj -C $${i}; \
+	make -f Makefile.obj -C $${i}; \
+	done
+	@echo "@@@ Generating $(LIBLIB)"
+	touch $(LIBLIB)
+	@echo "*** $(LIBLIB) ***"
+	
+# Actual builds
+# -- create 'object' directories
+bindirs: $(D_OBJ)
+
+$(D_OBJ):
+	${MKDIR} ${D_OBJ}
