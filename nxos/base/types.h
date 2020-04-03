@@ -39,7 +39,9 @@ typedef U8 bool; /**< Boolean data type. */
 #endif
 
 /** Hardware register definition for DE1-SoC support */
-typedef volatile unsigned int HW_REG;
+typedef volatile unsigned long HW_REG;
+typedef volatile unsigned short HW_REG16;
+typedef volatile unsigned char HW_REG8;
 
 /** A function that takes no arguments and returns nothing. */
 typedef void (*nx_closure_t)(void);

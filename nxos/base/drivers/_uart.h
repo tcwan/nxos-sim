@@ -1,11 +1,8 @@
 /** @file _uart.h
- *  @brief UART driver for bluetooth communications.
- *
- * This driver only support the uart where the bluetooth chip is
- * connected => Only used by bt.(c|h)
+ *  @brief UART system internal interface.
  */
 
-/* Copyright (C) 2007 the NxOS developers
+/* Copyright (C) 2020 the NxOS developers
  *
  * See AUTHORS for a full list of the developers.
  *
@@ -13,76 +10,45 @@
  * the terms of the GNU Public License (GPL) version 2.
  */
 
-#ifndef __NXOS_BASE_DRIVERS_UART_H__
-#define __NXOS_BASE_DRIVERS_UART_H__
+#ifndef __NXOS_BASE_DRIVERS__UART_H__
+#define __NXOS_BASE_DRIVERS__UART_H__
 
-#include "base/types.h"
+#include "base/drivers/uart.h"
 
 /** @addtogroup driverinternal */
 /*@{*/
 
-/** @defgroup uart UART driver
- *
- * The UART controller manages the link with the BlueCore Bluetooth
- * chip. It is for use exclusively by the Bluetooth driver.
- */
+/** @defgroup soundinternal UART */
 /*@{*/
 
 /**
- * Buffer size for UART messages.
+ * UART I/O register constants
  */
-#define UART_BUFSIZE 128
+#define UART_DATA_INDEX 0x0					/* Index must be based on the data type (U32) */
+#define UART_RDATA_SHORT_INDEX  0x0			/* Index must be based on the data type (U16) */
+#define UART_RAVAIL_SHORT_INDEX 0x1			/* Index must be based on the data type (U16) */
 
-/** Prototype for the UART read callback.
- *
- * The UART driver fires the callback with a @a buffer of length @a
- * packet_size of data to process.
- */
-typedef void (*nx__uart_read_callback_t)(U8 *buffer, U32 packet_size);
+#define UART_DATAREG_MASK 0xFF
+#define RVALID_MASK 0x00008000
+#define RAVAIL_MASK 0xFFFF0000
+#define RAVAIL_SHIFT 16
 
-/** Initialize the UART driver.
- *
- * @param callback The callback to fire when the UART receives data.
- */
-void nx__uart_init(nx__uart_read_callback_t callback);
+#define UART_CONTROL_INDEX 0x1				/* Index must be based on the data type (U32) */
+#define UART_WDATA_BYTE_INDEX 0x0			/* Index must be based on the data type (U8) */
+#define UART_WSPACE_SHORT_INDEX  0x3		/* Index must be based on the data type (U16) */
+#define WSPACE_MASK 0xFFFF0000
+#define WSPACE_SHIFT 16
 
-/**
- * @param callback new callback to use
- * @note if callback is null, interruptions are disabled and PDC is disabled
- */
-void nx__uart_set_callback(nx__uart_read_callback_t callback);
+#define UART_INTR_RE_MASK 0x0001
+#define UART_INTR_WE_MASK 0x0002
+#define UART_INTR_RI_MASK 0x0100
+#define UART_INTR_WI_MASK 0x0200
+#define UART_INTR_AC_MASK 0x0400
 
-/**
- * Set manually the PDC
- */
-void nx__uart_read(U8 *buf, U32 length);
-
-/**
- * Indicates how many bytes the PDC has already read from the UART
- */
-U32 nx__uart_data_read(void);
-
-/** Write @a lng bytes from @a data over the UART bus.
- *
- * @param data A pointer to the data to write.
- * @param lng The number of bytes to write.
- */
-void nx__uart_write(const U8 *data, U32 lng);
-
-/** Check if the UART can be written to.
- *
- * @return TRUE if the UART is idle and can be written to, else
- * FALSE.
- */
-bool nx__uart_can_write(void);
-
-/** Check if the UART is currently writing data.
- *
- * @return TRUE if the UART is busy writing, else FALSE.
- */
-bool nx__uart_is_writing(void);
+/** Initialize the UART driver. */
+void nx__uart_init(void);
 
 /*@}*/
 /*@}*/
 
-#endif
+#endif /* __NXOS_BASE_DRIVERS__UART_H__ */
