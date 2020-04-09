@@ -24,6 +24,7 @@
 #include "drivers/_systick.h"
 #include "drivers/_sound.h"
 #include "drivers/_lcd.h"
+#include "drivers/_uart.h"
 
 #include "base/_core.h"
 
@@ -42,6 +43,7 @@ static void core_init(void) {
   nx__systick_init();
   nx__sound_init();
   nx__lcd_init();
+  nx__uart_init();
   nx__display_init();
   nx_interrupts_enable();		// We must call this once before passing control over to main() to enable interrupts
 
