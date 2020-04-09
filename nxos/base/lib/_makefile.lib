@@ -26,8 +26,8 @@ clean::
 	@echo "Cleaning ..." ${LIBDIRS}
 	@for i in ${LIBDIRS}; \
 	do \
-	echo @@@ make -f Makefile.obj -C $${i} clean; \
-	make -f Makefile.obj -C $${i} clean; \
+	echo @@@ make -f makefile.obj -C $${i} clean; \
+	make -f makefile.obj -C $${i} clean; \
 	done
 	rm -rf $(LIBLIB)
 
@@ -35,8 +35,8 @@ all::
 	@echo "Making ..." ${LIBDIRS}
 	@for i in ${LIBDIRS}; \
 	do \
-	echo @@@ make -f Makefile.obj -C $${i}; \
-	make -f Makefile.obj -C $${i}; \
+	echo @@@ make -f makefile.obj -C $${i}; \
+	make -f makefile.obj -C $${i}; \
 	done
 	@echo "@@@ Generating $(LIBLIB)"
 	touch $(LIBLIB)
