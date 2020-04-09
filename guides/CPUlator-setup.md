@@ -31,7 +31,7 @@ $ docker tag <image_id> arm-eabi
 
 - run Docker image as a standalone interactive shell in Linus/macOS (mapping current directory to /home)
 ```
-$ docker run -it --rm arm-eabi -v$PWD:/home bash
+$ docker run -it -v$PWD:/home --rm arm-eabi bash
 [Inside Docker bash shell]
 root@5c3ceeaae138:/work# ls /home
 ```
