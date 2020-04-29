@@ -16,11 +16,10 @@
 
 #include "base/types.h"
 
-#ifdef __DE1SOC__
 /** @addtogroup driver */
 /*@{*/
 
-/** @defgroup uart UART driver
+/** @defgroup uart UART
  *
  * The UART controller is a serial interface for bidirectional communications.
  */
@@ -29,8 +28,8 @@
 /**
  * Buffer size for UART messages.
  */
-#define UART_RXBUFSIZE 64
-#define UART_TXBUFSIZE 64
+#define UART_RXBUFSIZE 64		/**< UART Receive Buffer Size */
+#define UART_TXBUFSIZE 64		/**< UART Transmit Buffer Size */
 
 
 /** Check if the UART can be read from.
@@ -89,7 +88,5 @@ void nx_uart_writebuf(const U8 *buf, U32 length);
 
 /*@}*/
 /*@}*/
-
-#endif /* __DE1SOC__ */
 
 #endif
