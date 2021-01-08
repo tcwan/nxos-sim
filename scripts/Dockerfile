@@ -15,6 +15,7 @@ RUN apt-get update && \
       python-pil \
       doxygen \
       git \
+      scons \
       bzip2 \
       wget && \
     apt-get clean
