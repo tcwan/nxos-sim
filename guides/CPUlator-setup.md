@@ -156,8 +156,6 @@ It is assumed that the build process for the application has completed successfu
 
 ![CPUlator](images/CPUlator-DE1-SoC.png)
 
-You can use this [URL to launch CPUlator with the correct settings](https://cpulator.01xz.net/?sys=arm-de1soc&dbgchk=8110).
-
 - Load the `<app>.elf` executable file from your PC. 
 ```
 The built in CPUlator Editor and Assembler will not be used.
@@ -165,6 +163,8 @@ The built in CPUlator Editor and Assembler will not be used.
 - Setup the Debugging Check Settings correctly for NxOS-Sim
 
 ![CPUlator Debugging Checks](images/CPUlator-Debugging-Check-Settings.png)
+
+You can use this [URL to launch CPUlator with the correct settings](https://cpulator.01xz.net/?sys=arm-de1soc&dbgchk=8110).
 
 ## Running the NxOS-sim application
 
