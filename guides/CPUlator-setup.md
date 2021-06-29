@@ -13,6 +13,16 @@ It will probably work on recent Windows OS as well, but it has not been tested.
 - install [Eclipse CDT](https://www.eclipse.org/cdt/)
 - install a compatible browser for [CPUlator](https://cpulator.01xz.net/doc/#requirements)
 
+### Docker for Windows
+
+Please see the following for some notes regarding running Docker on Windows:
+- Use [Docker Desktop in WSL](https://docs.docker.com/docker-for-windows/wsl/)
+
+Under WSL, it might be better to run Eclipse inside WSL than to run Eclipse under Windows, to allow the Docker Tooling plugin to access the directories.
+- [Running GUI Apps in WSL](https://docs.microsoft.com/en-us/windows/wsl/tutorials/gui-apps)
+
+NOTE: I have not tested this configuration. YMMV.
+
 ## Install Docker Image
 
 This is best done via the terminal or shell.
