@@ -1,4 +1,4 @@
-FROM ubuntu:18.04
+FROM ubuntu:20.04
 LABEL maintainer="TC Wan <tcwan@usm.my>"
 LABEL Description="Image for building and debugging arm-embedded projects from git, adapted from Dockerfile created by Niklas Hauser <niklas.hauser@rwth-aachen.de>\nSource: https://hub.docker.com/r/stronglytyped/arm-none-eabi-gcc/"
 WORKDIR /work
