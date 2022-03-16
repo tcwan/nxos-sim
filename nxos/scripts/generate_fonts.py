@@ -14,7 +14,7 @@ if sys.platform == 'darwin':
 try:
     from PIL import Image
 except ImportError:
-    print "ERROR: Python Imaging Library required for font generation."
+    print("ERROR: Python Imaging Library required for font generation.")
     sys.exit(2)
 
 
@@ -29,7 +29,7 @@ class Font(object):
             if self.chary != 8:
                 raise ValueError
         except ValueError:
-            print "ERROR: unparseable font size %s" % size
+            print("ERROR: unparseable font size %s" % size)
             sys.exit(1)
 
         # Open the image and check that its dimensions make sense
@@ -37,7 +37,7 @@ class Font(object):
 
         if ((self.img.size[0] % self.charx) != 0 or
             (self.img.size[1] % self.chary) != 0):
-            print "ERROR: Font image for %s font has non-multiple dimensions" % size
+            print("ERROR: Font image for %s font has non-multiple dimensions" % size)
             sys.exit(1)
 
         # Remember how many font char rows and cols there are
@@ -52,26 +52,26 @@ class Font(object):
 
     def _byteify(self, scanline):
         byte = 0
-        for x in xrange(8):
+        for x in range(8):
             if not scanline[x]: # Invert the value to get the correct
                                 # NXT encoding.
                 byte |= 1 << x
         return byte
 
     def chars(self):
-        for y in xrange(self.rows):
-            for x in xrange(self.cols):
+        for y in range(self.rows):
+            for x in range(self.cols):
                 block_coords = self._get_block_coords(x, y)
                 font_block = list(self.img.crop(block_coords).getdata())
                 scanlines = []
-                for x in xrange(len(font_block)/self.charx):
+                for x in range(len(font_block)/self.charx):
                     scanlines.append(font_block[x*self.charx:(x+1)*self.charx])
-                scanlines = zip(*scanlines)
+                scanlines = list(zip(*scanlines))
                 yield [self._byteify(l) for l in scanlines]
 
 def main():
     if len(sys.argv) != 4:
-        print "Usage: %s <font file> <template file> <output file>"
+        print("Usage: %s <font file> <template file> <output file>")
         sys.exit(1)
 
     font_file = sys.argv[1]

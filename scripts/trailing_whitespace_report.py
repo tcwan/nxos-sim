@@ -37,12 +37,12 @@ for line in git('diff-index', '--cached', '--no-prefix',
     elif line.startswith('+'):
         line = line.rstrip('\n')
         if line.endswith(' ') or line.endswith('\t'):
-            print 'Trailing whitespace at %s in %s:' % (file, function)
-            print line
+            print('Trailing whitespace at %s in %s:' % (file, function))
+            print(line)
             ok = False
         if line.endswith('\r'):
-            print 'Windows-style EOL at %s in %s:' % (file, function)
-            print line
+            print('Windows-style EOL at %s in %s:' % (file, function))
+            print(line)
             ok = False
 
 if ok:

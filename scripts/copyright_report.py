@@ -29,7 +29,7 @@ def git(*args):
 def years_in_group(group):
     if '-' in group:
         min, max = (int(x) for x in group.split('-'))
-        for year in xrange(min, max+1):
+        for year in range(min, max+1):
             yield year
     else:
         yield int(group)
@@ -40,11 +40,11 @@ def parse_years(years_str):
         try:
             for year in years_in_group(group):
                 if year in years:
-                    print 'Year %d mentionned twice in %s' % (year, years)
+                    print('Year %d mentionned twice in %s' % (year, years))
                     return False
                 years.add(year)
         except:
-            print 'Could not parse copyright years %s' % years
+            print('Could not parse copyright years %s' % years)
             return False
     return years
 
@@ -59,7 +59,7 @@ def check_file(file_path, file_sha):
     contents = git('cat-file', 'blob', file_sha)
 
     if requires_copyright and 'Copyright' not in contents:
-        print 'No copyright notice found in %s' % file_path
+        print('No copyright notice found in %s' % file_path)
         return False
 
     m = COPYRIGHT_RE.search(contents)
@@ -67,18 +67,18 @@ def check_file(file_path, file_sha):
         return True
 
     if m.group(1) == 'C':
-        print 'Copyright notice in %s uses "(C)"' % file_path
-        print 'Correct notation is "(c)"'
-        print m.group(0)
+        print('Copyright notice in %s uses "(C)"' % file_path)
+        print('Correct notation is "(c)"')
+        print(m.group(0))
         return False
 
     years = parse_years(m.group(2))
     if not years:
         return False
     if current_year not in years:
-        print '%d not present in copyright notice of %s:' % \
-              (current_year, file_path)
-        print m.group(0)
+        print('%d not present in copyright notice of %s:' % \
+              (current_year, file_path))
+        print(m.group(0))
         return False
     return True
 
